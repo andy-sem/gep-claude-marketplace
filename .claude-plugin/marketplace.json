@@ -7,12 +7,5 @@
     "description": "Claude Code plugins and skills maintained by Gep",
     "version": "0.1.0"
   },
-  "plugins": [
-    {
-      "name": "gep-example",
-      "source": "./plugins/gep-example",
-      "description": "An example plugin demonstrating the marketplace structure and skill format",
-      "version": "0.1.0"
-    }
-  ]
+  "plugins": []
 }
