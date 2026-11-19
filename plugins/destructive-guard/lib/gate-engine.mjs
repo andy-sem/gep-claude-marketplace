@@ -27,7 +27,7 @@ export const PACKS_DIR = join(
   "..",
   "packs",
 )
-export const DEFAULT_PACKS = ["base", "postgres", "terraform"]
+export const DEFAULT_PACKS = ["base", "destructive"]
 export const packPath = (name) => join(PACKS_DIR, `${name}.json`)
 
 const MAX_DEPTH = 8
@@ -114,6 +114,7 @@ const KNOWN_KINDS = new Set([
   "cli-gated",
   "mcp-allowlist",
   "mcp-as-cli",
+  "mcp-pattern",
 ])
 
 // ---------------------------------------------------------------------------
@@ -227,11 +228,11 @@ function runnerList(value) {
   return [...byProgram.values()]
 }
 
-function regex(source, what) {
+function regex(source, what, flags = "") {
   if (typeof source !== "string")
     throw new RulesError(`${what} must be a regex string`)
   try {
-    return new RegExp(source)
+    return new RegExp(source, flags)
   } catch (e) {
     throw new RulesError(`${what} is not a valid regex: ${e.message}`)
   }
@@ -337,6 +338,8 @@ export function parseRules(parsed) {
         rule.writeVerbs = strArray(raw.writeVerbs, `${where} writeVerbs`)
         rule.helpFlags = strArray(raw.helpFlags, `${where} helpFlags`)
         rule.helpWords = strArray(raw.helpWords, `${where} helpWords`)
+        rule.scriptScan =
+          raw.scriptScan === undefined ? true : bool(raw.scriptScan, `${where} scriptScan`)
         break
       case "cli-gated":
         rule.programs = strArray(raw.programs, `${where} programs`)
@@ -347,7 +350,34 @@ export function parseRules(parsed) {
         rule.unlessFlags = strArray(raw.unlessFlags, `${where} unlessFlags`)
         rule.helpFlags = strArray(raw.helpFlags, `${where} helpFlags`)
         rule.helpWords = strArray(raw.helpWords, `${where} helpWords`)
+        rule.whenFlags = strArrayArray(raw.whenFlags, `${where} whenFlags`)
+        if (rule.whenFlags.some((g) => !g.length || g.some((f) => !f)))
+          throw new RulesError(`${where} whenFlags groups must be non-empty`)
+        rule.ignoreCase = bool(raw.ignoreCase, `${where} ignoreCase`)
+        rule.whenArgs = strArray(raw.whenArgs, `${where} whenArgs`).map((r) =>
+          regex(r, `${where} whenArgs entry`, rule.ignoreCase ? "i" : ""),
+        )
+        rule.shortBundles = bool(raw.shortBundles, `${where} shortBundles`)
+        rule.matchStdin = bool(raw.matchStdin, `${where} matchStdin`)
+        if (raw.dynamicArgs !== undefined && !["ask", "ignore"].includes(raw.dynamicArgs))
+          throw new RulesError(`${where} dynamicArgs must be "ask" or "ignore"`)
+        rule.dynamicArgs = raw.dynamicArgs ?? "ask"
+        rule.scriptScan =
+          raw.scriptScan === undefined ? true : bool(raw.scriptScan, `${where} scriptScan`)
         break
+      case "mcp-pattern": {
+        rule.tool = regex(raw.tool ?? "^mcp__", `${where} tool`)
+        rule.toolWords = nonEmptyStrArray(raw.toolWords, `${where} toolWords`).map(
+          (w) => w.toLowerCase(),
+        )
+        rule.inputPattern =
+          raw.inputPattern === undefined
+            ? null
+            : regex(raw.inputPattern, `${where} inputPattern`, "i")
+        if (!rule.toolWords.length && !rule.inputPattern && raw.tool === undefined)
+          throw new RulesError(`${where} needs tool, toolWords or inputPattern`)
+        break
+      }
       case "mcp-allowlist":
         rule.tool = regex(raw.tool, `${where} tool`)
         rule.readTools = strArray(raw.readTools, `${where} readTools`).map(
@@ -1022,18 +1052,48 @@ function applyCliRule(
     case "cli-gated": {
       if (!rule.programs.includes(program)) return null
       if (isHelpCall(rule, rest)) return null
-      if (dynamic) return ask(rule.id, "dynamic argument")
+      if (dynamic && rule.dynamicArgs === "ask")
+        return ask(rule.id, "dynamic argument")
       const positionals = rest.filter((t) => !t.startsWith("-"))
       if (!rule.gatedPrefixes.some((p) => isSubsequence(positionals, p)))
         return null
+      if (
+        !rule.whenFlags.every((group) =>
+          group.some((f) => hasFlag(rest, f, rule.shortBundles)),
+        )
+      )
+        return null
+      if (rule.whenArgs.length) {
+        const texts = [...rest]
+        if (rule.matchStdin)
+          for (const h of tokens.stdin ?? []) texts.push(h.body ?? "")
+        if (!rule.whenArgs.some((re) => texts.some((t) => re.test(t))))
+          return null
+      }
       const exempt = rule.unlessFlags.some((f) =>
-        rest.some((t) => t === f || t.startsWith(`${f}=`)),
+        rule.shortBundles
+          ? hasFlag(rest, f, true)
+          : rest.some((t) => t === f || t.startsWith(`${f}=`)),
       )
       return exempt ? null : ask(rule.id, "gated invocation")
     }
     default:
       return null
   }
+}
+
+// True when `flag` is among `args` (before any `--`): the flag itself, `--flag=value`,
+// or, with `bundles`, a one-letter flag inside a short-flag bundle (`-rf`, `-fdx`).
+// Without bundles, single-dash long options (`find -delete`) match exactly only.
+function hasFlag(args, flag, bundles) {
+  const short = /^-[A-Za-z0-9]$/.test(flag)
+  for (const t of args) {
+    if (t === "--") return false
+    if (t === flag || t.startsWith(`${flag}=`)) return true
+    if (bundles && short && /^-[A-Za-z0-9]{2,}$/.test(t) && t.includes(flag[1]))
+      return true
+  }
+  return false
 }
 
 // True when the arguments only ask the program for help, which changes nothing:
@@ -1221,6 +1281,38 @@ function evalMcp(rule, input, rules) {
   )
 }
 
+// Words of an MCP tool name after its last `__`: split on `_`, `-` and camelCase.
+function toolWords(toolName) {
+  const suffix = toolName.slice(toolName.lastIndexOf("__") + 2)
+  return suffix
+    .split(/[_\-\s]+|(?<=[a-z0-9])(?=[A-Z])/)
+    .filter(Boolean)
+    .map((w) => w.toLowerCase())
+}
+
+// Every string inside an MCP input (bounded depth).
+function inputStrings(value, out = [], depth = 0) {
+  if (depth > 8) return out
+  if (typeof value === "string") out.push(value)
+  else if (Array.isArray(value)) for (const v of value) inputStrings(v, out, depth + 1)
+  else if (value && typeof value === "object")
+    for (const v of Object.values(value)) inputStrings(v, out, depth + 1)
+  return out
+}
+
+function evalMcpPattern(rule, input) {
+  const name = input.tool_name
+  if (!rule.tool.test(name)) return null
+  const words = toolWords(name)
+  if (rule.toolWords.length && !words.some((w) => rule.toolWords.includes(w)))
+    return null
+  if (rule.inputPattern) {
+    const hit = inputStrings(input.tool_input).some((t) => rule.inputPattern.test(t))
+    if (!hit) return null
+  }
+  return ask(rule.id, name.slice(name.lastIndexOf("__") + 2))
+}
+
 function isCliRule(rule) {
   return rule.kind === "cli-allowlist" || rule.kind === "cli-gated"
 }
@@ -1254,8 +1346,10 @@ export function classify(input, rules) {
     }
 
     for (const rule of rules.rules) {
-      if (rule.kind !== "mcp-allowlist" && rule.kind !== "mcp-as-cli") continue
-      const r = evalMcp(rule, input, rules)
+      let r = null
+      if (rule.kind === "mcp-pattern") r = evalMcpPattern(rule, input)
+      else if (rule.kind === "mcp-allowlist" || rule.kind === "mcp-as-cli")
+        r = evalMcp(rule, input, rules)
       if (r) return r
     }
     return null
@@ -1361,9 +1455,9 @@ async function main() {
   try {
     let rules
     try {
-      // WP-G1: GATE_RULES names one rules file; otherwise the packs ported from
-      // the source ruleset are loaded. Env-driven pack selection (GATE_CHECKS)
-      // replaces this in WP-G3.
+      // GATE_RULES names one rules file; otherwise DEFAULT_PACKS (base +
+      // destructive) are loaded. Env-driven pack selection (GATE_CHECKS) comes
+      // in WP-G3.
       rules = process.env.GATE_RULES
         ? loadRules(process.env.GATE_RULES)
         : loadPacks(DEFAULT_PACKS.map(packPath))

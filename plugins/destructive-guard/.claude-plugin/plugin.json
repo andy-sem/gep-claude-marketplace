@@ -1,6 +1,6 @@
 {
   "name": "destructive-guard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Deterministic PreToolUse approval gate, configured through env variables. By default asks before destructive commands on the local machine or cloud services; optional rule packs and an optional Jev classifier.",
   "author": {
     "name": "Gep"

@@ -215,7 +215,24 @@ start the next open work package."*
 | --- | --- |
 | WP-G0, WP-W0 | Done: both plugin dirs scaffolded, listed in `marketplace.json` (`metadata.version` 0.2.0), validate passes |
 | WP-G1 | Done (destructive-guard 0.1.0, catalog 0.3.0): engine/scanner/Jev in `lib/`, wrapper `hooks/gate.sh`, `hooks/hooks.json`, `.env` guard `hooks/env-guard.sh`; ruleset split into `packs/{base,postgres,terraform}.json` (cloud-provider packs removed); 515 ported tests + 8 new green |
-| WP-G2 | **Next**: the general destructive gate (default behaviour). Then WP-G3. WP-W1 can run in parallel |
+| WP-G2 | Done (destructive-guard 0.2.0, catalog 0.4.0): `packs/destructive.json` (34 rules with base) is the default; new `cli-gated` fields `whenFlags`, `shortBundles`, `whenArgs`, `ignoreCase`, `matchStdin`, `dynamicArgs`, `scriptScan`; new kind `mcp-pattern`; 682 tests green |
+| WP-G3 | **Next**: env configuration and tuning. WP-W1 can run in parallel |
+
+#### WP-G2 notes (read before G3)
+
+- `DEFAULT_PACKS = ["base", "destructive"]`; `postgres`/`terraform` are only
+  reachable through `GATE_RULES` until `GATE_CHECKS` exists.
+- Destructive rules use `dynamicArgs: "ignore"` (otherwise `rm $F` or
+  `git checkout $B` would ask) and `scriptScan: false` (otherwise every script
+  mentioning `git`/`rm` would ask). The scanner now returns early when no rule
+  program and no `scriptPatterns` are loaded, so scripts outside the project no
+  longer ask by default.
+- Not covered statically: destructive commands inside scripts (`bash x.sh`
+  that runs `rm -rf`), `psql -f file.sql`, SQL piped into a client. Jev covers
+  these when enabled. Candidates for G3+.
+- Tuning candidates for G3: `unparsable: dynamic command word` (`$EDITOR f`)
+  asks today, which is noisy for a global gate (`GATE_STRICT=0`?); the `.env`
+  guard's `*.env*` match.
 
 #### WP-G1 notes (read before G2/G3)
 

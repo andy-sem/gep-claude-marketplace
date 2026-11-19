@@ -782,6 +782,7 @@ function programNames(rules) {
   const names = new Set()
   for (const rule of rules.rules) {
     if (rule.kind === "cli-allowlist" || rule.kind === "cli-gated") {
+      if (rule.scriptScan === false) continue
       for (const p of rule.programs) names.add(p)
     } else if (rule.kind === "mcp-as-cli") {
       names.add(rule.program)
@@ -795,6 +796,9 @@ function programNames(rules) {
 // `ask` result or null.
 export function scanScripts(collected, rules) {
   if (!collected) return null
+  // Nothing to look for: no program names and no patterns.
+  if (!programNames(rules).length && !(rules.scriptPatterns ?? []).length)
+    return null
   const problem = collected.problems.find((p) => !p.exempt)
   if (problem) return ask("script", `${problem.path} ${problem.reason}`)
   const files = collected.files.filter((f) => !f.exempt)
