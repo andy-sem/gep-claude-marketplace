@@ -9,7 +9,7 @@ repository root for the plan and work packages.
 /plugin install destructive-guard --marketplace gep/gep-claude-marketplace
 ```
 
-## What it does (0.4.0)
+## What it does
 
 Out of the box, with no configuration, it asks before **destructive** calls:
 anything that deletes, overwrites or irreversibly changes data or resources,
@@ -93,6 +93,27 @@ prompt makes the gate ask with a `gate-config:` reason.
 
 Other variables: `GATE_JEV_URL`, `GATE_JEV_MODEL`, `GATE_JEV_TIMEOUT_MS`,
 `GATE_JEV_ALLOW_THRESHOLD`, `GATE_JEV_ESCALATE_THRESHOLD`, `GATE_JEV_LOG`.
+
+## Checking a call: `/destructive-guard:check`
+
+Ask Claude *"would the gate ask for `git push --force`?"* or run the skill
+directly. It dry-runs a call through the effective configuration (same env
+variables, packs and rules files as the hook) and never runs it:
+
+```text
+$ node lib/check.mjs 'git push --force origin main'
+Bash: git push --force origin main
+decision: ask
+source:   git-push-force
+reason:   git-push-force: gated invocation
+jev:      off
+```
+
+`--mcp <tool> '<json>'` checks an MCP call, `--config` (or no argument)
+prints the effective configuration with the Jev API key redacted, `--json`
+gives machine-readable output, `--cwd DIR` resolves scripts relative to DIR.
+Jev is not contacted unless you pass `--jev`. `source` is the rule id to put
+in `GATE_DISABLE_RULES` if a rule is too broad for you.
 
 ## Configuration
 
