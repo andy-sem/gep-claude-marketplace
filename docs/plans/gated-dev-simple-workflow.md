@@ -311,12 +311,9 @@ They can differ (as with DEMO-2). Acceptable; the session reports it.
 ### Next
 
 1. Merge PR #4 (dry-run checks, W6) when the user approves.
-2. Demo cleanup (ask the user): DEMO-4 waits at plan approval; DEMO-5 is at
-   `complete` with its branch pushed and no PR; PR #2 (DEMO-3) is open;
-   worktrees under `~/orca/workspaces/gated-dev-demo/` and
-   `.claude/worktrees/`, untracked `docs/tickets/DEMO-{2..5}` in the demo main
-   checkout, the `orca repo` entry, the local-scope plugin install, and the
-   repo itself if no longer needed.
+2. Demo cleanup done 2026-11-19: PR #2 closed, all ticket branches (local and
+   remote) and worktrees removed, demo `main` up to date. Kept: the repo, its
+   `orca repo` entry and the local-scope plugin install (for further runs).
 3. Optional: WP-W4 (notifications). v0.2: WP-W5.
 
 Update the Status table at the end of every work package.
