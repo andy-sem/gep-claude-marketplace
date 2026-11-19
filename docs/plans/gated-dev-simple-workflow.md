@@ -214,7 +214,7 @@ Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
 
 Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, pushed
-through WP-G5 (WP-W1 local, not pushed); no PR yet. destructive-guard
+through WP-W1; no PR yet. destructive-guard
 **0.6.0**, gated-dev-simple-workflow **0.1.0**, catalog `metadata.version` **0.9.0**. 728 tests green, validate passes.
 
 ### Status
@@ -228,7 +228,7 @@ through WP-G5 (WP-W1 local, not pushed); no PR yet. destructive-guard
 | WP-G3 | Done: `lib/config.mjs`, pack selection, opt-outs, `GATE_ENABLED`, `GATE_ENV_GUARD`, `GATE_LOG`, `GATE_STRICT` (default 0), 713 tests | `c6a5eb5` |
 | WP-G4 (rest) | Done: `GATE_JEV_SCOPE`, `GATE_JEV_CAN_LIFT`, 718 tests | `7d5f6f0` |
 | WP-G5 | Done: `check` skill + `lib/check.mjs` (dry-run, `--json`, `--config`), 728 tests | `885c418` |
-| WP-W1 | Done: four agents ported, file-based (`ticket.md`), generic escalation + `PROJECT_RULES:`, `FORMAT_CMD=`, optional `GATE_CHECK=` | (this commit) |
+| WP-W1 | Done: four agents ported, file-based (`ticket.md`), generic escalation + `PROJECT_RULES:`, `FORMAT_CMD=`, optional `GATE_CHECK=` | `3119c41` |
 | **WP-W2** | **Next**: orchestrator skill | |
 | WP-G6 | Open: docs & release | |
 | WP-W3 … W6 | Open | |
