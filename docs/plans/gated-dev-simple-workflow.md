@@ -211,7 +211,7 @@ The two tracks only meet at W3.
 Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
 
-Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, pushed;
+Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, WP-G4 not pushed yet;
 no PR yet. destructive-guard **0.5.0**, gated-dev-simple-workflow 0.0.1,
 catalog `metadata.version` **0.7.0**. 718 tests green, validate passes.
 
@@ -224,7 +224,7 @@ catalog `metadata.version` **0.7.0**. 718 tests green, validate passes.
 | WP-G2 | Done: general destructive gate is the default (no config needed) | `ec6a090` |
 | WP-G4 (prompt part) | Done ahead of G3: Jev prompt is data, destructive by default, env-configurable | `5384607` |
 | WP-G3 | Done: `lib/config.mjs`, pack selection, opt-outs, `GATE_ENABLED`, `GATE_ENV_GUARD`, `GATE_LOG`, `GATE_STRICT` (default 0), 713 tests | `c6a5eb5` |
-| WP-G4 (rest) | Done: `GATE_JEV_SCOPE`, `GATE_JEV_CAN_LIFT`, 718 tests | (this commit) |
+| WP-G4 (rest) | Done: `GATE_JEV_SCOPE`, `GATE_JEV_CAN_LIFT`, 718 tests | `7d5f6f0` |
 | **WP-G5** | **Next**: `check` skill (unblocks W3) | |
 | WP-G6 | Open: docs & release | |
 | WP-W1 … W6 | Open; W1 can start any time (independent of the gate track) | |
