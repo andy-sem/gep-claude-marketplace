@@ -1413,7 +1413,7 @@ function emit(result) {
 
 // Optional Jev layer (gate-jev.mjs), loaded only when GATE_JEV is set so the
 // output is unchanged without it. With Jev on, every Bash command and every MCP
-// call (any server) is sent; Read, Edit, Write, Glob and Grep are not. gate-config
+// call (any server) in GATE_JEV_SCOPE (default: both) is sent; Read, Edit, Write, Glob and Grep are not. gate-config
 // answers and input-level unparsable answers (bad JSON, no tool name, no command,
 // an MCP call missing its args) are never touched; a Bash command string the
 // parser could not read is sent to Jev, falling back to the unparsable ask when
@@ -1446,6 +1446,9 @@ async function applyJev(input, result, rules, collected, env = process.env) {
   } else {
     return result
   }
+  // GATE_JEV_SCOPE: calls of a kind left out keep the rule result, no request.
+  if (cfg.scope && !cfg.scope.includes(tool === "Bash" ? "bash" : "mcp"))
+    return result
   try {
     return await jev.runJev(call, result, cfg)
   } catch {

@@ -88,8 +88,8 @@ required; files are only referenced *by* env variables.
 | `GATE_JEV_ALLOW_THRESHOLD` / `_ESCALATE_THRESHOLD` | `0.95` / `0.5` | As today. |
 | `GATE_JEV_PROMPT` | `destructive` | Built-in prompt name (`destructive`, `cloud-change`) or a path to a JSON with `question`, `instructions`, `context`, `criteria`, `ask`, `safe`. **Done.** |
 | `GATE_JEV_INSTRUCTIONS` / `_CONTEXT` / `_POLICY` | unset | Replace the question text, `context.project`, `context.policy` of the selected prompt. **Done.** |
-| `GATE_JEV_SCOPE` | `bash,mcp` | Which calls are sent to Jev. |
-| `GATE_JEV_CAN_LIFT` | `1` | Jev may lift a rule `ask` when it is confident the call is safe (today's behaviour). `0` = Jev can only add asks. Jev never emits `allow`. |
+| `GATE_JEV_SCOPE` | `bash,mcp` | Which calls are sent to Jev. **Done.** |
+| `GATE_JEV_CAN_LIFT` | `1` | Jev may lift a rule `ask` when it is confident the call is safe (today's behaviour). `0` = Jev can only add asks. Jev never emits `allow`. **Done.** |
 | `GATE_JEV_LOG` | unset | As today. |
 
 Invariants kept from the source: fail closed (any config/engine error →
@@ -212,8 +212,8 @@ Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
 
 Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, pushed;
-no PR yet. destructive-guard **0.4.0**, gated-dev-simple-workflow 0.0.1,
-catalog `metadata.version` **0.6.0**. 713 tests green, validate passes.
+no PR yet. destructive-guard **0.5.0**, gated-dev-simple-workflow 0.0.1,
+catalog `metadata.version` **0.7.0**. 718 tests green, validate passes.
 
 ### Status
 
@@ -224,11 +224,12 @@ catalog `metadata.version` **0.6.0**. 713 tests green, validate passes.
 | WP-G2 | Done: general destructive gate is the default (no config needed) | `ec6a090` |
 | WP-G4 (prompt part) | Done ahead of G3: Jev prompt is data, destructive by default, env-configurable | `5384607` |
 | WP-G3 | Done: `lib/config.mjs`, pack selection, opt-outs, `GATE_ENABLED`, `GATE_ENV_GUARD`, `GATE_LOG`, `GATE_STRICT` (default 0), 713 tests | `c6a5eb5` |
-| **WP-G4 (rest)** | **Next**: `GATE_JEV_SCOPE`, `GATE_JEV_CAN_LIFT` | |
-| WP-G5, WP-G6 | Open: `check` skill; docs & release | |
+| WP-G4 (rest) | Done: `GATE_JEV_SCOPE`, `GATE_JEV_CAN_LIFT`, 718 tests | (this commit) |
+| **WP-G5** | **Next**: `check` skill (unblocks W3) | |
+| WP-G6 | Open: docs & release | |
 | WP-W1 … W6 | Open; W1 can start any time (independent of the gate track) | |
 
-Suggested order from here: G4 rest (small) → G5 (`check` skill; unblocks W3)
+Suggested order from here: G5 (`check` skill; unblocks W3)
 → W1 → W2 → G6/W3 → W6. The user may pick W1 first instead; ask.
 
 Update this table at the end of every work package.
@@ -286,8 +287,7 @@ Update this table at the end of every work package.
 
 ### Behaviour today
 
-- **Env vars that work now:** everything in §2's table except
-  `GATE_JEV_SCOPE` and `GATE_JEV_CAN_LIFT`. `GATE_RULES` is kept as a
+- **Env vars that work now:** everything in §2's table. `GATE_RULES` is kept as a
   deprecated alias for `GATE_CHECKS=none GATE_RULES_FILE=…` (tests use it).
 - **Strict vs loose:** `classify()` defaults to `strict: true` (tests and
   library callers keep the old behaviour); `main()` passes `config.strict`
@@ -298,6 +298,8 @@ Update this table at the end of every work package.
   `GATE_JEV=1`. Jev: risk = sum of prompt `ask` choices > escalate threshold →
   ask; sum of `safe` choices ≥ allow threshold → no opinion (lifts rule asks);
   otherwise the rule result. Commands mentioning `.env` are never sent.
+  `applyJev()` skips calls outside `cfg.scope` (no request); `runJev()`
+  ignores a `pass` when `cfg.canLift === false`.
 - **Rule kinds:** `cli-allowlist`, `cli-gated`, `mcp-allowlist`, `mcp-as-cli`,
   and new `mcp-pattern` (`tool` regex, `toolWords` from the name after the
   last `__` split on `_`/`-`/camelCase, `inputPattern` over all input
@@ -311,23 +313,30 @@ Update this table at the end of every work package.
 - The scanner returns early when no program names and no `scriptPatterns`
   are loaded (so with the default packs, outside-project scripts don't ask).
 
-### Next: WP-G4 (rest) spec
+### Next: WP-G5 spec (`check` skill)
 
-- `GATE_JEV_SCOPE` (default `bash,mcp`): comma list of `bash`, `mcp`; which
-  calls `applyJev()` sends. Unknown value → config error (fail closed). Read it
-  in `readJevConfig` next to the other Jev variables.
-- `GATE_JEV_CAN_LIFT` (default `1`): `0` turns a Jev `pass` on a rule ask into
-  "rule result stands" (Jev can only add asks). Jev never emits `allow`.
-- Tests against the local mock server in `test/gate-hook.test.mjs`; README Jev
-  section; bump destructive-guard 0.5.0, catalog 0.7.0.
+- `skills/check/SKILL.md`, invoked as `/destructive-guard:check <cmd>` or
+  with an MCP tool name + JSON input. It runs a small CLI (e.g.
+  `lib/check.mjs`, via `node "${CLAUDE_PLUGIN_ROOT}/lib/check.mjs"`) that
+  builds the effective config exactly like `main()` (`readConfig` →
+  `buildRules`), calls `gate(..., {strict, trace})` and prints: decision
+  (`ask` / no opinion), rule id + reason, the pre-Jev rule result, and
+  whether Jev would be consulted (scope). Default: rules only, no network;
+  `--jev` opts in to a real request.
+- `--config` (or no argument): print effective config: packs, extra rule
+  files, disabled ids, strict, env guard, log path, Jev settings with
+  `TYPESAFE_API_KEY` redacted. Config errors are printed, not thrown.
+- Machine-readable `--json` output so the workflow planner (W3) can fill its
+  `## Gated operations` table with rule ids.
+- Tests: CLI on sample commands (`ls` → none, `git push -f` → ask with rule
+  id, MCP delete tool → ask), config print redacts the key, bad config
+  reports `gate-config:`. Bump 0.6.0, catalog 0.8.0.
 
 ### Known gaps / later
 
 - Not caught statically: destructive commands inside scripts (`bash x.sh`
   running `rm -rf`), `psql -f file.sql`, SQL piped into a client. Jev covers
   these when enabled.
-- G5: `/destructive-guard:check <cmd>` skill (dry-run + effective config,
-  API key redacted). W3 depends on it.
 - Old commit `1a9ae6b` may still be fetchable on GitHub by SHA until GC;
   GitHub support can purge it if needed.
 

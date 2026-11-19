@@ -583,6 +583,48 @@ test("jev: read_only 0.97 lifts rule asks and script asks", async () => {
   }
 })
 
+test("jev: GATE_JEV_SCOPE limits which calls are sent", async () => {
+  const bashIn = bash("git push --force")
+  const mcpIn = mcpCall(ISSUE_EDIT, { issueIdOrKey: "PROJ-1" })
+  const rulesOnly = (stdin) => run(stdin, shipped).stdout
+  // bash only: MCP calls keep the rule result and make no request.
+  let r = await runJev(mcpIn, risky, { ...shipped, GATE_JEV_SCOPE: "bash" })
+  assert.equal(r.hits, 0)
+  assert.equal(r.stdout, rulesOnly(mcpIn))
+  r = await runJev(bashIn, unrelated, { ...shipped, GATE_JEV_SCOPE: "bash" })
+  assert.equal(r.hits, 1)
+  assert.equal(r.stdout, "")
+  // mcp only: Bash calls keep the rule result and make no request.
+  r = await runJev(bashIn, unrelated, { ...shipped, GATE_JEV_SCOPE: "mcp" })
+  assert.equal(r.hits, 0)
+  assert.equal(r.stdout, rulesOnly(bashIn))
+  r = await runJev(mcpIn, risky, { ...shipped, GATE_JEV_SCOPE: "mcp" })
+  assert.equal(r.hits, 1)
+  assert.equal(decision(r.stdout).permissionDecision, "ask")
+})
+
+test("jev: GATE_JEV_CAN_LIFT=0 keeps rule asks, Jev still adds asks", async () => {
+  const noLift = { ...shipped, GATE_JEV_CAN_LIFT: "0" }
+  const ruled = bash("cloudctl sql instances describe $P")
+  const r = await runJev(ruled, readOnly, noLift)
+  assert.equal(r.hits, 1)
+  assert.match(decision(r.stdout).permissionDecisionReason, /^cloudctl:/)
+  const added = await runJev(bash("git status"), risky, noLift)
+  assert.match(decision(added.stdout).permissionDecisionReason, /^jev: /)
+  const quiet = await runJev(bash("git status"), readOnly, noLift)
+  assert.equal(quiet.stdout, "")
+})
+
+test("jev: invalid GATE_JEV_SCOPE or GATE_JEV_CAN_LIFT asks gate-config", async () => {
+  for (const env of [{ GATE_JEV_SCOPE: "files" }, { GATE_JEV_CAN_LIFT: "no" }]) {
+    const r = await runJev(bash("git status"), readOnly, { ...shipped, ...env })
+    assert.equal(r.hits, 0)
+    const o = decision(r.stdout)
+    assert.equal(o.permissionDecision, "ask")
+    assert.match(o.permissionDecisionReason, /^gate-config: GATE_JEV_/)
+  }
+})
+
 test("jev: the request for a script carries the redacted script", async () => {
   const root = tempProject({
     "infra/cloud/apply.sh": [
