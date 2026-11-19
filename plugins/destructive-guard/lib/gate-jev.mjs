@@ -2,7 +2,8 @@
 // gate-engine.mjs only when GATE_JEV is set. For every Bash command and every MCP
 // call it asks Jev the configured question (default: could the call delete,
 // overwrite or irreversibly change data, locally or remotely; see jev/*.json and
-// GATE_JEV_PROMPT). Jev can add an `ask` or lift a rule `ask` (no output, so Claude Code's own
+// GATE_JEV_PROMPT; GATE_JEV_SCOPE limits it to Bash or MCP calls). Jev can add an
+// `ask` or, unless GATE_JEV_CAN_LIFT=0, lift a rule `ask` (no output, so Claude Code's own
 // permission rules decide); it never emits an `allow`. Any request failure leaves
 // the rule result unchanged.
 
@@ -25,6 +26,7 @@ const MAX_SCRIPTS_BYTES = 65536
 const PROMPTS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "jev")
 export const DEFAULT_PROMPT = "destructive"
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"])
+export const SCOPES = ["bash", "mcp"]
 
 export class JevConfigError extends Error {
   constructor(message) {
@@ -41,6 +43,27 @@ export class JevConfigError extends Error {
 function optional(env, name) {
   const value = env[name]
   return value === undefined || value.trim() === "" ? undefined : value.trim()
+}
+
+// GATE_JEV_SCOPE: comma list of call kinds sent to Jev (default: all).
+function scope(env) {
+  const raw = optional(env, "GATE_JEV_SCOPE")
+  if (raw === undefined) return [...SCOPES]
+  const items = raw.split(",").map((s) => s.trim().toLowerCase())
+  if (items.some((s) => !SCOPES.includes(s)))
+    throw new JevConfigError(
+      `GATE_JEV_SCOPE must be a comma list of ${SCOPES.join(", ")}`,
+    )
+  return SCOPES.filter((s) => items.includes(s))
+}
+
+// GATE_JEV_CAN_LIFT: 1 (default) lets a confident safe answer lift a rule ask;
+// 0 restricts Jev to adding asks.
+function canLift(env) {
+  const raw = optional(env, "GATE_JEV_CAN_LIFT")
+  if (raw === undefined || raw === "1") return true
+  if (raw === "0") return false
+  throw new JevConfigError("GATE_JEV_CAN_LIFT must be 0 or 1")
 }
 
 function probability(env, name, fallback) {
@@ -105,6 +128,8 @@ export function readJevConfig(env) {
     ),
     timeoutMs,
     logPath: optional(env, "GATE_JEV_LOG"),
+    scope: scope(env),
+    canLift: canLift(env),
     prompt: promptFromEnv(env),
   }
 }
@@ -562,10 +587,12 @@ export async function runJev(call, ruleResult, cfg, deps) {
     return ruleResult
   }
   const jev = jevDecision(probabilities, cfg)
+  // canLift === false (GATE_JEV_CAN_LIFT=0): a safe answer leaves the rule
+  // result in place, so Jev can only add asks. Missing means the default (true).
   const final =
     jev?.decision === "ask"
       ? { decision: "ask", reason: jev.reason }
-      : jev?.decision === "pass"
+      : jev?.decision === "pass" && cfg.canLift !== false
         ? null
         : ruleResult
   audit(cfg, {

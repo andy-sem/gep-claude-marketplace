@@ -139,8 +139,35 @@ test("readJevConfig applies defaults", () => {
     escalateThreshold: 0.5,
     timeoutMs: 1500,
     logPath: undefined,
+    scope: ["bash", "mcp"],
+    canLift: true,
     prompt: builtinPrompt("destructive"),
   })
+})
+
+test("readJevConfig reads GATE_JEV_SCOPE and GATE_JEV_CAN_LIFT", () => {
+  const scopeOf = (v) => readJevConfig({ ...baseEnv, GATE_JEV_SCOPE: v }).scope
+  assert.deepEqual(scopeOf(""), ["bash", "mcp"])
+  assert.deepEqual(scopeOf("bash"), ["bash"])
+  assert.deepEqual(scopeOf(" MCP "), ["mcp"])
+  assert.deepEqual(scopeOf("mcp, bash,mcp"), ["bash", "mcp"])
+  const liftOf = (v) =>
+    readJevConfig({ ...baseEnv, GATE_JEV_CAN_LIFT: v }).canLift
+  assert.equal(liftOf(""), true)
+  assert.equal(liftOf("1"), true)
+  assert.equal(liftOf("0"), false)
+  for (const bad of [
+    { GATE_JEV_SCOPE: "bash,files" },
+    { GATE_JEV_SCOPE: "," },
+    { GATE_JEV_SCOPE: "none" },
+    { GATE_JEV_CAN_LIFT: "yes" },
+    { GATE_JEV_CAN_LIFT: "2" },
+  ])
+    assert.throws(
+      () => readJevConfig({ ...baseEnv, ...bad }),
+      JevConfigError,
+      JSON.stringify(bad),
+    )
 })
 
 test("readJevConfig treats empty optional vars as unset", () => {
@@ -478,6 +505,21 @@ test("runJev returns the rule result unchanged when Jev fails", async () => {
     await runJev(mcpCall("mcp__x__y"), null, cfg, { fetchImpl }),
     null,
   )
+})
+
+test("runJev with canLift false keeps rule asks but still adds asks", async () => {
+  const rule = { decision: "ask", reason: "rule: x" }
+  const noLift = { ...cfg, canLift: false }
+  const safe = async () => okResponse(probs(0, 1, 0, 0))
+  const risky = async () => okResponse(probs(0, 0, 0, 1))
+  for (const call of [bashCall("ls"), mcpCall("mcp__x__y", { a: 1 })]) {
+    assert.equal(await runJev(call, rule, noLift, { fetchImpl: safe }), rule)
+    assert.equal(await runJev(call, null, noLift, { fetchImpl: safe }), null)
+    assert.equal(await runJev(call, rule, cfg, { fetchImpl: safe }), null)
+    const added = await runJev(call, null, noLift, { fetchImpl: risky })
+    assert.equal(added.decision, "ask")
+    assert.match(added.reason, /^jev: /)
+  }
 })
 
 test("runJev falls back to the rule result for every failure mode", async () => {

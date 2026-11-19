@@ -60,6 +60,16 @@ otherwise:
 | `safe` choices at or above `GATE_JEV_ALLOW_THRESHOLD` (0.95) | no opinion, even if a rule asked |
 | in between, error, timeout | the rule result |
 
+Two variables narrow this:
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `GATE_JEV_SCOPE` | `bash,mcp` | Which calls are sent: `bash`, `mcp` or both. Calls left out keep the rule result and make no request. |
+| `GATE_JEV_CAN_LIFT` | `1` | `0` stops a confident safe answer from lifting a rule ask, so Jev can only add asks. |
+
+Jev never emits `allow`. An invalid value makes the gate ask with a
+`gate-config:` reason.
+
 **Default question** (`jev/destructive.json`): *"Could this call delete,
 overwrite or irreversibly change data or resources, on the local machine or
 in any remote service?"* with choices `read_only`, `reversible_change`
