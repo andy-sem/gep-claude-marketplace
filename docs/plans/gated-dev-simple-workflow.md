@@ -207,114 +207,162 @@ The two tracks only meet at W3.
 
 ## 7. Handoff (how to continue in a new session)
 
-Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` and
+Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
+
+Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, pushed;
+no PR yet. destructive-guard **0.3.0**, gated-dev-simple-workflow 0.0.1,
+catalog `metadata.version` **0.5.0**. 689 tests green, validate passes.
 
 ### Status
 
-| Package | State |
-| --- | --- |
-| WP-G0, WP-W0 | Done: both plugin dirs scaffolded, listed in `marketplace.json` (`metadata.version` 0.2.0), validate passes |
-| WP-G1 | Done (destructive-guard 0.1.0, catalog 0.3.0): engine/scanner/Jev in `lib/`, wrapper `hooks/gate.sh`, `hooks/hooks.json`, `.env` guard `hooks/env-guard.sh`; ruleset split into `packs/{base,postgres,terraform}.json` (cloud-provider packs removed); 515 ported tests + 8 new green |
-| WP-G2 | Done (destructive-guard 0.2.0, catalog 0.4.0): `packs/destructive.json` (34 rules with base) is the default; new `cli-gated` fields `whenFlags`, `shortBundles`, `whenArgs`, `ignoreCase`, `matchStdin`, `dynamicArgs`, `scriptScan`; new kind `mcp-pattern`; 682 tests green |
-| WP-G4 (prompt part) | Done ahead of G3 (destructive-guard 0.3.0, catalog 0.5.0): Jev prompt is data (`jev/destructive.json` default, `jev/cloud-change.json` preset), selected by `GATE_JEV_PROMPT`, overridable by `GATE_JEV_INSTRUCTIONS/_CONTEXT/_POLICY`; `ask`/`safe` choice lists drive `jevDecision`. Prompts name no specific MCP server. Remaining G4: `GATE_JEV_SCOPE`, `GATE_JEV_CAN_LIFT` |
-| WP-G3 | **Next**: env configuration and tuning. WP-W1 can run in parallel |
-
-#### WP-G2 notes (read before G3)
-
-- `DEFAULT_PACKS = ["base", "destructive"]`; `postgres`/`terraform` are only
-  reachable through `GATE_RULES` until `GATE_CHECKS` exists.
-- Destructive rules use `dynamicArgs: "ignore"` (otherwise `rm $F` or
-  `git checkout $B` would ask) and `scriptScan: false` (otherwise every script
-  mentioning `git`/`rm` would ask). The scanner now returns early when no rule
-  program and no `scriptPatterns` are loaded, so scripts outside the project no
-  longer ask by default.
-- Not covered statically: destructive commands inside scripts (`bash x.sh`
-  that runs `rm -rf`), `psql -f file.sql`, SQL piped into a client. Jev covers
-  these when enabled. Candidates for G3+.
-- Tuning candidates for G3: `unparsable: dynamic command word` (`$EDITOR f`)
-  asks today, which is noisy for a global gate (`GATE_STRICT=0`?); the `.env`
-  guard's `*.env*` match.
-
-#### WP-G1 notes (read before G2/G3)
-
-- Default without `GATE_RULES` = `DEFAULT_PACKS` in `lib/gate-engine.mjs`
-  (`base`, `postgres`, `terraform`). G2 makes `destructive` the default; G3
-  adds `GATE_CHECKS`, and `postgres`/`terraform` become opt-in. `GATE_RULES=""` now means "use packs"
-  (the source treated it as a path).
-- New engine exports: `composeRules(paths)` (merge raw packs: string lists
-  deduped, `runners`/`rules` concatenated, `inertUnsafeFlags` merged per
-  program, duplicate rule ids rejected), `loadPacks(paths)`, `parseRules(obj)`,
-  `packPath(name)`. G3 builds pack selection on these.
-- Ported tests run against `test/fixtures/rules.json`: the source ruleset with
-  its cloud-provider tools renamed to fictional ones (`cloudctl`, `blobctl`,
-  `dwh`, `dbhost`, `acmecloud`) so engine coverage of `cli-allowlist`,
-  `mcp-allowlist` and `mcp-as-cli` is kept. `test/packs.test.mjs` checks the
-  shipped packs match the fixture's matching parts. Its `scriptScanExempt` paths are source-project specific
-  and are **not** shipped in any pack (project exemptions → `GATE_RULES_FILE`).
-- Three tests that read source-repo files were rewritten: the hook-registration
-  test now checks `hooks/hooks.json`; the two "real provision script" tests use
-  a temp-project stand-in.
-- `.env` guard keeps the source's `*.env*` match, which also blocks e.g.
-  `config.environment.ts`. Tighten in G3 together with `GATE_ENV_GUARD`.
-- Wrapper still honours `GATE_INFRA_NODE` (tests use it); rename in G3 if wanted.
+| Package | State | Commit |
+| --- | --- | --- |
+| WP-G0, WP-W0 | Done: both plugins scaffolded and in the catalog | `480382f` |
+| WP-G1 | Done: engine ported, packs, `.env` guard, 523 tests | `256a169` |
+| WP-G2 | Done: general destructive gate is the default (no config needed) | `ec6a090` |
+| WP-G4 (prompt part) | Done ahead of G3: Jev prompt is data, destructive by default, env-configurable | `5384607` |
+| **WP-G3** | **Next**: env configuration and tuning (spec below) | |
+| WP-G4 (rest) | Open: `GATE_JEV_SCOPE`, `GATE_JEV_CAN_LIFT` | |
+| WP-G5, WP-G6 | Open: `check` skill; docs & release | |
+| WP-W1 … W6 | Open; W1 can start any time (independent of the gate track) | |
 
 Update this table at the end of every work package.
 
-### Getting the source
+### Decisions made with the user (binding)
 
-SSH clone of `git@github.com:omicron-labs/flashcards.git` hung in the first
-session. Fetch single files with `gh` instead (it is authenticated):
+- **Public repo hygiene.** This repo is public. Never write the source
+  project's app name, ticket keys, cloud/database project ids or branch names
+  here. Supabase and gcloud/GCP are *irrelevant*: no packs, rules, prompt text
+  or test names for them (tests use fictional tools: `cloudctl`, `blobctl`,
+  `dwh`, `dbhost`, `acmecloud`). The source branch is kept only in local
+  Claude memory (`gated-dev-source-refs`); ask the user if it is missing.
+  History was rewritten once to remove such strings; do not reintroduce them.
+- **MCP stays generic.** No named MCP servers (Jira/Atlassian, Chrome, …) in
+  prompts, packs or tests; describe calls as "an MCP tool call that …" and use
+  made-up tool names (`mcp__tracker__editIssue`, `mcp__db__execute_sql`).
+  A test enforces this for `jev/*.json`.
+- **General gate first, then fine-tuning and configuration.** The default
+  must be useful with zero config; G3+ only add selection/opt-outs on top.
+- **Jev decides, rules are the fallback.** With Jev on, Jev's confident answer
+  wins (adds an ask, or lifts a rule ask); rules decide in the uncertain band,
+  on errors/timeouts and when Jev is off. Fail-closed cases (config errors,
+  unparsable hook input) always ask and are never sent to Jev.
+- **The Jev question is a default that env vars can change** (done):
+  `GATE_JEV_PROMPT`, `GATE_JEV_INSTRUCTIONS`, `GATE_JEV_CONTEXT`,
+  `GATE_JEV_POLICY`. The default covers local *and* remote destructive calls.
+- CLI rules for `gh`, `aws`, `az`, `wrangler` stay in the destructive pack
+  (command coverage, not MCP). Jira in §3 stays (workflow ticket source).
+- Commit per work package; push only when the user asks.
+
+### Where things are (`plugins/destructive-guard/`)
+
+| Path | What |
+| --- | --- |
+| `hooks/hooks.json` | PreToolUse: `Bash\|mcp__.*` → `gate.sh`; `Read\|Edit\|Write` → `env-guard.sh` |
+| `hooks/gate.sh` | Fail-closed wrapper: runs the engine with `GATE_RUN=1` + done-file; no done-file / no node → ask. Honours `GATE_INFRA_NODE` (tests) |
+| `hooks/env-guard.sh` | Blocks `*.env*` paths except `.env.example` (exit 2); jq optional |
+| `lib/gate-engine.mjs` | Parser, rules, `classify()`, `gate()`, `main()`; `DEFAULT_PACKS = ["base","destructive"]`; `composeRules/loadPacks/parseRules/packPath` |
+| `lib/gate-scripts.mjs` | Collects scripts a Bash command runs; `scanScripts()` (program names of rules with `scriptScan !== false`, then `scriptPatterns`) |
+| `lib/gate-jev.mjs` | Jev config (`readJevConfig`), prompts (`promptFromEnv`, `builtinPrompt`, `validatePrompt`), redaction, request, `jevDecision`, audit log |
+| `packs/base.json` | wrappers, runners, inert programs (always loaded) |
+| `packs/destructive.json` | Default rules (34): filesystem, git, gh, infra, aws/az/wrangler, SQL, MCP |
+| `packs/postgres.json`, `packs/terraform.json` | Optional, ported; only reachable via `GATE_RULES` until G3 |
+| `jev/destructive.json` | Default Jev prompt: choices `read_only`, `reversible_change` (safe), `destructive` (ask) |
+| `jev/cloud-change.json` | Preset: the source's question (cloud/infra/db changes) |
+| `test/fixtures/rules.json` | Ported ruleset with fictional tool names; used by the ported tests |
+| `test/destructive.test.mjs` | One case per destructive rule + near misses + new rule-field unit tests |
+| `test/jev-prompt.test.mjs` | Default prompt, env overrides, validation, "no specific names" check |
+| `README.md` | User docs: what it asks on, Jev section, rule-field reference |
+
+### Behaviour today
+
+- **Env vars that work now:** `GATE_RULES` (one rules file replaces the
+  default packs), `GATE_JEV=1` + `TYPESAFE_API_KEY`, `GATE_JEV_PROMPT`,
+  `GATE_JEV_INSTRUCTIONS`, `GATE_JEV_CONTEXT`, `GATE_JEV_POLICY`,
+  `GATE_JEV_URL/_MODEL/_TIMEOUT_MS/_ALLOW_THRESHOLD/_ESCALATE_THRESHOLD/_LOG`.
+  Nothing else from §2's table exists yet.
+- **Decision flow** `gate()`: `classify()` (rules) → for Bash with no rule hit
+  (or Jev on) collect scripts and `scanScripts()` → `applyJev()` when
+  `GATE_JEV=1`. Jev: risk = sum of prompt `ask` choices > escalate threshold →
+  ask; sum of `safe` choices ≥ allow threshold → no opinion (lifts rule asks);
+  otherwise the rule result. Commands mentioning `.env` are never sent.
+- **Rule kinds:** `cli-allowlist`, `cli-gated`, `mcp-allowlist`, `mcp-as-cli`,
+  and new `mcp-pattern` (`tool` regex, `toolWords` from the name after the
+  last `__` split on `_`/`-`/camelCase, `inputPattern` over all input
+  strings; all given conditions must hold).
+- **New `cli-gated` fields (G2):** `whenFlags` (AND of OR-groups),
+  `shortBundles` (one-letter flags inside `-rf`; also for `unlessFlags`),
+  `whenArgs` (regex on any arg; `ignoreCase`; `matchStdin` adds heredocs),
+  `dynamicArgs` (`ask` default / `ignore`), `scriptScan` (`false` keeps the
+  program out of the scanner). Destructive rules use `dynamicArgs: "ignore"`
+  and `scriptScan: false`.
+- The scanner returns early when no program names and no `scriptPatterns`
+  are loaded (so with the default packs, outside-project scripts don't ask).
+
+### Next: WP-G3 spec (env configuration and tuning)
+
+Put all env parsing in a new `lib/config.mjs` (one place, pure function
+`readConfig(env) → config | throws ConfigError`), used by `main()`. Bad
+values → ask with `gate-config:` reason (fail closed), as today.
+
+- `GATE_ENABLED=0` → hooks emit nothing (both `gate.sh` and `env-guard.sh`).
+- `GATE_CHECKS` (default `destructive`): comma list of pack names from
+  `packs/` (`base` always prepended), or `none`. Unknown name → config error.
+- `GATE_RULES_FILE`: `:`-separated extra rules files appended after the packs
+  (with `GATE_CHECKS=none` it is a full replacement). Keep `GATE_RULES` as a
+  deprecated alias or drop it (tests use it heavily; simplest: keep it).
+- `GATE_DISABLE_RULES`: comma list of rule ids removed after composition;
+  unknown id → config error (catches typos).
+- `GATE_ENV_GUARD=0` disables `env-guard.sh`; also tighten its match to real
+  env files (`.env`, `.env.*`, `*.env`), not any path containing `.env`
+  (today `config.environment.ts` is blocked).
+- `GATE_LOG`: append one JSON line per decision (tool, command/tool name,
+  rule result, final decision), like `GATE_JEV_LOG`.
+- Tuning for a global gate (user wants low noise): make the
+  `unparsable: dynamic command word` ask (`$EDITOR file`) configurable, e.g.
+  `GATE_STRICT=0` turns parser-uncertainty asks into no opinion; default to be
+  agreed with the user (ask them).
+- Tests: a config matrix (`test/config.test.mjs`) + hook-level tests through
+  `gate.sh`; keep all 689 green.
+- Bump destructive-guard to 0.4.0, catalog to 0.6.0; README "Configuration"
+  section rewritten as the full env reference.
+
+### Known gaps / later
+
+- Not caught statically: destructive commands inside scripts (`bash x.sh`
+  running `rm -rf`), `psql -f file.sql`, SQL piped into a client. Jev covers
+  these when enabled.
+- G4 rest: `GATE_JEV_SCOPE` (`bash,mcp`), `GATE_JEV_CAN_LIFT` (default `1`).
+- G5: `/destructive-guard:check <cmd>` skill (dry-run + effective config,
+  API key redacted). W3 depends on it.
+- Old commit `1a9ae6b` may still be fetchable on GitHub by SHA until GC;
+  GitHub support can purge it if needed.
+
+### Getting the source (only needed for WP-W1/W2 now)
+
+SSH clone of `git@github.com:omicron-labs/flashcards.git` hung. Fetch single
+files with `gh` (authenticated) into the session scratchpad, never this repo:
 
 ```bash
-REF="$SOURCE_REF"   # not recorded here (public repo); ask the user or check local memory
+REF="$SOURCE_REF"   # not recorded here (public repo); local memory or ask the user
 gh api "repos/omicron-labs/flashcards/contents/<path>?ref=$REF" \
   -H 'Accept: application/vnd.github.raw' > <dest>
-# list files:
 gh api "repos/omicron-labs/flashcards/git/trees/$REF?recursive=1" --jq '.tree[].path'
 ```
 
-Download into the session scratchpad, not into this repo. Files needed: the
-paths in §1, all under `.claude/` plus `scripts/ticket-flow/watch-pr.mjs`
-(v0.2 only) and the pipeline design spec in `docs/tickets/` (design reference for WP-W2).
-
-### Engine facts (so G1–G4 don't need re-discovery)
-
-- `gate-infra.sh` runs `node gate-infra.mjs` with `GATE_RUN=1` and
-  `GATE_DONE_FILE`; it emits nothing (= no opinion, normal permissions) **only**
-  if the engine wrote the done-file, otherwise it emits an `ask`. Missing
-  `node` → `ask`.
-- Rules path today: `$GATE_RULES` or `gate-rules.json` next to the engine
-  (`main()` in `gate-infra.mjs`). `loadRules()` validates and throws
-  `RulesError` → `ask` with `gate-config:` reason.
-- Rules file top-level keys: `wrappers`, `runners`, `inertPrograms`,
-  `inertUnsafeFlags`, `scriptPatterns`, `scriptScanExempt`, `rules`.
-- Rule kinds (`KNOWN_KINDS`): `cli-allowlist` (programs, skipWords,
-  readPrefixes, readSequences, readVerbs, writeVerbs, helpFlags, helpWords;
-  unknown subcommand asks), `cli-gated` (programs, gatedPrefixes matched as a
-  subsequence of positionals, unlessFlags), `mcp-allowlist` (tool regex,
-  readTools regexes), `mcp-as-cli` (tool regex, argsField, program).
-  No flag-based or content-based matching yet → WP-G2.
-- Decision flow `gate()`: `classify()` (rules) → for Bash with no rule match
-  (or when Jev is on) `gate-scripts.mjs` collects the scripts/files the command
-  runs and `scanScripts()` matches `scriptPatterns` → `applyJev()` (dynamic
-  import of `gate-jev.mjs`, only when `GATE_JEV` is set).
-- Jev: `readJevConfig(env)` parses all `GATE_JEV_*` vars and throws
-  `JevConfigError` on bad values; `CONTEXT` and `CRITERIA` constants hold the
-  source-project-specific prompt (move to `jev/*.json` in WP-G4); `jevDecision()`
-  applies thresholds; request failures leave the rule result unchanged.
-- Tests use `node:test`; `gate-hook.test.mjs` computes `repoRoot` as two levels
-  up from the hooks dir and spawns the wrapper. Paths need adjusting for
-  `plugins/destructive-guard/{hooks,lib,test}`.
-- Hooks in plugins reference files via `${CLAUDE_PLUGIN_ROOT}`; plugin agents
-  are namespaced (`gated-dev-simple-workflow:ticket-spec`).
+Workflow sources: `.claude/agents/ticket-*.md`, `.claude/skills/ticket/SKILL.md`,
+`.claude/hooks/notify-ticket-flow.sh`, `scripts/ticket-flow/watch-pr.mjs`
+(v0.2 only), the pipeline design spec under `docs/tickets/`. Scrub all
+source-project names (see decisions above) while porting.
 
 ### Working rules for every package
 
-1. Port tests first, keep them green, then change behaviour.
+1. Keep existing tests green, then change behaviour; add tests per change.
 2. Run `node --test 'plugins/destructive-guard/test/*.test.mjs'` (Node 25
-   rejects a bare directory argument) and
-   `claude plugin validate .` before committing.
+   rejects a bare directory argument) and `claude plugin validate .` before
+   committing.
 3. Bump the plugin `version` in `plugin.json` **and** its catalog entry, and
    `metadata.version` when the catalog changes (see `CLAUDE.md`).
-4. One commit (or PR) per work package on `feature/gated-dev-simple-workflow`.
+4. One commit per work package on `feature/gated-dev-simple-workflow`; push
+   only when the user asks.
