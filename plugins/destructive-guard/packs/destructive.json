@@ -1,0 +1,738 @@
+{
+  "rules": [
+    {
+      "id": "rm-recursive-force",
+      "kind": "cli-gated",
+      "programs": [
+        "rm"
+      ],
+      "gatedPrefixes": [
+        []
+      ],
+      "whenFlags": [
+        [
+          "-r",
+          "-R",
+          "--recursive"
+        ],
+        [
+          "-f",
+          "--force"
+        ]
+      ],
+      "shortBundles": true,
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "find-delete",
+      "kind": "cli-gated",
+      "programs": [
+        "find"
+      ],
+      "gatedPrefixes": [
+        []
+      ],
+      "whenFlags": [
+        [
+          "-delete"
+        ]
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "shred",
+      "kind": "cli-gated",
+      "programs": [
+        "shred",
+        "srm"
+      ],
+      "gatedPrefixes": [
+        []
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "dd-output",
+      "kind": "cli-gated",
+      "programs": [
+        "dd"
+      ],
+      "gatedPrefixes": [
+        []
+      ],
+      "whenArgs": [
+        "^of="
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "mkfs",
+      "kind": "cli-gated",
+      "programs": [
+        "mkfs",
+        "mkfs.ext2",
+        "mkfs.ext3",
+        "mkfs.ext4",
+        "mkfs.xfs",
+        "mkfs.btrfs",
+        "mkfs.vfat",
+        "mkfs.fat",
+        "mkfs.exfat",
+        "mkfs.ntfs",
+        "newfs",
+        "newfs_apfs",
+        "newfs_hfs",
+        "wipefs"
+      ],
+      "gatedPrefixes": [
+        []
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "truncate",
+      "kind": "cli-gated",
+      "programs": [
+        "truncate"
+      ],
+      "gatedPrefixes": [
+        []
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "diskutil-erase",
+      "kind": "cli-gated",
+      "programs": [
+        "diskutil"
+      ],
+      "gatedPrefixes": [
+        [
+          "eraseDisk"
+        ],
+        [
+          "eraseVolume"
+        ],
+        [
+          "zeroDisk"
+        ],
+        [
+          "randomDisk"
+        ],
+        [
+          "secureErase"
+        ],
+        [
+          "partitionDisk"
+        ],
+        [
+          "apfs",
+          "deleteVolume"
+        ],
+        [
+          "apfs",
+          "deleteContainer"
+        ]
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "git-push-force",
+      "kind": "cli-gated",
+      "programs": [
+        "git"
+      ],
+      "gatedPrefixes": [
+        [
+          "push"
+        ]
+      ],
+      "whenFlags": [
+        [
+          "--force",
+          "-f",
+          "--force-with-lease",
+          "--mirror",
+          "--delete",
+          "-d",
+          "--prune"
+        ]
+      ],
+      "shortBundles": true,
+      "helpFlags": [
+        "--help",
+        "-h"
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "git-push-refspec",
+      "kind": "cli-gated",
+      "programs": [
+        "git"
+      ],
+      "gatedPrefixes": [
+        [
+          "push"
+        ]
+      ],
+      "whenArgs": [
+        "^\\+",
+        "^:"
+      ],
+      "helpFlags": [
+        "--help",
+        "-h"
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "git-reset-hard",
+      "kind": "cli-gated",
+      "programs": [
+        "git"
+      ],
+      "gatedPrefixes": [
+        [
+          "reset"
+        ]
+      ],
+      "whenFlags": [
+        [
+          "--hard"
+        ]
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "git-clean",
+      "kind": "cli-gated",
+      "programs": [
+        "git"
+      ],
+      "gatedPrefixes": [
+        [
+          "clean"
+        ]
+      ],
+      "whenFlags": [
+        [
+          "-f",
+          "--force"
+        ]
+      ],
+      "unlessFlags": [
+        "-n",
+        "--dry-run"
+      ],
+      "shortBundles": true,
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "git-branch-force-delete",
+      "kind": "cli-gated",
+      "programs": [
+        "git"
+      ],
+      "gatedPrefixes": [
+        [
+          "branch"
+        ]
+      ],
+      "whenFlags": [
+        [
+          "-D"
+        ]
+      ],
+      "shortBundles": true,
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "git-checkout-all",
+      "kind": "cli-gated",
+      "programs": [
+        "git"
+      ],
+      "gatedPrefixes": [
+        [
+          "checkout"
+        ]
+      ],
+      "whenArgs": [
+        "^\\.$"
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "git-restore-all",
+      "kind": "cli-gated",
+      "programs": [
+        "git"
+      ],
+      "gatedPrefixes": [
+        [
+          "restore"
+        ]
+      ],
+      "whenArgs": [
+        "^\\.$"
+      ],
+      "unlessFlags": [
+        "--staged",
+        "-S"
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "git-stash-drop",
+      "kind": "cli-gated",
+      "programs": [
+        "git"
+      ],
+      "gatedPrefixes": [
+        [
+          "stash",
+          "drop"
+        ],
+        [
+          "stash",
+          "clear"
+        ]
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "git-history-rewrite",
+      "kind": "cli-gated",
+      "programs": [
+        "git"
+      ],
+      "gatedPrefixes": [
+        [
+          "filter-branch"
+        ],
+        [
+          "filter-repo"
+        ]
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "git-update-ref-delete",
+      "kind": "cli-gated",
+      "programs": [
+        "git"
+      ],
+      "gatedPrefixes": [
+        [
+          "update-ref"
+        ]
+      ],
+      "whenFlags": [
+        [
+          "-d"
+        ]
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "gh-delete",
+      "kind": "cli-gated",
+      "programs": [
+        "gh"
+      ],
+      "gatedPrefixes": [
+        [
+          "repo",
+          "delete"
+        ],
+        [
+          "release",
+          "delete"
+        ],
+        [
+          "release",
+          "delete-asset"
+        ],
+        [
+          "secret",
+          "delete"
+        ],
+        [
+          "variable",
+          "delete"
+        ],
+        [
+          "cache",
+          "delete"
+        ],
+        [
+          "run",
+          "delete"
+        ],
+        [
+          "gist",
+          "delete"
+        ],
+        [
+          "label",
+          "delete"
+        ],
+        [
+          "ssh-key",
+          "delete"
+        ],
+        [
+          "gpg-key",
+          "delete"
+        ]
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "gh-pr-delete-branch",
+      "kind": "cli-gated",
+      "programs": [
+        "gh"
+      ],
+      "gatedPrefixes": [
+        [
+          "pr",
+          "close"
+        ],
+        [
+          "pr",
+          "merge"
+        ]
+      ],
+      "whenFlags": [
+        [
+          "--delete-branch",
+          "-d"
+        ]
+      ],
+      "shortBundles": true,
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "gh-api-delete",
+      "kind": "cli-gated",
+      "programs": [
+        "gh"
+      ],
+      "gatedPrefixes": [
+        [
+          "api"
+        ]
+      ],
+      "whenArgs": [
+        "^(--method=|-X)?DELETE$"
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "terraform-destroy",
+      "kind": "cli-gated",
+      "programs": [
+        "terraform",
+        "tofu",
+        "terragrunt"
+      ],
+      "gatedPrefixes": [
+        [
+          "destroy"
+        ],
+        [
+          "state",
+          "rm"
+        ],
+        [
+          "workspace",
+          "delete"
+        ]
+      ],
+      "helpFlags": [
+        "-help",
+        "-h",
+        "--help"
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "terraform-apply-destroy",
+      "kind": "cli-gated",
+      "programs": [
+        "terraform",
+        "tofu",
+        "terragrunt"
+      ],
+      "gatedPrefixes": [
+        [
+          "apply"
+        ]
+      ],
+      "whenFlags": [
+        [
+          "-destroy",
+          "--destroy"
+        ]
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "kubectl-delete",
+      "kind": "cli-gated",
+      "programs": [
+        "kubectl",
+        "oc"
+      ],
+      "gatedPrefixes": [
+        [
+          "delete"
+        ],
+        [
+          "drain"
+        ]
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "helm-uninstall",
+      "kind": "cli-gated",
+      "programs": [
+        "helm"
+      ],
+      "gatedPrefixes": [
+        [
+          "uninstall"
+        ],
+        [
+          "delete"
+        ]
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "docker-prune",
+      "kind": "cli-gated",
+      "programs": [
+        "docker",
+        "podman"
+      ],
+      "gatedPrefixes": [
+        [
+          "system",
+          "prune"
+        ],
+        [
+          "volume",
+          "prune"
+        ],
+        [
+          "volume",
+          "rm"
+        ],
+        [
+          "image",
+          "prune"
+        ],
+        [
+          "container",
+          "prune"
+        ],
+        [
+          "builder",
+          "prune"
+        ],
+        [
+          "network",
+          "prune"
+        ]
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "docker-compose-volumes",
+      "kind": "cli-gated",
+      "programs": [
+        "docker",
+        "podman",
+        "docker-compose",
+        "podman-compose"
+      ],
+      "gatedPrefixes": [
+        [
+          "down"
+        ]
+      ],
+      "whenFlags": [
+        [
+          "-v",
+          "--volumes"
+        ]
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "aws-delete",
+      "kind": "cli-gated",
+      "programs": [
+        "aws"
+      ],
+      "gatedPrefixes": [
+        []
+      ],
+      "whenArgs": [
+        "^(delete|terminate|deregister|purge|remove)-[a-z0-9-]+$"
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "aws-s3-delete",
+      "kind": "cli-gated",
+      "programs": [
+        "aws"
+      ],
+      "gatedPrefixes": [
+        [
+          "s3",
+          "rm"
+        ],
+        [
+          "s3",
+          "rb"
+        ]
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "az-delete",
+      "kind": "cli-gated",
+      "programs": [
+        "az"
+      ],
+      "gatedPrefixes": [
+        [
+          "delete"
+        ],
+        [
+          "delete-batch"
+        ],
+        [
+          "purge"
+        ]
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "wrangler-delete",
+      "kind": "cli-gated",
+      "programs": [
+        "wrangler"
+      ],
+      "gatedPrefixes": [
+        [
+          "delete"
+        ]
+      ],
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "sql-destructive",
+      "kind": "cli-gated",
+      "programs": [
+        "psql",
+        "mysql",
+        "mariadb",
+        "sqlite3",
+        "duckdb"
+      ],
+      "gatedPrefixes": [
+        []
+      ],
+      "whenArgs": [
+        "(?:\\bdrop\\s+(table|database|schema|view|materialized\\s+view|index|function|procedure|trigger|sequence|type|role|user|extension|owned|policy|publication)\\b)|(?:\\btruncate\\b)|(?:\\bdelete\\s+from\\b(?![\\s\\S]*\\bwhere\\b))|(?:\\balter\\s+table\\b[\\s\\S]*?\\bdrop\\b)"
+      ],
+      "ignoreCase": true,
+      "matchStdin": true,
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "wrangler-d1-sql",
+      "kind": "cli-gated",
+      "programs": [
+        "wrangler"
+      ],
+      "gatedPrefixes": [
+        [
+          "d1",
+          "execute"
+        ]
+      ],
+      "whenArgs": [
+        "(?:\\bdrop\\s+(table|database|schema|view|materialized\\s+view|index|function|procedure|trigger|sequence|type|role|user|extension|owned|policy|publication)\\b)|(?:\\btruncate\\b)|(?:\\bdelete\\s+from\\b(?![\\s\\S]*\\bwhere\\b))|(?:\\balter\\s+table\\b[\\s\\S]*?\\bdrop\\b)"
+      ],
+      "ignoreCase": true,
+      "dynamicArgs": "ignore",
+      "scriptScan": false
+    },
+    {
+      "id": "mcp-destructive-tool",
+      "kind": "mcp-pattern",
+      "toolWords": [
+        "delete",
+        "drop",
+        "destroy",
+        "destructive",
+        "remove",
+        "reset",
+        "truncate",
+        "purge",
+        "wipe",
+        "erase",
+        "terminate"
+      ]
+    },
+    {
+      "id": "mcp-destructive-sql",
+      "kind": "mcp-pattern",
+      "toolWords": [
+        "sql",
+        "query",
+        "execute"
+      ],
+      "inputPattern": "(?:\\bdrop\\s+(table|database|schema|view|materialized\\s+view|index|function|procedure|trigger|sequence|type|role|user|extension|owned|policy|publication)\\b)|(?:\\btruncate\\b)|(?:\\bdelete\\s+from\\b(?![\\s\\S]*\\bwhere\\b))|(?:\\balter\\s+table\\b[\\s\\S]*?\\bdrop\\b)"
+    }
+  ]
+}

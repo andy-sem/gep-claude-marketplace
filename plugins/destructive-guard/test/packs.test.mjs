@@ -22,8 +22,8 @@ const fixture = JSON.parse(
 const byId = (rules) => [...rules].sort((a, b) => a.id.localeCompare(b.id))
 const wrapper = fileURLToPath(new URL("../hooks/gate.sh", import.meta.url))
 
-test("default packs match the matching parts of the test ruleset", () => {
-  const composed = composeRules(DEFAULT_PACKS.map(packPath))
+test("ported packs match the matching parts of the test ruleset", () => {
+  const composed = composeRules(["base", "postgres", "terraform"].map(packPath))
   for (const key of [
     "wrappers",
     "runners",
@@ -47,7 +47,7 @@ test("default packs match the matching parts of the test ruleset", () => {
 })
 
 test("every pack loads on its own after base", () => {
-  for (const name of DEFAULT_PACKS) {
+  for (const name of ["destructive", "postgres", "terraform"]) {
     assert.doesNotThrow(() => loadPacks([packPath("base"), packPath(name)]), name)
   }
 })
@@ -83,7 +83,11 @@ test("composeRules merges string lists without duplicates", () => {
   assert.deepEqual(m.inertUnsafeFlags, { rg: ["--pre", "-z"] })
 })
 
-test("without GATE_RULES the hook loads the shipped packs", () => {
+test("DEFAULT_PACKS is base + destructive", () => {
+  assert.deepEqual(DEFAULT_PACKS, ["base", "destructive"])
+})
+
+test("without GATE_RULES the hook loads the default packs", () => {
   const run = (command) =>
     spawnSync("bash", [wrapper], {
       input: JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd: tmpdir() }),
@@ -92,6 +96,13 @@ test("without GATE_RULES the hook loads the shipped packs", () => {
     })
   const asked = JSON.parse(run("terraform destroy").stdout).hookSpecificOutput
   assert.equal(asked.permissionDecision, "ask")
-  assert.match(asked.permissionDecisionReason, /^terraform:/)
+  assert.match(asked.permissionDecisionReason, /^terraform-destroy:/)
+  assert.match(
+    JSON.parse(run("git push --force").stdout).hookSpecificOutput
+      .permissionDecisionReason,
+    /^git-push-force:/,
+  )
+  assert.equal(run("git push").stdout, "")
+  assert.equal(run("git status").stdout, "")
   assert.equal(run("ls -la").stdout, "")
 })
