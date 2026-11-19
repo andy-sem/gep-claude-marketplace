@@ -91,6 +91,16 @@ Sessions are named `<KEY> · <title>` (`<KEY> resume · <title>`) and get
 `TICKET_FLOW_KEY`; `--remote-control` also starts them with Remote Control.
 Outside Orca and iTerm2 only `--dry-run` works.
 
+### Notifications
+
+Launched sessions (those with `TICKET_FLOW_KEY`) show a desktop notification
+titled `<KEY> needs you` whenever Claude Code raises a `Notification` event:
+a permission or gate prompt, a stop point such as plan approval, or an idle
+wait for input. macOS uses `osascript` (with a sound), Linux uses
+`notify-send` when it is installed; other systems stay silent. The message
+comes from the event (needs `jq`, otherwise a generic text). Sessions started
+by hand are never notified. Set `GATED_DEV_NOTIFY=0` to turn it off.
+
 ## Agents
 
 | Agent | Stage | Writes |
@@ -113,7 +123,7 @@ gate the table lists the calls it expects to need approval, with
 
 ## Requirements
 
-`git`, and `gh` (authenticated) for the PR; `orca` when running in Orca; `node` for the launcher.
+`git`, and `gh` (authenticated) for the PR; `orca` when running in Orca; `node` for the launcher; optional `jq` and `notify-send` (Linux) for notifications.
 
 ## Install
 
