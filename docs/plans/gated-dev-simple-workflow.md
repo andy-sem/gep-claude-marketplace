@@ -220,7 +220,7 @@ Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
 
 Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, pushed
-through WP-W1 (WP-W2, WP-W3 local, not pushed); no PR yet. destructive-guard
+through WP-W3; no PR yet. destructive-guard
 **0.6.0**, gated-dev-simple-workflow **0.3.0**, catalog `metadata.version` **0.11.0**. 728 tests green, validate passes.
 
 ### Status
@@ -236,11 +236,43 @@ through WP-W1 (WP-W2, WP-W3 local, not pushed); no PR yet. destructive-guard
 | WP-G5 | Done: `check` skill + `lib/check.mjs` (dry-run, `--json`, `--config`), 728 tests | `885c418` |
 | WP-W1 | Done: four agents ported, file-based (`ticket.md`), generic escalation + `PROJECT_RULES:`, `FORMAT_CMD=`, optional `GATE_CHECK=` | `3119c41` |
 | WP-W2 | Written: `/ticket` skill + `references/{pipeline-spec,config}.md`; kickoff git steps smoke-tested in a scratch repo. **Open:** interactive end-to-end dry run to an opened PR (needs the user: H2 approval, a GitHub remote) | `92efa87` |
-| WP-W3 | Done: skill passes `GATE_CHECK=node '<installPath>/lib/check.mjs' --json --cwd '<wt>'` when the `destructive-guard:check` skill is available (path from `~/.claude/plugins/installed_plugins.json`); planner checks every changing call, lists `ask` ones with `source` as rule ID | (this commit) |
-| WP-G6 | Open: docs & release | |
-| WP-W4 … W7 | Open (W7 = Orca/iTerm2 launcher) | |
+| WP-W3 | Done: skill passes `GATE_CHECK=node '<installPath>/lib/check.mjs' --json --cwd '<wt>'` when the `destructive-guard:check` skill is available (path from `~/.claude/plugins/installed_plugins.json`); planner checks every changing call, lists `ask` ones with `source` as rule ID | `506d0f7` |
+| **W2/W3 dry run** | **Next, with the user** (see below) | |
+| WP-G6 | Open: docs & release (destructive-guard README, env reference, optional CI) | |
+| WP-W7 | Open: Orca/iTerm2 launcher (see below) | |
+| WP-W4 | Open, optional: notifications | |
+| WP-W5 | Deferred to v0.2: PR watch, `--address-review`, merge cleanup | |
+| WP-W6 | Open: workflow docs & release (README already covers usage, config, agents, gate) | |
 
 Suggested order from here: W2/W3 dry run (with the user) → G6 → W7 → W6.
+
+### Progress in the session of 2026-11-19 (W1–W3)
+
+- User decisions this session (binding, also in §5): the workflow is
+  **file-based, no Jira**; **keep Orca and iTerm2 support**.
+- W1: agents ported and generalised (no tracker tools; read-only stages only
+  disallow `Edit, NotebookEdit`).
+- W2: `/ticket` skill written from the source skill (sections kept and dropped
+  listed below); kickoff git commands smoke-tested in a scratch repo.
+- W3: gate integration; `GATE_CHECK` form tested against the local
+  `check.mjs` (`rm -rf` → `rm-recursive-force`, `DROP TABLE` via MCP →
+  `mcp-destructive-sql`, `npm test` → none; the planner's own check call is
+  not gated).
+- Not yet exercised: the skill as a whole (no `/ticket` run so far).
+
+### Next: W2/W3 end-to-end dry run (needs the user)
+
+1. Scratch GitHub repo (or a fork) cloned locally with `origin`; `gh` authenticated.
+2. Install the plugins from this branch (local marketplace:
+   `/plugin marketplace add <path to this checkout>`, then install both).
+3. Write `docs/tickets/DEMO-1/ticket.md` (small change, e.g. add a function
+   and its test), optionally `.claude/gated-dev.json` with `formatCommand`.
+4. `/ticket DEMO-1`: check kickoff (worktree, `state.json` ignored), spec,
+   plan with `## Gated operations` (rule IDs with the gate, `unknown` with it
+   disabled), H2, dev commits with `Plan-Step:`, review, push, PR.
+5. Also: `/ticket DEMO-1 --status`, interrupt during dev then `--resume`, and
+   one run inside Orca if available.
+6. Fix what breaks in `skills/ticket/SKILL.md` / agents; bump versions.
 
 Update this table at the end of every work package.
 
@@ -366,10 +398,10 @@ optional `PROJECT_RULES:` (from config `escalationExtra`). Final line is
 - Host `orca` / `iterm` / `plain` (same test as the source's `detectHost`);
   `TICKET_FLOW_KEY` set means a launched session (no `/rename` hint).
 
-### Next: WP-W7 (launcher)
+### Then: WP-W7 (launcher)
 
-- Source: `scripts/ticket-flow/launch.mjs` (+ `launch.test.mjs`) in the
-  scratchpad copy; keep `detectHost`, `sessionName`/`shortSummary`,
+- Source: `scripts/ticket-flow/launch.mjs` (+ `launch.test.mjs`); fetch it
+  again into the new session's scratchpad (see "Getting the source"); keep `detectHost`, `sessionName`/`shortSummary`,
   `buildShellCommand` (`TICKET_FLOW_KEY`, `claude --name`, optional
   `--remote-control`), `buildAppleScript`, `buildOrcaArgs`,
   `createOrcaWorktree`, `launchTab`. Key validation from config `keyPattern`;
@@ -385,7 +417,7 @@ optional `PROJECT_RULES:` (from config `escalationExtra`). Final line is
 - Old commit `1a9ae6b` may still be fetchable on GitHub by SHA until GC;
   GitHub support can purge it if needed.
 
-### Getting the source (only needed for WP-W1/W2 now)
+### Getting the source (only needed for WP-W7 and WP-W5 now)
 
 SSH clone of `git@github.com:omicron-labs/flashcards.git` hung. Fetch single
 files with `gh` (authenticated) into the session scratchpad, never this repo:
@@ -397,9 +429,10 @@ gh api "repos/omicron-labs/flashcards/contents/<path>?ref=$REF" \
 gh api "repos/omicron-labs/flashcards/git/trees/$REF?recursive=1" --jq '.tree[].path'
 ```
 
-Workflow sources: `.claude/agents/ticket-*.md`, `.claude/skills/ticket/SKILL.md`,
-`.claude/hooks/notify-ticket-flow.sh`, `scripts/ticket-flow/watch-pr.mjs`
-(v0.2 only), the pipeline design spec under `docs/tickets/`. Scrub all
+Remaining workflow sources: `scripts/ticket-flow/launch.mjs` and
+`launch.test.mjs` (W7), `.claude/hooks/notify-ticket-flow.sh` (W4),
+`scripts/ticket-flow/watch-pr.mjs` and sections 9b–9d of
+`.claude/skills/ticket/SKILL.md` (W5, v0.2). Scrub all
 source-project names (see decisions above) while porting.
 
 ### Working rules for every package
