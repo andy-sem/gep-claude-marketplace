@@ -19,3 +19,5 @@ jobs:
           for f in plugins/*/.claude-plugin/plugin.json; do jq -e . "$f" > /dev/null; done
       - name: destructive-guard tests
         run: node --test 'plugins/destructive-guard/test/*.test.mjs'
+      - name: gated-dev-simple-workflow tests
+        run: node --test 'plugins/gated-dev-simple-workflow/test/*.test.mjs'
