@@ -31,6 +31,29 @@ Per-project settings (tickets directory, key pattern, base branch, setup and
 format commands, risky paths, extra escalation rules, models) go in
 `.claude/gated-dev.json`; see `skills/ticket/references/config.md`.
 
+## Launching several tickets
+
+`/gated-dev-simple-workflow:launch` (or the script directly) opens one new
+Claude Code session per ticket, each running `/ticket <KEY>`, in a new Orca
+or iTerm2 tab:
+
+```bash
+node <plugin>/scripts/launch.mjs --dry-run PROJ-1 PROJ-2   # show what would open
+node <plugin>/scripts/launch.mjs PROJ-1 PROJ-2
+node <plugin>/scripts/launch.mjs --all                     # every ticket.md without a run
+```
+
+| Case | Where the session starts |
+| --- | --- |
+| New ticket, Orca, repo registered in Orca | A new Orca worktree on `<KEY>/<slug>` (base: front matter `base:`, `baseBranch`, `origin/HEAD`, `main`), with `ticket.md` and `.claude/settings.local.json` copied in; the session adopts it |
+| New ticket, iTerm2 (or a repo Orca does not know) | The main checkout; the session creates its worktree |
+| Ticket with a run | Its worktree, with `/ticket <KEY> --resume` |
+| Finished run (`stage: done`) | Skipped |
+
+Sessions are named `<KEY> · <title>` (`<KEY> resume · <title>`) and get
+`TICKET_FLOW_KEY`; `--remote-control` also starts them with Remote Control.
+Outside Orca and iTerm2 only `--dry-run` works.
+
 ## Agents
 
 | Agent | Stage | Writes |
@@ -53,10 +76,11 @@ gate the table lists the calls it expects to need approval, with
 
 ## Requirements
 
-`git`, and `gh` (authenticated) for the PR; `orca` when running in Orca.
+`git`, and `gh` (authenticated) for the PR; `orca` when running in Orca; `node` for the launcher.
 
 ## Install
 
 ```text
-/plugin install gated-dev-simple-workflow --marketplace gep/gep-claude-marketplace
+/plugin marketplace add gep/gep-claude-marketplace
+/plugin install gated-dev-simple-workflow@gep-claude-marketplace
 ```
