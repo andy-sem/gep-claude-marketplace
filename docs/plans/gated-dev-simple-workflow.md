@@ -211,9 +211,9 @@ The two tracks only meet at W3.
 Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
 
-Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, WP-G4 not pushed yet;
-no PR yet. destructive-guard **0.5.0**, gated-dev-simple-workflow 0.0.1,
-catalog `metadata.version` **0.7.0**. 718 tests green, validate passes.
+Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, WP-G4/G5 not pushed yet;
+no PR yet. destructive-guard **0.6.0**, gated-dev-simple-workflow 0.0.1,
+catalog `metadata.version` **0.8.0**. 728 tests green, validate passes.
 
 ### Status
 
@@ -225,12 +225,12 @@ catalog `metadata.version` **0.7.0**. 718 tests green, validate passes.
 | WP-G4 (prompt part) | Done ahead of G3: Jev prompt is data, destructive by default, env-configurable | `5384607` |
 | WP-G3 | Done: `lib/config.mjs`, pack selection, opt-outs, `GATE_ENABLED`, `GATE_ENV_GUARD`, `GATE_LOG`, `GATE_STRICT` (default 0), 713 tests | `c6a5eb5` |
 | WP-G4 (rest) | Done: `GATE_JEV_SCOPE`, `GATE_JEV_CAN_LIFT`, 718 tests | `7d5f6f0` |
-| **WP-G5** | **Next**: `check` skill (unblocks W3) | |
+| WP-G5 | Done: `check` skill + `lib/check.mjs` (dry-run, `--json`, `--config`), 728 tests | (this commit) |
+| **WP-W1** | **Next**: port the four agents | |
 | WP-G6 | Open: docs & release | |
-| WP-W1 … W6 | Open; W1 can start any time (independent of the gate track) | |
+| WP-W2 … W6 | Open | |
 
-Suggested order from here: G5 (`check` skill; unblocks W3)
-→ W1 → W2 → G6/W3 → W6. The user may pick W1 first instead; ask.
+Suggested order from here: W1 → W2 → G6/W3 → W6.
 
 Update this table at the end of every work package.
 
@@ -270,6 +270,8 @@ Update this table at the end of every work package.
 | `hooks/gate.sh` | Fail-closed wrapper: runs the engine with `GATE_RUN=1` + done-file; no done-file / no node → ask. Honours `GATE_INFRA_NODE` (tests) |
 | `hooks/gate.sh` / `env-guard.sh` | Both exit early on `GATE_ENABLED=0`; env guard also on `GATE_ENV_GUARD=0` |
 | `hooks/env-guard.sh` | Blocks file names `.env`, `.env.*`, `*.env` except `.env.example` (exit 2); jq optional |
+| `lib/check.mjs` | Dry-run CLI for the `check` skill: `checkCall()`, `effectiveConfig()`, `run(argv)`; Jev only with `--jev`; `source` = reason prefix (rule id or gate tag) |
+| `skills/check/SKILL.md` | `/destructive-guard:check`: command as **one single-quoted argument** (unquoted words would be parsed by the gate as part of the skill's own call) |
 | `lib/config.mjs` | `readConfig(env)` (all non-Jev env parsing, throws `ConfigError`), `buildRules(config)` (packs + files − disabled ids), `availablePacks()` |
 | `lib/gate-engine.mjs` | Parser, rules, `classify(input, rules, {strict})`, `gate(input, rules, {strict, trace})`, `main()` (config → rules → gate → `GATE_LOG`); `DEFAULT_PACKS = ["base","destructive"]`; `composeRules/loadPacks/parseRules/packPath` |
 | `lib/gate-scripts.mjs` | Collects scripts a Bash command runs; `scanScripts()` (program names of rules with `scriptScan !== false`, then `scriptPatterns`) |
@@ -313,24 +315,20 @@ Update this table at the end of every work package.
 - The scanner returns early when no program names and no `scriptPatterns`
   are loaded (so with the default packs, outside-project scripts don't ask).
 
-### Next: WP-G5 spec (`check` skill)
+### Next: WP-W1 (agents)
 
-- `skills/check/SKILL.md`, invoked as `/destructive-guard:check <cmd>` or
-  with an MCP tool name + JSON input. It runs a small CLI (e.g.
-  `lib/check.mjs`, via `node "${CLAUDE_PLUGIN_ROOT}/lib/check.mjs"`) that
-  builds the effective config exactly like `main()` (`readConfig` →
-  `buildRules`), calls `gate(..., {strict, trace})` and prints: decision
-  (`ask` / no opinion), rule id + reason, the pre-Jev rule result, and
-  whether Jev would be consulted (scope). Default: rules only, no network;
-  `--jev` opts in to a real request.
-- `--config` (or no argument): print effective config: packs, extra rule
-  files, disabled ids, strict, env guard, log path, Jev settings with
-  `TYPESAFE_API_KEY` redacted. Config errors are printed, not thrown.
-- Machine-readable `--json` output so the workflow planner (W3) can fill its
-  `## Gated operations` table with rule ids.
-- Tests: CLI on sample commands (`ls` → none, `git push -f` → ask with rule
-  id, MCP delete tool → ask), config print redacts the key, bad config
-  reports `gate-config:`. Bump 0.6.0, catalog 0.8.0.
+- Fetch `.claude/agents/ticket-*.md` from the source (see "Getting the
+  source") into the scratchpad; port to
+  `plugins/gated-dev-simple-workflow/agents/ticket-{spec,planner,dev,reviewer}.md`.
+- Generalise per §3: generic escalation list + `PROJECT_RULES:`,
+  `FORMAT_CMD=`, neutral examples (`PROJ-1`, `apps/web`), gate-as-contract
+  wording (a gate prompt/denial is a checkpoint → `NEEDS_DECISION`).
+- Planner's `## Gated operations` table: in W3 it fills rule ids via the
+  `destructive-guard:check` skill (`--json`) when installed; in W1 keep the
+  contract wording and the `Rule ID: unknown` fallback.
+- Done when: no source-project names/keys/branches, agents load
+  (`claude plugin validate .`), plugin description updated (no hooks/gate),
+  workflow 0.1.0, catalog 0.9.0.
 
 ### Known gaps / later
 
