@@ -391,14 +391,17 @@ test("jev: unparsable command classified risky -> jev ask", async () => {
   assert.equal(r.hits, 1)
 })
 
-test("jev: unsure or unreachable on unparsable command -> unparsable ask", async () => {
-  const unsure = await runJev(bash(dynamicRun), probs(0.04, 0.9, 0.03, 0.03))
+test("jev: unsure or unreachable on unparsable command -> unparsable ask (GATE_STRICT=1)", async () => {
+  const unsure = await runJev(bash(dynamicRun), probs(0.04, 0.9, 0.03, 0.03), {
+    GATE_STRICT: "1",
+  })
   assert.equal(
     decision(unsure.stdout).permissionDecisionReason,
     "unparsable: dynamic command word",
   )
   const down = await runJev(bash(dynamicRun), probs(0.01, 0.97, 0.01, 0.01), {
     GATE_JEV_URL: "http://127.0.0.1:1/v1/systemone",
+    GATE_STRICT: "1",
   })
   assert.equal(
     decision(down.stdout).permissionDecisionReason,
@@ -406,15 +409,30 @@ test("jev: unsure or unreachable on unparsable command -> unparsable ask", async
   )
 })
 
-test("jev: unparsable command without Jev still asks", async () => {
+test("jev: unparsable command without Jev asks with GATE_STRICT=1", async () => {
   const r = await runJev(bash(dynamicRun), probs(0.01, 0.97, 0.01, 0.01), {
     GATE_JEV: "",
+    GATE_STRICT: "1",
   })
   assert.equal(
     decision(r.stdout).permissionDecisionReason,
     "unparsable: dynamic command word",
   )
   assert.equal(r.hits, 0)
+})
+
+test("jev: unparsable command by default (GATE_STRICT unset) -> no opinion", async () => {
+  const off = await runJev(bash(dynamicRun), probs(0.01, 0.97, 0.01, 0.01), {
+    GATE_JEV: "",
+  })
+  assert.equal(off.stdout, "")
+  assert.equal(off.hits, 0)
+  // with Jev on, Jev still judges it; unsure falls back to no opinion
+  const unsure = await runJev(bash(dynamicRun), probs(0.04, 0.9, 0.03, 0.03))
+  assert.equal(unsure.stdout, "")
+  assert.equal(unsure.hits, 1)
+  const risky = await runJev(bash(dynamicRun), probs(0.1, 0.2, 0.6, 0.1))
+  assert.match(decision(risky.stdout).permissionDecisionReason, /^jev: /)
 })
 
 test("jev: input-level unparsable and gate-config results still ask", async () => {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Tool-agnostic approval gate engine for Claude Code PreToolUse hooks.
-// Reads rules from JSON rule packs (packs/*.json) or the file named by
-// GATE_RULES; this file knows no concrete tool names.
+// Reads rules from JSON rule packs (packs/*.json) and rules files selected by
+// env variables (see config.mjs); this file knows no concrete tool names.
 // Fails closed: anything it cannot parse or load results in an `ask`.
 
 import { readFileSync, realpathSync, writeFileSync } from "node:fs"
@@ -31,6 +31,10 @@ export const DEFAULT_PACKS = ["base", "destructive"]
 export const packPath = (name) => join(PACKS_DIR, `${name}.json`)
 
 const MAX_DEPTH = 8
+// Set while classify() runs with strict: false (GATE_STRICT=0). Loose parsing
+// reads nested shell strings that contain `$` expansions like any other command
+// instead of giving up on them; classify() then skips what it still cannot read.
+let loose = false
 // Placeholder left in a word where a command substitution was (its value is unknown).
 const DYN = "\u0000"
 const SHELLS = new Set(["bash", "sh", "zsh"])
@@ -756,7 +760,8 @@ function nestedStrings(rawTokens) {
     }
   }
   for (const str of found) {
-    if (/\$(?!\()/.test(str)) throw new UnparsableError("dynamic shell command")
+    if (!loose && /\$(?!\()/.test(str))
+      throw new UnparsableError("dynamic shell command")
   }
   return found
 }
@@ -1138,7 +1143,7 @@ function isDynamic(token) {
 function shellCommandString(tokens) {
   const info = parseShell(tokens)
   if (!info.command) return []
-  if (/\$(?!\()/.test(info.command))
+  if (!loose && /\$(?!\()/.test(info.command))
     throw new UnparsableError("dynamic shell command")
   return [info.command]
 }
@@ -1317,7 +1322,20 @@ function isCliRule(rule) {
   return rule.kind === "cli-allowlist" || rule.kind === "cli-gated"
 }
 
-export function classify(input, rules) {
+// The rule decision for one hook input: an `ask` result or null. With
+// `strict: false` a Bash command (or part of one) the parser cannot read gives
+// no opinion instead of an `unparsable` ask; the other parts are still checked.
+// Input-level problems (no tool name, no command) always ask.
+export function classify(input, rules, { strict = true } = {}) {
+  loose = !strict
+  try {
+    return classifyInner(input, rules, strict)
+  } finally {
+    loose = false
+  }
+}
+
+function classifyInner(input, rules, strict) {
   try {
     if (input === null || typeof input !== "object" || Array.isArray(input)) {
       return ask("unparsable", "hook input is not an object")
@@ -1330,6 +1348,24 @@ export function classify(input, rules) {
       const command = input.tool_input?.command
       if (typeof command !== "string")
         return ask("unparsable", "Bash call has no command")
+      if (!strict) {
+        let parts
+        try {
+          parts = splitCommand(command)
+        } catch (e) {
+          if (e instanceof UnparsableError) return null
+          throw e
+        }
+        for (const tokens of parts) {
+          try {
+            const r = evalTokens(tokens, rules, 0)
+            if (r) return r
+          } catch (e) {
+            if (!(e instanceof UnparsableError)) throw e
+          }
+        }
+        return null
+      }
       try {
         for (const tokens of splitCommand(command)) {
           const r = evalTokens(tokens, rules, 0)
@@ -1420,8 +1456,14 @@ async function applyJev(input, result, rules, collected, env = process.env) {
 // The full decision for one hook input: the rule result, the script scan as a
 // fallback for Bash calls no rule matched, then the optional Jev layer. Returns an
 // `ask` result or null (no output).
-export async function gate(input, rules, { env = process.env, cwd } = {}) {
-  let result = classify(input, rules)
+// `strict` is passed to classify(); `trace`, when given, receives the result
+// before Jev as `trace.rule` (for GATE_LOG).
+export async function gate(
+  input,
+  rules,
+  { env = process.env, cwd, strict = true, trace } = {},
+) {
+  let result = classify(input, rules, { strict })
   let collected = null
   const command = input?.tool_input?.command
   const closed =
@@ -1447,26 +1489,51 @@ export async function gate(input, rules, { env = process.env, cwd } = {}) {
       return ask("gate-config", `script scan failed: ${e?.message ?? e}`)
     }
   }
+  if (trace) trace.rule = result
   return applyJev(input, result, rules, collected, env)
+}
+
+// GATE_LOG: one JSON line per decision. Commands are redacted like Jev input;
+// a command that mentions .env is not written. Never fails the gate.
+async function logDecision(path, input, rule, result) {
+  try {
+    const { appendFileSync } = await import("node:fs")
+    const tool = typeof input?.tool_name === "string" ? input.tool_name : null
+    const record = { ts: new Date().toISOString(), tool }
+    if (tool === "Bash" && typeof input?.tool_input?.command === "string") {
+      const { redact } = await import("./gate-jev.mjs")
+      record.command = redact(input.tool_input.command)
+    }
+    record.rule = rule?.reason ?? null
+    record.decision = result?.decision ?? "none"
+    record.reason = result?.reason ?? null
+    appendFileSync(path, JSON.stringify(record) + "\n")
+  } catch {}
 }
 
 async function main() {
   let result
+  let config
+  let input
+  const trace = {}
   try {
     let rules
     try {
-      // GATE_RULES names one rules file; otherwise DEFAULT_PACKS (base +
-      // destructive) are loaded. Env-driven pack selection (GATE_CHECKS) comes
-      // in WP-G3.
-      rules = process.env.GATE_RULES
-        ? loadRules(process.env.GATE_RULES)
-        : loadPacks(DEFAULT_PACKS.map(packPath))
+      const { readConfig, buildRules, ConfigError } = await import(
+        "./config.mjs"
+      )
+      try {
+        config = readConfig(process.env)
+        if (config.enabled) rules = buildRules(config)
+      } catch (e) {
+        if (e instanceof RulesError || e instanceof ConfigError)
+          result = ask("gate-config", e.message)
+        else throw e
+      }
     } catch (e) {
-      if (e instanceof RulesError) result = ask("gate-config", e.message)
-      else throw e
+      result = ask("gate-config", `internal error: ${e?.message ?? e}`)
     }
-    if (!result) {
-      let input
+    if (!result && config.enabled) {
       try {
         input = JSON.parse(readFileSync(0, "utf8"))
       } catch {
@@ -1475,13 +1542,15 @@ async function main() {
       if (input === undefined) {
         result = ask("unparsable", "hook input is not valid JSON")
       } else {
-        result = await gate(input, rules)
+        result = await gate(input, rules, { strict: config.strict, trace })
       }
     }
   } catch (e) {
     result = ask("gate-config", `internal error: ${e?.message ?? e}`)
   }
   if (result) emit(result)
+  if (config?.enabled && config.log)
+    await logDecision(config.log, input, trace.rule, result)
   // Tell the wrapper the engine ran to completion (allow = empty stdout).
   if (process.env.GATE_DONE_FILE) {
     try {

@@ -2,6 +2,11 @@
 # PreToolUse approval gate wrapper. Fails closed: allow (empty stdout, exit 0)
 # is only emitted when the engine proved it ran to completion via a done-file.
 dir="$(dirname "$0")"
+# GATE_ENABLED=0 turns the gate off without starting node; any other value is
+# validated by the engine (an invalid one asks).
+case "$(printf '%s' "${GATE_ENABLED:-}" | tr '[:upper:]' '[:lower:]')" in
+  0|false|no|off) exit 0 ;;
+esac
 ask() {
   printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"%s"}}' "$1"
   exit 0
