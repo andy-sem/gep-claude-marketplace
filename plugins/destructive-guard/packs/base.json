@@ -1,0 +1,161 @@
+{
+  "wrappers": [
+    "env",
+    "sudo",
+    "doas",
+    "time",
+    "nohup",
+    "nice",
+    "ionice",
+    "stdbuf",
+    "caffeinate",
+    "watch",
+    "command",
+    "builtin",
+    "exec",
+    "coproc",
+    "timeout",
+    "xargs"
+  ],
+  "runners": [
+    {
+      "program": "npx",
+      "valueOptions": [
+        "-p",
+        "--package"
+      ],
+      "shellOptions": [
+        "-c",
+        "--call"
+      ],
+      "bareBin": true
+    },
+    {
+      "program": "pnpx",
+      "valueOptions": [
+        "-p",
+        "--package"
+      ],
+      "bareBin": true
+    },
+    {
+      "program": "bunx",
+      "valueOptions": [
+        "-p",
+        "--package"
+      ],
+      "bareBin": true
+    },
+    {
+      "program": "pnpm",
+      "valueOptions": [
+        "-C",
+        "--dir",
+        "-F",
+        "--filter",
+        "--filter-prod",
+        "--workspace-dir",
+        "--reporter",
+        "--loglevel",
+        "--test-pattern",
+        "--changed-files-ignore-pattern",
+        "--resume-from",
+        "--workspace-concurrency",
+        "--package"
+      ],
+      "subcommands": [
+        "exec",
+        "dlx",
+        "run"
+      ],
+      "shellOptions": [
+        "-c",
+        "--shell-mode"
+      ],
+      "bareBin": true
+    },
+    {
+      "program": "npm",
+      "valueOptions": [
+        "-w",
+        "--workspace",
+        "--prefix",
+        "-p",
+        "--package"
+      ],
+      "subcommands": [
+        "exec",
+        "x"
+      ],
+      "shellOptions": [
+        "-c",
+        "--call"
+      ]
+    },
+    {
+      "program": "yarn",
+      "valueOptions": [
+        "--cwd"
+      ],
+      "subcommands": [
+        "dlx",
+        "exec",
+        "run"
+      ],
+      "bareBin": true
+    },
+    {
+      "program": "bun",
+      "valueOptions": [
+        "--cwd"
+      ],
+      "subcommands": [
+        "x",
+        "run"
+      ],
+      "bareBin": true
+    }
+  ],
+  "inertPrograms": [
+    "echo",
+    "printf",
+    "grep",
+    "egrep",
+    "fgrep",
+    "rg",
+    "which",
+    "whereis",
+    "type",
+    "man",
+    "cat",
+    "head",
+    "tail",
+    "less",
+    "wc",
+    "ls",
+    "stat",
+    "file",
+    "basename",
+    "dirname",
+    "realpath",
+    "readlink"
+  ],
+  "inertUnsafeFlags": {
+    "rg": [
+      "--pre",
+      "--hostname-bin"
+    ],
+    "man": [
+      "-P",
+      "--pager",
+      "-H",
+      "--html"
+    ],
+    "less": [
+      "+!"
+    ]
+  },
+  "scriptPatterns": [],
+  "scriptScanExempt": [],
+  "rules": []
+}

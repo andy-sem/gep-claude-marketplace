@@ -1,0 +1,39 @@
+{
+  "scriptPatterns": [
+    "postgres(ql)?://"
+  ],
+  "rules": [
+    {
+      "id": "psql",
+      "kind": "cli-gated",
+      "programs": [
+        "psql"
+      ],
+      "gatedPrefixes": [
+        []
+      ],
+      "helpFlags": [
+        "--help",
+        "-?"
+      ]
+    },
+    {
+      "id": "pg_restore",
+      "kind": "cli-gated",
+      "programs": [
+        "pg_restore"
+      ],
+      "gatedPrefixes": [
+        []
+      ],
+      "unlessFlags": [
+        "-f",
+        "--file"
+      ],
+      "helpFlags": [
+        "--help",
+        "-?"
+      ]
+    }
+  ]
+}
