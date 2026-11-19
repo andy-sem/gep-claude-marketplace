@@ -1,0 +1,23 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate manifests
+        run: |
+          jq -e . .claude-plugin/marketplace.json > /dev/null
+          for f in plugins/*/.claude-plugin/plugin.json; do jq -e . "$f" > /dev/null; done
+      - name: destructive-guard tests
+        run: node --test 'plugins/destructive-guard/test/*.test.mjs'
+      - name: gated-dev-simple-workflow tests
+        run: node --test 'plugins/gated-dev-simple-workflow/test/*.test.mjs'

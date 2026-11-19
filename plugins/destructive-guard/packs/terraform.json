@@ -1,0 +1,66 @@
+{
+  "scriptPatterns": [
+    "hashicorp/setup-terraform"
+  ],
+  "rules": [
+    {
+      "id": "terraform",
+      "kind": "cli-gated",
+      "programs": [
+        "terraform",
+        "tofu"
+      ],
+      "gatedPrefixes": [
+        [
+          "apply"
+        ],
+        [
+          "destroy"
+        ],
+        [
+          "import"
+        ],
+        [
+          "state",
+          "rm"
+        ],
+        [
+          "state",
+          "mv"
+        ],
+        [
+          "state",
+          "push"
+        ],
+        [
+          "state",
+          "replace-provider"
+        ],
+        [
+          "taint"
+        ],
+        [
+          "untaint"
+        ],
+        [
+          "force-unlock"
+        ],
+        [
+          "test"
+        ],
+        [
+          "refresh"
+        ],
+        [
+          "workspace",
+          "delete"
+        ]
+      ],
+      "helpFlags": [
+        "-help",
+        "-h",
+        "--help"
+      ]
+    }
+  ]
+}
