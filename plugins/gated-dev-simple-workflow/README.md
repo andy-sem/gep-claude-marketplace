@@ -44,6 +44,13 @@ Each ends with `RESULT: OK <file>` or a `NEEDS_DECISION` block. A prompt or
 denial from an approval gate (for example the `destructive-guard` plugin) is
 treated as a checkpoint, never worked around.
 
+With `destructive-guard` installed and enabled, the planner dry-runs every
+call its steps need through the gate (`destructive-guard:check`) and lists
+the ones that will ask, with their rule IDs, in the plan's
+`## Gated operations` table; you see that table at plan approval. Without a
+gate the table lists the calls it expects to need approval, with
+`Rule ID: unknown`.
+
 ## Requirements
 
 `git`, and `gh` (authenticated) for the PR; `orca` when running in Orca.

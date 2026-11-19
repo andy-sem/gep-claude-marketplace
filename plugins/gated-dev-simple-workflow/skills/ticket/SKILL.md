@@ -31,7 +31,8 @@ Rules that hold everywhere:
 
 1. `<session-root>` is the top level of the checkout this session started in (`$CLAUDE_PROJECT_DIR`, else `git rev-parse --show-toplevel`). `<root>` is the main checkout: the first `worktree` entry of `git worktree list --porcelain`.
 2. Read `<session-root>/.claude/gated-dev.json` if it exists (all keys optional; see `references/config.md`). Invalid JSON or an unknown key: report it and stop; never guess. Defaults: `ticketsDir` `docs/tickets`, `keyPattern` `^[A-Za-z][A-Za-z0-9._-]*$`, `baseBranch` unset, `setupCommand` unset, `formatCommand` unset, `riskPaths` (section 8), `escalationExtra` `[]`, `models` `{spec: sonnet, plan: opus, dev: sonnet, review: sonnet, reviewRisk: opus}`.
-3. Host: `orca` when `TERM_PROGRAM=Orca`, or `ORCA_TERMINAL_HANDLE` is set and `TERM_PROGRAM` is not `iTerm.app`; `iterm` when `TERM_PROGRAM=iTerm.app` or `ITERM_SESSION_ID` is set; otherwise `plain`. Only `orca` changes how worktrees are created and removed; `iterm` and `plain` use git directly.
+3. Gate dry-run. When the skill `destructive-guard:check` is in your list of available skills (the gate plugin is installed and enabled), find its script: in `~/.claude/plugins/installed_plugins.json`, take the `installPath` of the `destructive-guard@<marketplace>` entry whose `projectPath` is `<root>` (scope `project` or `local`), else the one with scope `user`, and check that `<installPath>/lib/check.mjs` exists. Then `GATE_CHECK=node '<installPath>/lib/check.mjs' --json --cwd '<wt>'` (set `<wt>` once the worktree exists). Anything not found: no `GATE_CHECK` (the planner then writes `unknown` rule IDs). Never pass `--jev`.
+4. Host: `orca` when `TERM_PROGRAM=Orca`, or `ORCA_TERMINAL_HANDLE` is set and `TERM_PROGRAM` is not `iTerm.app`; `iterm` when `TERM_PROGRAM=iTerm.app` or `ITERM_SESSION_ID` is set; otherwise `plain`. Only `orca` changes how worktrees are created and removed; `iterm` and `plain` use git directly.
 
 ## 1. Arguments
 
@@ -90,6 +91,7 @@ BASE_BRANCH=<BASE_REF, e.g. origin/main>
 MODE=implement|fix-review          (ticket-dev only)
 REVIEW_ROUND=<n>                   (ticket-dev with MODE=fix-review only)
 FORMAT_CMD=<formatCommand>         (ticket-dev only, when configured)
+GATE_CHECK=<command>               (ticket-planner only, when found in section 0)
 DECISIONS:
 <YAML list of state.decisions: stage, question, answer, at; "[]" when empty>
 PROJECT_RULES:                     (only when escalationExtra is not empty)
