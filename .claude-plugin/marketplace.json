@@ -5,7 +5,20 @@
   },
   "metadata": {
     "description": "Claude Code plugins and skills maintained by Gep",
-    "version": "0.1.0"
+    "version": "0.3.0"
   },
-  "plugins": []
+  "plugins": [
+    {
+      "name": "destructive-guard",
+      "source": "./plugins/destructive-guard",
+      "description": "Deterministic PreToolUse approval gate, configured through env variables. By default asks before destructive commands on the local machine or cloud services; optional rule packs and an optional Jev classifier.",
+      "version": "0.1.0"
+    },
+    {
+      "name": "gated-dev-simple-workflow",
+      "source": "./plugins/gated-dev-simple-workflow",
+      "description": "Ticket-to-PR pipeline: spec, plan, dev and review subagents with a plan-approval checkpoint, worktree per ticket and PR creation. Pairs with an approval-gate plugin but does not require it.",
+      "version": "0.0.1"
+    }
+  ]
 }
