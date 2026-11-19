@@ -9,7 +9,7 @@ repository root for the plan and work packages.
 /plugin install destructive-guard --marketplace gep/gep-claude-marketplace
 ```
 
-## What it does (0.3.0)
+## What it does (0.4.0)
 
 Out of the box, with no configuration, it asks before **destructive** calls:
 anything that deletes, overwrites or irreversibly changes data or resources,
@@ -33,9 +33,15 @@ seen through, while `echo rm -rf /` or a commit message mentioning
 
 Also:
 
-- **Read/Edit/Write of `.env*` files** are blocked (except `.env.example`).
-- **Fails closed**: an engine or config error, an unparsable command, or a
-  command whose program is a variable (`$EDITOR file`) asks.
+- **Read/Edit/Write of env files** (`.env`, `.env.*`, `*.env`) are blocked,
+  except `.env.example`. Only the file name is matched, so
+  `config.environment.ts` is fine.
+- **Fails closed**: an engine error or invalid configuration asks with a
+  `gate-config:` reason.
+- **Low noise by default**: a command the parser cannot resolve (`$EDITOR
+  file`, `eval "$CMD"`, `curl … | bash`) gets no opinion, while the parts it
+  can read are still checked (`$EDITOR f; rm -rf x` asks). `GATE_STRICT=1`
+  makes such commands ask.
 - **Jev classifier** (optional, see below).
 
 Requires Node.js on PATH. `jq` is optional.
@@ -78,15 +84,32 @@ prompt makes the gate ask with a `gate-config:` reason.
 Other variables: `GATE_JEV_URL`, `GATE_JEV_MODEL`, `GATE_JEV_TIMEOUT_MS`,
 `GATE_JEV_ALLOW_THRESHOLD`, `GATE_JEV_ESCALATE_THRESHOLD`, `GATE_JEV_LOG`.
 
-## Configuration (so far)
+## Configuration
 
-Env-based tuning (`GATE_CHECKS`, `GATE_DISABLE_RULES`, `GATE_ENABLED`, …)
-arrives in the next release. Today:
+Only env variables, no config file is needed. Set them in the `env` block of
+`~/.claude/settings.json` for every project, or of a project's
+`.claude/settings.json` to override per project:
 
-- `GATE_RULES=/path/rules.json` replaces the default packs with one rules
-  file. Shipped packs: `packs/base.json`, `packs/destructive.json`, and the
-  optional `packs/postgres.json`, `packs/terraform.json`.
-- `GATE_JEV=1` and `GATE_JEV_*` enable the Jev layer.
+```json
+{ "env": { "GATE_CHECKS": "destructive,postgres", "GATE_DISABLE_RULES": "git-clean" } }
+```
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `GATE_ENABLED` | `1` | `0` turns both hooks off (no node is started). |
+| `GATE_CHECKS` | `destructive` | Comma list of built-in packs: `destructive`, `postgres` (any `psql`/`pg_restore`), `terraform` (apply, import, state changes, …). `base` (wrappers, runners, inert programs) is always loaded. `none` loads no pack. |
+| `GATE_RULES_FILE` | unset | Your own rules file(s), `:`-separated, loaded after the packs. With `GATE_CHECKS=none` they replace the packs. |
+| `GATE_DISABLE_RULES` | unset | Comma list of rule ids to drop (ids are the prefix of the ask reason, e.g. `git-push-force`). |
+| `GATE_ENV_GUARD` | `1` | `0` allows Read/Edit/Write of env files. |
+| `GATE_STRICT` | `0` | `1` asks on commands the parser cannot resolve. |
+| `GATE_LOG` | unset | File to append one JSON line per decision: `ts`, `tool`, `command` (redacted; `null` when it mentions `.env`), `rule` (rule result), `decision` (`ask`/`none`), `reason`. |
+| `GATE_RULES` | unset | Deprecated: one rules file replacing every pack. Same as `GATE_CHECKS=none GATE_RULES_FILE=…`; cannot be combined with them. |
+| `GATE_JEV`, `GATE_JEV_*`, `TYPESAFE_API_KEY` | off | The Jev layer, see above. |
+
+Booleans accept `0/1`, `true/false`, `yes/no`, `on/off`. Any other value, an
+unknown pack, an unknown rule id in `GATE_DISABLE_RULES`, `GATE_CHECKS=none`
+without a rules file, or an unreadable/invalid rules file makes every call ask
+with a `gate-config:` reason (fail closed) until it is fixed.
 
 ### Rule fields
 
