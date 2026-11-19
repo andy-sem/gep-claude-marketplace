@@ -219,11 +219,35 @@ The two tracks only meet at W3.
 Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
 
-Last updated 2026-11-19 (night). Branch `feature/gated-dev-simple-workflow`,
-earlier work merged into `main` (PRs #2, #3); dry-run/W6 in PR #4.
-destructive-guard **0.6.1**, gated-dev-simple-workflow **0.5.0**, catalog
-`metadata.version` **0.13.0**. Tests: 730 (guard) + 37 (launcher) green;
-`claude plugin validate .` passes.
+Last updated 2026-11-19 (night). **The port is complete and merged into
+`main`** (PRs #2, #3, #4; last merge `d912876`). destructive-guard **0.6.1**,
+gated-dev-simple-workflow **0.5.0**, catalog `metadata.version` **0.13.0**.
+Tests: 730 (guard) + 37 (launcher) green; CI green; `claude plugin validate .`
+passes.
+
+**Summary for the next session**
+
+- `destructive-guard` (G0–G6): done. Zero-config destructive gate, env-only
+  configuration, optional packs, optional Jev classifier, `check` skill,
+  README as the full reference (a test keeps it in sync).
+- `gated-dev-simple-workflow` (W0–W3, W6, W7): done. File-based `/ticket`
+  pipeline with four stage agents, Orca/iTerm2/plain hosts, gate dry-run in
+  the plan, launcher. Exercised end to end in a private demo repo: runs to a
+  PR, `--status`, interrupt + `--resume`, gated rows with real rule IDs,
+  `unknown` without the gate, spec questions (H1), denial as a checkpoint.
+- Open, all optional: **WP-W4** notifications; **WP-W5** (v0.2) PR follow-up
+  (`watch-pr`, `--address-review`, merge cleanup). Sources: "Getting the
+  source" below.
+- Possible follow-ups, not decided: rename `git-push-force` (it also covers
+  `--delete`/`--prune`/`--mirror`; renaming breaks `GATE_DISABLE_RULES`
+  values); statically catching destructive commands inside scripts/npm
+  scripts (Jev covers them today).
+- Demo repo `gep/gated-dev-demo` (private, `~/work/gep/gated-dev-demo`) is
+  clean and kept for further runs; after a plugin change run
+  `claude plugin update <plugin>@gep-claude-marketplace` there first.
+  Headless runs (`claude -p '/gated-dev-simple-workflow:ticket <KEY>'`,
+  `--continue` to answer a stop point) work for testing; a
+  `Bash(git push:*)` deny does not match `git -C <wt> push`.
 
 ### Status
 
@@ -239,12 +263,12 @@ destructive-guard **0.6.1**, gated-dev-simple-workflow **0.5.0**, catalog
 | WP-W1 | Done: four agents ported, file-based (`ticket.md`), generic escalation + `PROJECT_RULES:`, `FORMAT_CMD=`, optional `GATE_CHECK=` | `3119c41` |
 | WP-W2 | Done: `/ticket` skill + `references/{pipeline-spec,config}.md`; end-to-end runs to a PR in the demo repo (see "Dry run results"); Orca/adoption fixes from the run in `b056f39` | `92efa87`, `b056f39` |
 | WP-W3 | Done: skill passes `GATE_CHECK=node '<installPath>/lib/check.mjs' --json --cwd '<wt>'` when the `destructive-guard:check` skill is available (path from `~/.claude/plugins/installed_plugins.json`); planner checks every changing call, lists `ask` ones with `source` as rule ID | `506d0f7` |
-| W2/W3 dry run | Done: DEMO-1/2/3 ran to `done` (PRs #1–#3); `--status`, interrupt + `--resume`, a gated row with real rule IDs and the `unknown` path all checked (see "Dry run results") | this commit |
+| W2/W3 dry run | Done: DEMO-1/2/3 ran to `done` (PRs #1–#3); `--status`, interrupt + `--resume`, a gated row with real rule IDs and the `unknown` path all checked (see "Dry run results") | `8d57cfc` |
 | WP-G6 | Done: README rewritten (install, every env variable with defaults, what Jev sends, writing rules incl. all rule kinds and top-level keys, troubleshooting); `test/readme.test.mjs` fails when an env variable, pack or prompt is undocumented; CI `.github/workflows/test.yml` (jq manifest check + `node --test`, Node 22); root README lists the plugins; 730 tests | `1d3db86` |
 | WP-W7 | Done: `scripts/launch.mjs` (file-based CLI: keys or `--all`, `--dry-run`, `--remote-control`; new ticket → Orca worktree via `orca worktree create --repo path:<root>` when the repo is registered in Orca, else main checkout; existing run → `--resume` in its worktree; `done` skipped), `skills/launch/SKILL.md`, 37 tests in `test/launch.test.mjs` (CI runs them). Real tabs verified 2026-11-19 against the demo repo: Orca (repo registered → new Orca worktree under Orca's workspace dir, ticket + local settings copied, session adopted it with the plugin loaded) and iTerm2 (main checkout, titled tab). Version 0.4.0 | `fa7c24a` |
 | WP-W4 | Open, optional: notifications | |
 | WP-W5 | Deferred to v0.2: PR watch, `--address-review`, merge cleanup | |
-| WP-W6 | Done: README without the WIP line, ticket files + `state.json` stages, config example (JSON backslash note); version 0.5.0 | this commit |
+| WP-W6 | Done: README without the WIP line, ticket files + `state.json` stages, config example (JSON backslash note); version 0.5.0 | `8d57cfc` |
 
 Suggested order from here: push and open the PR (ask the user first), demo cleanup (ask). W4 optional; W5 is v0.2. Every other package is complete.
 
@@ -310,7 +334,7 @@ They can differ (as with DEMO-2). Acceptable; the session reports it.
 
 ### Next
 
-1. Merge PR #4 (dry-run checks, W6) when the user approves.
+1. PR #4 merged (`d912876`).
 2. Demo cleanup done 2026-11-19: PR #2 closed, all ticket branches (local and
    remote) and worktrees removed, demo `main` up to date. Kept: the repo, its
    `orca repo` entry and the local-scope plugin install (for further runs).
