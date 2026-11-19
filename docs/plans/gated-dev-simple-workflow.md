@@ -211,8 +211,8 @@ The two tracks only meet at W3.
 Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
 
-Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, pushed;
-no PR yet. destructive-guard **0.4.0**, gated-dev-simple-workflow 0.0.1,
+Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`; pushed
+up to `8c6b7c4`, WP-G3 (`c6a5eb5`) and this update are local only; no PR yet. destructive-guard **0.4.0**, gated-dev-simple-workflow 0.0.1,
 catalog `metadata.version` **0.6.0**. 713 tests green, validate passes.
 
 ### Status
@@ -223,10 +223,13 @@ catalog `metadata.version` **0.6.0**. 713 tests green, validate passes.
 | WP-G1 | Done: engine ported, packs, `.env` guard, 523 tests | `256a169` |
 | WP-G2 | Done: general destructive gate is the default (no config needed) | `ec6a090` |
 | WP-G4 (prompt part) | Done ahead of G3: Jev prompt is data, destructive by default, env-configurable | `5384607` |
-| WP-G3 | Done: `lib/config.mjs`, pack selection, opt-outs, `GATE_ENABLED`, `GATE_ENV_GUARD`, `GATE_LOG`, `GATE_STRICT` (default 0) | see `git log` |
+| WP-G3 | Done: `lib/config.mjs`, pack selection, opt-outs, `GATE_ENABLED`, `GATE_ENV_GUARD`, `GATE_LOG`, `GATE_STRICT` (default 0), 713 tests | `c6a5eb5` |
 | **WP-G4 (rest)** | **Next**: `GATE_JEV_SCOPE`, `GATE_JEV_CAN_LIFT` | |
 | WP-G5, WP-G6 | Open: `check` skill; docs & release | |
 | WP-W1 … W6 | Open; W1 can start any time (independent of the gate track) | |
+
+Suggested order from here: G4 rest (small) → G5 (`check` skill; unblocks W3)
+→ W1 → W2 → G6/W3 → W6. The user may pick W1 first instead; ask.
 
 Update this table at the end of every work package.
 
