@@ -220,7 +220,7 @@ Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
 
 Last updated 2026-11-19 (night). Branch `feature/gated-dev-simple-workflow`,
-pushed through `16f887a`; the dry-run/W6 commit is local; no PR yet.
+earlier work merged into `main` (PRs #2, #3); dry-run/W6 in PR #4.
 destructive-guard **0.6.1**, gated-dev-simple-workflow **0.5.0**, catalog
 `metadata.version` **0.13.0**. Tests: 730 (guard) + 37 (launcher) green;
 `claude plugin validate .` passes.
@@ -310,7 +310,7 @@ They can differ (as with DEMO-2). Acceptable; the session reports it.
 
 ### Next
 
-1. Ask the user to push the branch and open the PR into `main`.
+1. Merge PR #4 (dry-run checks, W6) when the user approves.
 2. Demo cleanup (ask the user): DEMO-4 waits at plan approval; DEMO-5 is at
    `complete` with its branch pushed and no PR; PR #2 (DEMO-3) is open;
    worktrees under `~/orca/workspaces/gated-dev-demo/` and
