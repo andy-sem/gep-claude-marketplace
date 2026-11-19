@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins and skills maintained by Gep",
-    "version": "0.10.0"
+    "version": "0.11.0"
   },
   "plugins": [
     {
@@ -18,7 +18,7 @@
       "name": "gated-dev-simple-workflow",
       "source": "./plugins/gated-dev-simple-workflow",
       "description": "File-based ticket-to-PR pipeline: /ticket runs spec, plan, dev and review subagents in a worktree per ticket (git, Orca or iTerm2), with a plan-approval checkpoint and PR creation. Treats approval-gate prompts as checkpoints; no gate required.",
-      "version": "0.2.0"
+      "version": "0.3.0"
     }
   ]
 }

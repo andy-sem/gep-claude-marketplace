@@ -18,7 +18,7 @@ The orchestrator starts you with a prompt that contains these lines:
 - `BASE_BRANCH=<ref>`: a ref such as `origin/main` for the branch the ticket branch was created from and will merge into. Use it only in `git log` / `git diff` ranges; never check it out, commit to it or push to it.
 - `DECISIONS:` followed by YAML: the decisions already taken. Treat them as binding. Do not ask about them again.
 - `PROJECT_RULES:` (optional) followed by a list: project-specific cases that must also be escalated. Treat them as part of "When to escalate".
-- `GATE_CHECK=<command>` (optional): a read-only command that dry-runs a Bash command or tool call through the approval gate in effect and prints the decision and the rule ID. Present only when an approval gate with a dry-run is installed.
+- `GATE_CHECK=<command>` (optional): a read-only command that dry-runs a call through the approval gate in effect, without running it, and prints JSON with `decision` (`ask` or `none`) and `source` (the rule ID). Append the call to check as **one single-quoted argument** (`<GATE_CHECK> 'git push --force origin main'`); for an MCP tool call append `--mcp <tool name> '<input as JSON>'`. Run it once per call. Present only when an approval gate with a dry-run is installed.
 - `FEEDBACK:` (optional, on a re-plan) followed by the developer's change request on the previous plan. Address every point.
 
 If `WORKTREE`, `KEY`, `TICKET_DIR` or `BASE_BRANCH` is missing, end with a `NEEDS_DECISION` block asking for it. Do not guess.
@@ -85,7 +85,7 @@ Write `TICKET_DIR/plan.md` (overwrite it if it exists) with exactly these sectio
   - `Files:` the files it creates or changes (repo-relative paths),
   - `Check:` how to verify the step (a command or an observable result).
   Make each step one commit-sized unit. Apply TDD where it applies: the test comes first.
-- `## Gated operations`: a table with columns `Command`, `Rule ID`, `Reason`. List every command or tool call the steps need that is likely to need the developer's approval: anything that deletes or overwrites data, rewrites git history, pushes, deploys, changes infrastructure, databases or remote services, or touches secrets. Give the exact command. For the `Rule ID`: if `GATE_CHECK` is set, run it on the exact command and copy the rule ID it reports (a call it does not stop needs no row); otherwise write `unknown`. Never guess a rule ID. Write "None" when there are none.
+- `## Gated operations`: a table with columns `Command`, `Rule ID`, `Reason`. List every command or tool call the steps need that is likely to need the developer's approval: anything that deletes or overwrites data, rewrites git history, pushes, deploys, changes infrastructure, databases or remote services, or touches secrets. Give the exact command. For the `Rule ID`: if `GATE_CHECK` is set, run it on every command or tool call the steps need that could change anything (not only the ones you expect to be gated); list each call whose `decision` is `ask` with its `source` as the rule ID, and drop the ones whose `decision` is `none`. Otherwise write `unknown`. Never guess a rule ID. Write "None" when there are none.
 - `## Verification`: the commands to run after the steps, taken from the project's documented checks (`CLAUDE.md`, contributing docs, package scripts): the full test suite for source changes, lighter checks such as format/lint for documentation-only changes.
 - `## Risks`: what could go wrong and how the plan limits it.
 

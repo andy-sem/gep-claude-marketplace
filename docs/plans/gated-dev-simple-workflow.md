@@ -220,8 +220,8 @@ Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
 
 Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, pushed
-through WP-W1 (WP-W2 local, not pushed); no PR yet. destructive-guard
-**0.6.0**, gated-dev-simple-workflow **0.2.0**, catalog `metadata.version` **0.10.0**. 728 tests green, validate passes.
+through WP-W1 (WP-W2, WP-W3 local, not pushed); no PR yet. destructive-guard
+**0.6.0**, gated-dev-simple-workflow **0.3.0**, catalog `metadata.version` **0.11.0**. 728 tests green, validate passes.
 
 ### Status
 
@@ -235,12 +235,12 @@ through WP-W1 (WP-W2 local, not pushed); no PR yet. destructive-guard
 | WP-G4 (rest) | Done: `GATE_JEV_SCOPE`, `GATE_JEV_CAN_LIFT`, 718 tests | `7d5f6f0` |
 | WP-G5 | Done: `check` skill + `lib/check.mjs` (dry-run, `--json`, `--config`), 728 tests | `885c418` |
 | WP-W1 | Done: four agents ported, file-based (`ticket.md`), generic escalation + `PROJECT_RULES:`, `FORMAT_CMD=`, optional `GATE_CHECK=` | `3119c41` |
-| WP-W2 | Written: `/ticket` skill + `references/{pipeline-spec,config}.md`; kickoff git steps smoke-tested in a scratch repo. **Open:** interactive end-to-end dry run to an opened PR (needs the user: H2 approval, a GitHub remote) | (this commit) |
-| **WP-W3** | **Next**: pass `GATE_CHECK=` to the planner when `destructive-guard` is installed | |
+| WP-W2 | Written: `/ticket` skill + `references/{pipeline-spec,config}.md`; kickoff git steps smoke-tested in a scratch repo. **Open:** interactive end-to-end dry run to an opened PR (needs the user: H2 approval, a GitHub remote) | `92efa87` |
+| WP-W3 | Done: skill passes `GATE_CHECK=node '<installPath>/lib/check.mjs' --json --cwd '<wt>'` when the `destructive-guard:check` skill is available (path from `~/.claude/plugins/installed_plugins.json`); planner checks every changing call, lists `ask` ones with `source` as rule ID | (this commit) |
 | WP-G6 | Open: docs & release | |
 | WP-W4 … W7 | Open (W7 = Orca/iTerm2 launcher) | |
 
-Suggested order from here: W3 → W2 dry run (with the user) → G6 → W7 → W6.
+Suggested order from here: W2/W3 dry run (with the user) → G6 → W7 → W6.
 
 Update this table at the end of every work package.
 
@@ -366,15 +366,7 @@ optional `PROJECT_RULES:` (from config `escalationExtra`). Final line is
 - Host `orca` / `iterm` / `plain` (same test as the source's `detectHost`);
   `TICKET_FLOW_KEY` set means a launched session (no `/rename` hint).
 
-### Next: WP-W3 (gate integration)
-
-- In SKILL.md §4, add `GATE_CHECK=<command>` to the planner prompt when the
-  `destructive-guard` plugin is installed (detect its `lib/check.mjs`, e.g. via
-  the installed plugins cache or `claude plugin list`), as a `--json` dry-run
-  command; otherwise omit it (planner writes `unknown`).
-- Done when: plan lists rule ids with the gate installed, `unknown` without.
-
-### Then: WP-W7 (launcher)
+### Next: WP-W7 (launcher)
 
 - Source: `scripts/ticket-flow/launch.mjs` (+ `launch.test.mjs`) in the
   scratchpad copy; keep `detectHost`, `sessionName`/`shortSummary`,
