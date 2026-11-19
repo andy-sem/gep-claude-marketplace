@@ -1,13 +1,26 @@
 # Gep Claude Code Marketplace
 
 A Claude Code plugin marketplace for sharing plugins and skills maintained by
-Gep. The marketplace catalog is intentionally empty until plugins are added.
+Gep.
+
+```text
+/plugin marketplace add gep/gep-claude-marketplace
+/plugin install <plugin-name>@gep-claude-marketplace
+```
+
+## Plugins
+
+| Plugin | What it does |
+| --- | --- |
+| [`destructive-guard`](plugins/destructive-guard/README.md) | PreToolUse approval gate: asks before destructive commands and MCP calls (local or cloud), blocks `.env` reads. Zero config; tuned with env variables. |
+| [`gated-dev-simple-workflow`](plugins/gated-dev-simple-workflow/README.md) | `/ticket`: file-based ticket → spec → plan → dev → review → PR pipeline in a worktree per ticket. Works with or without the gate. |
 
 ## Repository layout
 
 ```text
 .claude-plugin/
   marketplace.json       # Marketplace catalog
+plugins/<name>/          # One directory per plugin
 ```
 
 ## Add a plugin

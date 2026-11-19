@@ -220,8 +220,8 @@ Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
 
 Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, pushed
-through WP-W3; no PR yet. destructive-guard
-**0.6.0**, gated-dev-simple-workflow **0.3.0**, catalog `metadata.version` **0.11.0**. 728 tests green, validate passes.
+through WP-W3 (WP-G6 committed locally, not pushed); no PR yet. destructive-guard
+**0.6.1**, gated-dev-simple-workflow **0.3.0**, catalog `metadata.version` **0.11.1**. 730 tests green, validate passes.
 
 ### Status
 
@@ -238,13 +238,13 @@ through WP-W3; no PR yet. destructive-guard
 | WP-W2 | Written: `/ticket` skill + `references/{pipeline-spec,config}.md`; kickoff git steps smoke-tested in a scratch repo. **Open:** interactive end-to-end dry run to an opened PR (needs the user: H2 approval, a GitHub remote) | `92efa87` |
 | WP-W3 | Done: skill passes `GATE_CHECK=node '<installPath>/lib/check.mjs' --json --cwd '<wt>'` when the `destructive-guard:check` skill is available (path from `~/.claude/plugins/installed_plugins.json`); planner checks every changing call, lists `ask` ones with `source` as rule ID | `506d0f7` |
 | **W2/W3 dry run** | **Next, with the user** (see below) | |
-| WP-G6 | Open: docs & release (destructive-guard README, env reference, optional CI) | |
+| WP-G6 | Done: README rewritten (install, every env variable with defaults, what Jev sends, writing rules incl. all rule kinds and top-level keys, troubleshooting); `test/readme.test.mjs` fails when an env variable, pack or prompt is undocumented; CI `.github/workflows/test.yml` (jq manifest check + `node --test`, Node 22); root README lists the plugins; 730 tests | (this commit) |
 | WP-W7 | Open: Orca/iTerm2 launcher (see below) | |
 | WP-W4 | Open, optional: notifications | |
 | WP-W5 | Deferred to v0.2: PR watch, `--address-review`, merge cleanup | |
 | WP-W6 | Open: workflow docs & release (README already covers usage, config, agents, gate) | |
 
-Suggested order from here: W2/W3 dry run (with the user) → G6 → W7 → W6.
+Suggested order from here: W2/W3 dry run (with the user) → W7 → W6. The guard track (G0–G6) is complete.
 
 ### Progress in the session of 2026-11-19 (W1–W3)
 
