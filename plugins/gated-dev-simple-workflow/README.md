@@ -1,8 +1,5 @@
 # gated-dev-simple-workflow
 
-Work in progress. See `docs/plans/gated-dev-simple-workflow.md` at the
-repository root for the porting plan and work packages.
-
 `/ticket <KEY>` runs one ticket through **spec → plan → dev → review → PR**,
 one subagent per stage, in its own git worktree. The pipeline is file-based:
 the ticket is a Markdown file (`docs/tickets/<KEY>/ticket.md` by default),
@@ -27,9 +24,49 @@ In Orca they are created with `orca worktree create`; in iTerm2 and other
 terminals with `git worktree add`. A session that already runs in a linked
 worktree adopts it.
 
-Per-project settings (tickets directory, key pattern, base branch, setup and
-format commands, risky paths, extra escalation rules, models) go in
-`.claude/gated-dev.json`; see `skills/ticket/references/config.md`.
+## Ticket files and run state
+
+Write `docs/tickets/<KEY>/ticket.md` (the first `# ` heading is the title; it
+names the branch and the PR; optional front matter `base:` picks the base
+branch), or paste a description after the key and `/ticket` writes the file.
+Commit it on the base branch or leave it untracked: kickoff copies it into the
+ticket worktree. Every stage works on files next to it:
+
+| File | Written by | Committed |
+| --- | --- | --- |
+| `ticket.md` | you / kickoff | at plan approval |
+| `spec.md` | spec agent | at plan approval |
+| `plan.md` | planner | at plan approval |
+| `decisions.md` | orchestrator (your answers at stop points) | at plan approval, then on every append |
+| `dev-report.md` | dev agent | by the dev agent |
+| `review.md` | reviewer | after each review round |
+| `state.json` | orchestrator | never (ignored through `.git/info/exclude`) |
+
+`state.json` records the stage, which `--status` prints and `--resume`
+re-enters from its start: `spec` → `plan` → `awaiting_plan_approval` → `dev`
+→ `review` → `complete` → `done` (or `aborted`). It also holds the branch,
+worktree, base, review round, decisions, warnings and the PR URL.
+
+## Configuration
+
+Optional, per project, in `.claude/gated-dev.json`. Every key is optional; an
+invalid file or an unknown key stops the run with a message. Example:
+
+```json
+{
+  "ticketsDir": "docs/tickets",
+  "keyPattern": "^[A-Z]+-\\d+$",
+  "baseBranch": "develop",
+  "setupCommand": "npm ci",
+  "formatCommand": "npx prettier --write",
+  "riskPaths": ["**/migrations/**", "src/auth/**"],
+  "escalationExtra": ["any change to the public API of packages/sdk"],
+  "models": { "plan": "opus", "reviewRisk": "opus" }
+}
+```
+
+Regex backslashes are doubled in JSON (`\\d`, not `\d`). Every key, its
+default and the ticket file format: `skills/ticket/references/config.md`.
 
 ## Launching several tickets
 
