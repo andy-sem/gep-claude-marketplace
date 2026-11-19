@@ -90,13 +90,15 @@ stronger model when the diff touches `riskPaths`.
 
 | Host | Detected by | Worktree created with | Removed with |
 | --- | --- | --- | --- |
-| Orca | `TERM_PROGRAM=Orca`, or `ORCA_TERMINAL_HANDLE` without `TERM_PROGRAM=iTerm.app` | `orca worktree create ... --json` | `orca worktree rm` |
+| Orca | `TERM_PROGRAM=Orca`, or `ORCA_TERMINAL_HANDLE` without `TERM_PROGRAM=iTerm.app`, and the repo is registered in Orca (`orca repo show --repo path:<root>`) | `orca worktree create --repo path:<root> ... --json` | `orca worktree rm` |
 | iTerm2 | `TERM_PROGRAM=iTerm.app` or `ITERM_SESSION_ID` | `git worktree add --no-track -b` | `git worktree remove` |
-| other | anything else | `git worktree add --no-track -b` | `git worktree remove` |
+| other | anything else (including Orca with an unregistered repo) | `git worktree add --no-track -b` | `git worktree remove` |
 
 A session that already runs in a linked worktree (opened by a launcher or by
 Orca) adopts it instead of creating one, when its branch is the ticket's or is
-clean, unused and behind the base. Sessions started by hand get a `/rename`
+clean, unused and behind the base. A run started from any other checkout
+adopts an existing worktree whose branch is the ticket's (`<KEY>/*`) as well,
+so a key never gets a second worktree. Sessions started by hand get a `/rename`
 hint; launched sessions carry `TICKET_FLOW_KEY` and are already named.
 
 ## 7. State and resume
