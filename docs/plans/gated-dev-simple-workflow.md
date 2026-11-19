@@ -31,7 +31,7 @@ in Jira.
 | Stage agents | `.claude/agents/ticket-*.md` | workflow | Medium: source-ticket docs, shared database rules, `pnpm format:files` |
 | Notify hook | `.claude/hooks/notify-ticket-flow.sh` | workflow | macOS-only |
 | PR watcher | `scripts/ticket-flow/watch-pr.mjs` | workflow (optional) | Low |
-| Driver | `scripts/ticket-flow/{cli,launch,pick,sync,flow-state}.mjs` | dropped | Orca/iTerm, Jira picker |
+| Driver | `scripts/ticket-flow/{cli,launch,pick,sync,flow-state}.mjs` | workflow (launcher part, WP-W7); Jira picker dropped | Orca/iTerm, Jira picker |
 
 Engine gap found: rule kinds are `cli-allowlist`, `cli-gated` (program +
 positional subcommand prefixes), `mcp-allowlist`, `mcp-as-cli`. They cannot
@@ -150,8 +150,12 @@ Generalisation (unchanged from the first draft, minus everything gate-related):
    skill when it is installed; otherwise the planner lists commands it
    *expects* to need approval with `Rule ID: unknown`. No path into the other
    plugin is hard-coded.
-4. Drop Orca/driver; plain `git worktree`. Agents namespaced as
-   `gated-dev-simple-workflow:ticket-*`.
+4. **Keep Orca and iTerm2 support** (user, 2026-11-19): the skill detects
+   the host, creates worktrees with `orca worktree create` in Orca and
+   `git worktree add` elsewhere, and adopts a linked worktree it was opened
+   in. A file-based launcher that opens one session per ticket in Orca or
+   iTerm2 tabs is WP-W7 (the source's Jira picker is dropped). Agents
+   namespaced as `gated-dev-simple-workflow:ticket-*`.
 
 ## 4. Work packages
 
@@ -173,13 +177,14 @@ Generalisation (unchanged from the first draft, minus everything gate-related):
 | --- | --- | --- | --- |
 | WP-W0 | Scaffold (**done**; description to be updated: no hooks/gate) | — | validate passes |
 | WP-W1 | **Agents**: port four agents, generic escalation list + `PROJECT_RULES:`, `FORMAT_CMD=`, neutral examples, gate-as-contract wording | W0 | No source-project ticket keys, app names or branch names; agents load |
-| WP-W2 | **Orchestrator skill**: config file, `ticket.md` intake (file or pasted text), distilled `pipeline-spec.md`, no Orca/driver; keeps H1–H7, `NEEDS_DECISION`, `state.json`, scope check, review loop, PR | W1 | Dry run in a scratch repo from a `ticket.md` reaches an opened PR; `--status`/`--resume` work |
+| WP-W2 | **Orchestrator skill**: config file, `ticket.md` intake (file or pasted text), distilled `pipeline-spec.md`, Orca/iTerm2/plain host handling; keeps H1–H7, `NEEDS_DECISION`, `state.json`, scope check, review loop, PR | W1 | Dry run in a scratch repo from a `ticket.md` reaches an opened PR; `--status`/`--resume` work |
 | WP-W3 | **Gate integration**: planner uses `destructive-guard:check` when present, `unknown` otherwise | W2, G5 | Plan lists rule ids with the gate installed, `unknown` without |
 | WP-W4 | **Notifications** (optional): cross-platform `notify.sh` | W2 | Fires on macOS; silent elsewhere |
 | WP-W5 | **PR follow-up** (v0.2, deferred): `watch-pr.mjs`, `--address-review`, merge cleanup | W2 | Feedback round end-to-end on a test PR |
-| WP-W6 | **Docs & release** | W1–W3 | README covers config + ticket sources |
+| WP-W6 | **Docs & release** | W1–W3 | README covers config + ticket files |
+| WP-W7 | **Launcher**: port `launch.mjs` (host detection, `sessionName`, iTerm2 AppleScript tab, `orca terminal create`, Orca worktree per ticket) as a file-based CLI: open a `/ticket <KEY>` session per given key or per `ticket.md` without a run; sets `TICKET_FLOW_KEY`; tests ported | W2 | Dry-run output correct for Orca and iTerm2; a real tab opens in each |
 
-Order: G0 → G1 → G2 → G3 → G4 → G5 → G6, and in parallel W1 → W2 → W3 → W6.
+Order: G0 → G1 → G2 → G3 → G4 → G5 → G6, and in parallel W1 → W2 → W3 → W6 (W7 after W2).
 **General gate first, then fine-tuning and configuration:** G2 makes the gate a
 working general-purpose destructive gate on its own (default, no config
 needed); G3+ add selection, opt-outs and the optional packs on top.
@@ -194,6 +199,7 @@ The two tracks only meet at W3.
 | Jev may lift rule asks by default? | Yes (`GATE_JEV_CAN_LIFT=1`, today's behaviour); `0` to restrict Jev to adding asks |
 | Ticket source for the workflow | Files only (`ticket.md` per ticket); no Jira or other tracker (user, 2026-11-19) |
 | PR watcher / `--address-review` / merge cleanup | Deferred to v0.2 (WP-W5) |
+| Orca / iTerm2 | Kept: host handling in the skill (W2), launcher (W7) (user, 2026-11-19) |
 | `.env` guard lives in the guard plugin | Yes, on by default, `GATE_ENV_GUARD=0` to disable |
 
 ## 6. Risks
@@ -214,8 +220,8 @@ Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
 
 Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, pushed
-through WP-W1; no PR yet. destructive-guard
-**0.6.0**, gated-dev-simple-workflow **0.1.0**, catalog `metadata.version` **0.9.0**. 728 tests green, validate passes.
+through WP-W1 (WP-W2 local, not pushed); no PR yet. destructive-guard
+**0.6.0**, gated-dev-simple-workflow **0.2.0**, catalog `metadata.version` **0.10.0**. 728 tests green, validate passes.
 
 ### Status
 
@@ -229,11 +235,12 @@ through WP-W1; no PR yet. destructive-guard
 | WP-G4 (rest) | Done: `GATE_JEV_SCOPE`, `GATE_JEV_CAN_LIFT`, 718 tests | `7d5f6f0` |
 | WP-G5 | Done: `check` skill + `lib/check.mjs` (dry-run, `--json`, `--config`), 728 tests | `885c418` |
 | WP-W1 | Done: four agents ported, file-based (`ticket.md`), generic escalation + `PROJECT_RULES:`, `FORMAT_CMD=`, optional `GATE_CHECK=` | `3119c41` |
-| **WP-W2** | **Next**: orchestrator skill | |
+| WP-W2 | Written: `/ticket` skill + `references/{pipeline-spec,config}.md`; kickoff git steps smoke-tested in a scratch repo. **Open:** interactive end-to-end dry run to an opened PR (needs the user: H2 approval, a GitHub remote) | (this commit) |
+| **WP-W3** | **Next**: pass `GATE_CHECK=` to the planner when `destructive-guard` is installed | |
 | WP-G6 | Open: docs & release | |
-| WP-W3 … W6 | Open | |
+| WP-W4 … W7 | Open (W7 = Orca/iTerm2 launcher) | |
 
-Suggested order from here: W2 → G6/W3 → W6.
+Suggested order from here: W3 → W2 dry run (with the user) → G6 → W7 → W6.
 
 Update this table at the end of every work package.
 
@@ -341,17 +348,42 @@ optional `PROJECT_RULES:` (from config `escalationExtra`). Final line is
 - Read-only stages have `disallowedTools: Edit, NotebookEdit`; the skill
   checks `git diff --name-only` after them (only `TICKET_DIR` may change).
 
-### Next: WP-W2 (orchestrator skill)
+### The `/ticket` skill (WP-W2, `skills/ticket/`)
 
-- Fetch `.claude/skills/ticket/SKILL.md` and the pipeline design spec from the
-  source (see "Getting the source") into the scratchpad.
-- Port to `plugins/gated-dev-simple-workflow/skills/ticket/` with
-  `references/{pipeline-spec,config}.md`. File-based intake only: `/ticket
-  <KEY>` uses an existing `<ticketsDir>/<KEY>/ticket.md`, or the developer
-  pastes a description and the skill writes it. Drop all tracker, Orca and
-  driver parts; plain `git worktree`. Keep H1–H7, `NEEDS_DECISION`,
-  `state.json`, scope check, review loop, PR creation, `--status`/`--resume`.
-- Launch agents as `gated-dev-simple-workflow:ticket-*` with the contract above.
+- Sections: 0 config + host, 1 arguments, 2 status, 3 kickoff, 4 prompt/parse/
+  scope check, 5 spec, 6 plan + H2, 7 dev + H6, 8 review loop + H5, 9 resume,
+  9a complete (verify, push, PR), 10 abort. Source sections 9b–9d
+  (`--address-review`, PR watch, merge cleanup) and all tracker comments are
+  left out (W5 / dropped).
+- Intake: `<session-root>/<ticketsDir>/<KEY>/ticket.md`, or pasted text the
+  skill writes there; copied into the worktree; committed at H2 with spec/plan.
+  Front matter `base:` overrides the base branch.
+- Base: front matter → config `baseBranch` → `origin/HEAD` → `main`.
+- `state.json` and `/.claude/worktrees/` are ignored via `.git/info/exclude`.
+- Config `.claude/gated-dev.json`: `ticketsDir`, `keyPattern`, `baseBranch`,
+  `setupCommand`, `formatCommand`, `riskPaths`, `escalationExtra`, `models`
+  (unknown key → stop).
+- Host `orca` / `iterm` / `plain` (same test as the source's `detectHost`);
+  `TICKET_FLOW_KEY` set means a launched session (no `/rename` hint).
+
+### Next: WP-W3 (gate integration)
+
+- In SKILL.md §4, add `GATE_CHECK=<command>` to the planner prompt when the
+  `destructive-guard` plugin is installed (detect its `lib/check.mjs`, e.g. via
+  the installed plugins cache or `claude plugin list`), as a `--json` dry-run
+  command; otherwise omit it (planner writes `unknown`).
+- Done when: plan lists rule ids with the gate installed, `unknown` without.
+
+### Then: WP-W7 (launcher)
+
+- Source: `scripts/ticket-flow/launch.mjs` (+ `launch.test.mjs`) in the
+  scratchpad copy; keep `detectHost`, `sessionName`/`shortSummary`,
+  `buildShellCommand` (`TICKET_FLOW_KEY`, `claude --name`, optional
+  `--remote-control`), `buildAppleScript`, `buildOrcaArgs`,
+  `createOrcaWorktree`, `launchTab`. Key validation from config `keyPattern`;
+  summary from the `ticket.md` title; base from §3 step 2 rules. Drop
+  `pick.mjs`, `resolveBase` parent lookup and `PIPELINE_FILES` (the skill
+  comes from the plugin now).
 
 ### Known gaps / later
 

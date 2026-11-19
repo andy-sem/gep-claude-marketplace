@@ -1,7 +1,7 @@
 {
   "name": "gated-dev-simple-workflow",
-  "version": "0.1.0",
-  "description": "Ticket-to-PR pipeline driven by files: spec, plan, dev and review subagents with a plan-approval checkpoint, worktree per ticket and PR creation. Treats approval-gate prompts as checkpoints; no gate required.",
+  "version": "0.2.0",
+  "description": "File-based ticket-to-PR pipeline: /ticket runs spec, plan, dev and review subagents in a worktree per ticket (git, Orca or iTerm2), with a plan-approval checkpoint and PR creation. Treats approval-gate prompts as checkpoints; no gate required.",
   "author": {
     "name": "Gep"
   },
