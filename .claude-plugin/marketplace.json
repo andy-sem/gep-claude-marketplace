@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Claude Code plugins and skills maintained by Gep",
-    "version": "0.8.0"
+    "version": "0.9.0"
   },
   "plugins": [
     {
@@ -17,8 +17,8 @@
     {
       "name": "gated-dev-simple-workflow",
       "source": "./plugins/gated-dev-simple-workflow",
-      "description": "Ticket-to-PR pipeline: spec, plan, dev and review subagents with a plan-approval checkpoint, worktree per ticket and PR creation. Pairs with an approval-gate plugin but does not require it.",
-      "version": "0.0.1"
+      "description": "Ticket-to-PR pipeline driven by files: spec, plan, dev and review subagents with a plan-approval checkpoint, worktree per ticket and PR creation. Treats approval-gate prompts as checkpoints; no gate required.",
+      "version": "0.1.0"
     }
   ]
 }

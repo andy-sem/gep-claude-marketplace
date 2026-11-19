@@ -1,7 +1,7 @@
 {
   "name": "gated-dev-simple-workflow",
-  "version": "0.0.1",
-  "description": "Ticket-to-PR pipeline: spec, plan, dev and review subagents with a plan-approval checkpoint, worktree per ticket and PR creation. Pairs with an approval-gate plugin but does not require it.",
+  "version": "0.1.0",
+  "description": "Ticket-to-PR pipeline driven by files: spec, plan, dev and review subagents with a plan-approval checkpoint, worktree per ticket and PR creation. Treats approval-gate prompts as checkpoints; no gate required.",
   "author": {
     "name": "Gep"
   },

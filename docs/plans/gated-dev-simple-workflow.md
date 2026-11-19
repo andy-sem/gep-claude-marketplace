@@ -129,17 +129,19 @@ plugins/gated-dev-simple-workflow/
   agents/ticket-{spec,planner,dev,reviewer}.md
   skills/ticket/
     SKILL.md
-    references/{pipeline-spec,ticket-sources,config}.md
+    references/{pipeline-spec,config}.md
   hooks/hooks.json + notify.sh       # notification only (optional, WP-W4)
   scripts/watch-pr.mjs               # only if WP-W5 is accepted
 ```
 
 Generalisation (unchanged from the first draft, minus everything gate-related):
 
-1. **Ticket source pluggable**: `jira` (Atlassian MCP, **default**, today's
-   behaviour), `github` (via `gh`), `none` (pasted description, free slug key).
+1. **File-based, no tracker.** The ticket is a Markdown file,
+   `<ticketsDir>/<KEY>/ticket.md` (written by the developer, or by the skill
+   from a pasted description); the key is free-form (`PROJ-1` or a slug).
+   The spec agent reads only that file. No Jira/GitHub-issue integration.
 2. **Per-project config** `.claude/gated-dev.json` (all optional):
-   `ticketSource`, `keyPattern`, `ticketsDir`, `setupCommand`,
+   `keyPattern`, `ticketsDir`, `setupCommand`,
    `formatCommand`, `riskPaths`, `baseBranchStrategy`, `escalationExtra`,
    `models`.
 3. **Gate coupling = contract, not code.** Agents keep the "a gate prompt or
@@ -171,7 +173,7 @@ Generalisation (unchanged from the first draft, minus everything gate-related):
 | --- | --- | --- | --- |
 | WP-W0 | Scaffold (**done**; description to be updated: no hooks/gate) | — | validate passes |
 | WP-W1 | **Agents**: port four agents, generic escalation list + `PROJECT_RULES:`, `FORMAT_CMD=`, neutral examples, gate-as-contract wording | W0 | No source-project ticket keys, app names or branch names; agents load |
-| WP-W2 | **Orchestrator skill**: config file, ticket-source adapter, distilled `pipeline-spec.md`, no Orca/driver; keeps H1–H7, `NEEDS_DECISION`, `state.json`, scope check, review loop, PR | W1 | Dry run in a scratch repo with `ticketSource: none` reaches an opened PR; `--status`/`--resume` work |
+| WP-W2 | **Orchestrator skill**: config file, `ticket.md` intake (file or pasted text), distilled `pipeline-spec.md`, no Orca/driver; keeps H1–H7, `NEEDS_DECISION`, `state.json`, scope check, review loop, PR | W1 | Dry run in a scratch repo from a `ticket.md` reaches an opened PR; `--status`/`--resume` work |
 | WP-W3 | **Gate integration**: planner uses `destructive-guard:check` when present, `unknown` otherwise | W2, G5 | Plan lists rule ids with the gate installed, `unknown` without |
 | WP-W4 | **Notifications** (optional): cross-platform `notify.sh` | W2 | Fires on macOS; silent elsewhere |
 | WP-W5 | **PR follow-up** (v0.2, deferred): `watch-pr.mjs`, `--address-review`, merge cleanup | W2 | Feedback round end-to-end on a test PR |
@@ -190,7 +192,7 @@ The two tracks only meet at W3.
 | Guard plugin name | `destructive-guard` (env variables keep the `GATE_*` prefix, matching the source and the Jev variables) |
 | What `destructive` covers by default | Anything destructive, local machine *or* cloud services (§2). The `destructive` Jev prompt uses the same definition. |
 | Jev may lift rule asks by default? | Yes (`GATE_JEV_CAN_LIFT=1`, today's behaviour); `0` to restrict Jev to adding asks |
-| Default ticket source for the workflow | `jira`; `github` and `none` as alternatives |
+| Ticket source for the workflow | Files only (`ticket.md` per ticket); no Jira or other tracker (user, 2026-11-19) |
 | PR watcher / `--address-review` / merge cleanup | Deferred to v0.2 (WP-W5) |
 | `.env` guard lives in the guard plugin | Yes, on by default, `GATE_ENV_GUARD=0` to disable |
 
@@ -211,9 +213,9 @@ The two tracks only meet at W3.
 Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
 
-Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, pushed (through WP-G5);
-no PR yet. destructive-guard **0.6.0**, gated-dev-simple-workflow 0.0.1,
-catalog `metadata.version` **0.8.0**. 728 tests green, validate passes.
+Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, pushed
+through WP-G5 (WP-W1 local, not pushed); no PR yet. destructive-guard
+**0.6.0**, gated-dev-simple-workflow **0.1.0**, catalog `metadata.version` **0.9.0**. 728 tests green, validate passes.
 
 ### Status
 
@@ -226,11 +228,12 @@ catalog `metadata.version` **0.8.0**. 728 tests green, validate passes.
 | WP-G3 | Done: `lib/config.mjs`, pack selection, opt-outs, `GATE_ENABLED`, `GATE_ENV_GUARD`, `GATE_LOG`, `GATE_STRICT` (default 0), 713 tests | `c6a5eb5` |
 | WP-G4 (rest) | Done: `GATE_JEV_SCOPE`, `GATE_JEV_CAN_LIFT`, 718 tests | `7d5f6f0` |
 | WP-G5 | Done: `check` skill + `lib/check.mjs` (dry-run, `--json`, `--config`), 728 tests | `885c418` |
-| **WP-W1** | **Next**: port the four agents | |
+| WP-W1 | Done: four agents ported, file-based (`ticket.md`), generic escalation + `PROJECT_RULES:`, `FORMAT_CMD=`, optional `GATE_CHECK=` | (this commit) |
+| **WP-W2** | **Next**: orchestrator skill | |
 | WP-G6 | Open: docs & release | |
-| WP-W2 … W6 | Open | |
+| WP-W3 … W6 | Open | |
 
-Suggested order from here: W1 → W2 → G6/W3 → W6.
+Suggested order from here: W2 → G6/W3 → W6.
 
 Update this table at the end of every work package.
 
@@ -259,7 +262,9 @@ Update this table at the end of every work package.
   `GATE_JEV_PROMPT`, `GATE_JEV_INSTRUCTIONS`, `GATE_JEV_CONTEXT`,
   `GATE_JEV_POLICY`. The default covers local *and* remote destructive calls.
 - CLI rules for `gh`, `aws`, `az`, `wrangler` stay in the destructive pack
-  (command coverage, not MCP). Jira in §3 stays (workflow ticket source).
+  (command coverage, not MCP).
+- **The workflow is file-based; no Jira support.** The ticket is
+  `TICKET_DIR/ticket.md`; agents have no tracker tools or tracker wording.
 - Commit per work package; push only when the user asks.
 
 ### Where things are (`plugins/destructive-guard/`)
@@ -315,20 +320,38 @@ Update this table at the end of every work package.
 - The scanner returns early when no program names and no `scriptPatterns`
   are loaded (so with the default packs, outside-project scripts don't ask).
 
-### Next: WP-W1 (agents)
+### Agent prompt contract (WP-W1, `plugins/gated-dev-simple-workflow/agents/`)
 
-- Fetch `.claude/agents/ticket-*.md` from the source (see "Getting the
-  source") into the scratchpad; port to
-  `plugins/gated-dev-simple-workflow/agents/ticket-{spec,planner,dev,reviewer}.md`.
-- Generalise per §3: generic escalation list + `PROJECT_RULES:`,
-  `FORMAT_CMD=`, neutral examples (`PROJ-1`, `apps/web`), gate-as-contract
-  wording (a gate prompt/denial is a checkpoint → `NEEDS_DECISION`).
-- Planner's `## Gated operations` table: in W3 it fills rule ids via the
-  `destructive-guard:check` skill (`--json`) when installed; in W1 keep the
-  contract wording and the `Rule ID: unknown` fallback.
-- Done when: no source-project names/keys/branches, agents load
-  (`claude plugin validate .`), plugin description updated (no hooks/gate),
-  workflow 0.1.0, catalog 0.9.0.
+All four: `WORKTREE=`, `KEY=`, `TICKET_DIR=` (default
+`<WORKTREE>/docs/tickets/<KEY>`), `BASE_BRANCH=`, `DECISIONS:` (YAML),
+optional `PROJECT_RULES:` (from config `escalationExtra`). Final line is
+`RESULT: OK <file>` or a `NEEDS_DECISION` block (`stage:` spec/plan/dev/review).
+
+- `ticket-spec`: reads `TICKET_DIR/ticket.md` only (the skill must write it
+  before stage 1); writes `spec.md`.
+- `ticket-planner`: optional `GATE_CHECK=<command>` (W3: the skill passes a
+  `destructive-guard` check `--json` command when that plugin is installed);
+  without it, `Rule ID` is `unknown`. Optional `FEEDBACK:`. Writes `plan.md`.
+- `ticket-dev`: `MODE=implement|fix-review|fix-pr`, `REVIEW_ROUND=`,
+  `FEEDBACK=<file>` (fix-pr, used by v0.2/W5), optional `FORMAT_CMD=`
+  (config `formatCommand`). Commits with `Plan-Step:`/`Review-Fix:`/`PR-Fix:`
+  trailers; writes `dev-report.md`.
+- `ticket-reviewer`: optional `REVIEW_SINCE=`; writes `review.md` ending in
+  `VERDICT: PASS|CHANGES_REQUIRED`.
+- Read-only stages have `disallowedTools: Edit, NotebookEdit`; the skill
+  checks `git diff --name-only` after them (only `TICKET_DIR` may change).
+
+### Next: WP-W2 (orchestrator skill)
+
+- Fetch `.claude/skills/ticket/SKILL.md` and the pipeline design spec from the
+  source (see "Getting the source") into the scratchpad.
+- Port to `plugins/gated-dev-simple-workflow/skills/ticket/` with
+  `references/{pipeline-spec,config}.md`. File-based intake only: `/ticket
+  <KEY>` uses an existing `<ticketsDir>/<KEY>/ticket.md`, or the developer
+  pastes a description and the skill writes it. Drop all tracker, Orca and
+  driver parts; plain `git worktree`. Keep H1–H7, `NEEDS_DECISION`,
+  `state.json`, scope check, review loop, PR creation, `--status`/`--resume`.
+- Launch agents as `gated-dev-simple-workflow:ticket-*` with the contract above.
 
 ### Known gaps / later
 
