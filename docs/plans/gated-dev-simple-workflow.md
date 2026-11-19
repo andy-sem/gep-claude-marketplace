@@ -220,8 +220,7 @@ Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
 
 Last updated 2026-11-19 (evening). Branch `feature/gated-dev-simple-workflow`,
-pushed through WP-W3; **everything after `dbed790` (G6, W7, Orca fixes,
-CLAUDE.md, this handoff) is committed locally, not pushed**; no PR yet.
+pushed through the handoff (G6, W7, Orca fixes, CLAUDE.md); no PR yet.
 destructive-guard **0.6.1**, gated-dev-simple-workflow **0.4.0**, catalog
 `metadata.version` **0.12.0**. Tests: 730 (guard) + 37 (launcher) green;
 `claude plugin validate .` passes.
