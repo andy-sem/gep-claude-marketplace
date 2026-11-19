@@ -1,0 +1,15 @@
+{
+  "name": "gated-dev-simple-workflow",
+  "version": "0.0.1",
+  "description": "Ticket-to-PR pipeline: spec, plan, dev and review subagents with a plan-approval checkpoint, worktree per ticket and PR creation. Pairs with an approval-gate plugin but does not require it.",
+  "author": {
+    "name": "Gep"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "workflow",
+    "agents",
+    "pipeline",
+    "tickets"
+  ]
+}
