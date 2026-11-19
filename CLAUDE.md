@@ -41,7 +41,7 @@ The two plugins are independent and installable on their own:
 
 ## Work in progress
 
-The branch `feature/gated-dev-simple-workflow` ports both plugins. Its plan, status, binding decisions and handoff are in `docs/plans/gated-dev-simple-workflow.md` (§7 is the entry point for a new session). Read it before changing either plugin.
+Both plugins are ported and merged into `main`; only optional packages remain (WP-W4 notifications, WP-W5 PR follow-up for v0.2). Plan, status, binding decisions and handoff: `docs/plans/gated-dev-simple-workflow.md` (§7 is the entry point for a new session). Read it before changing either plugin.
 
 ## Public repo hygiene (binding)
 
