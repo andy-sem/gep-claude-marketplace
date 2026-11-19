@@ -296,6 +296,7 @@ function runJev(stdin, answer, env = {}, { cwd } = {}) {
         TYPESAFE_API_KEY: "test-key",
         GATE_JEV_URL: jevUrl,
         GATE_JEV_TIMEOUT_MS: "5000",
+        GATE_JEV_PROMPT: "cloud-change",
         ...env,
       },
     })
@@ -469,8 +470,8 @@ test("jev: unreachable service -> rule result stands", async () => {
 
 const DBHOST_SQL = "mcp__plugin_dbhost_dbhost__execute_sql"
 const CLOUDCTL_MCP = "mcp__cloudctl__run_cloudctl_command"
-const JIRA_EDIT = "mcp__plugin_atlassian_atlassian__editJiraIssue"
-const CHROME_CLICK = "mcp__claude-in-chrome__computer"
+const ISSUE_EDIT = "mcp__tracker__editIssue"
+const BROWSER_CLICK = "mcp__browser__click"
 
 const mcpCall = (tool_name, tool_input = {}, cwd = repoRoot) =>
   JSON.stringify({ tool_name, tool_input, cwd })
@@ -501,8 +502,8 @@ test("jev: every Bash and MCP call makes exactly one request; file tools make no
     bash("git status"),
     mcpCall(DBHOST_SQL, { query: "SELECT 1" }),
     mcpCall(CLOUDCTL_MCP, { args: ["run", "services", "list"] }),
-    mcpCall(JIRA_EDIT, { issueIdOrKey: "PROJ-1" }),
-    mcpCall(CHROME_CLICK, { action: "left_click" }),
+    mcpCall(ISSUE_EDIT, { issueIdOrKey: "PROJ-1" }),
+    mcpCall(BROWSER_CLICK, { action: "left_click" }),
   ]) {
     const r = await runJev(stdin, unrelated, shipped)
     assert.equal(r.hits, 1, stdin)
@@ -525,7 +526,7 @@ test("jev: risk above 0.5 asks for Bash and MCP calls no rule matched", async ()
   for (const stdin of [
     bash("git status"),
     bash("node x.mjs"),
-    mcpCall(JIRA_EDIT, { issueIdOrKey: "PROJ-1" }),
+    mcpCall(ISSUE_EDIT, { issueIdOrKey: "PROJ-1" }),
   ]) {
     const o = decision((await runJev(stdin, risky, shipped)).stdout)
     assert.equal(o.permissionDecision, "ask", stdin)
@@ -537,7 +538,7 @@ test("jev: unrelated 0.97 gives no output", async () => {
   for (const stdin of [
     bash("git push --force"),
     bash("wrangler deploy"),
-    mcpCall(JIRA_EDIT, { issueIdOrKey: "PROJ-1", fields: { summary: "x" } }),
+    mcpCall(ISSUE_EDIT, { issueIdOrKey: "PROJ-1", fields: { summary: "x" } }),
   ]) {
     const r = await runJev(stdin, unrelated, shipped)
     assert.equal(r.stdout, "", stdin)
@@ -753,7 +754,7 @@ test("jev failures give the rule result for Bash and MCP calls", async () => {
       mode,
     )
     assert.equal(
-      (await go(mcpCall(JIRA_EDIT, { issueIdOrKey: "PROJ-1" }))).stdout,
+      (await go(mcpCall(ISSUE_EDIT, { issueIdOrKey: "PROJ-1" }))).stdout,
       "",
       mode,
     )
@@ -763,7 +764,7 @@ test("jev failures give the rule result for Bash and MCP calls", async () => {
 test("jev: an MCP call without its args and a gate-config result never reach Jev", async () => {
   const noArgs = await runJev(mcpCall(CLOUDCTL_MCP, {}), unrelated, shipped)
   assert.match(decision(noArgs.stdout).permissionDecisionReason, /^unparsable:/)
-  const badRules = await runJev(mcpCall(JIRA_EDIT, {}), unrelated, {
+  const badRules = await runJev(mcpCall(ISSUE_EDIT, {}), unrelated, {
     GATE_RULES: badRulesPath,
   })
   assert.match(

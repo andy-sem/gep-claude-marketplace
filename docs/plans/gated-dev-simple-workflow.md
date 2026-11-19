@@ -85,7 +85,8 @@ required; files are only referenced *by* env variables.
 | `TYPESAFE_API_KEY` | — | Required when `GATE_JEV=1`. |
 | `GATE_JEV_URL` / `_MODEL` / `_TIMEOUT_MS` | as today | Endpoint, model, timeout (https enforced). |
 | `GATE_JEV_ALLOW_THRESHOLD` / `_ESCALATE_THRESHOLD` | `0.95` / `0.5` | As today. |
-| `GATE_JEV_PROMPT` | `destructive` | Built-in prompt name (`destructive`, `cloud-change`) or a path to a JSON with `question`, `choices`, `context`, `criteria`. |
+| `GATE_JEV_PROMPT` | `destructive` | Built-in prompt name (`destructive`, `cloud-change`) or a path to a JSON with `question`, `instructions`, `context`, `criteria`, `ask`, `safe`. **Done.** |
+| `GATE_JEV_INSTRUCTIONS` / `_CONTEXT` / `_POLICY` | unset | Replace the question text, `context.project`, `context.policy` of the selected prompt. **Done.** |
 | `GATE_JEV_SCOPE` | `bash,mcp` | Which calls are sent to Jev. |
 | `GATE_JEV_CAN_LIFT` | `1` | Jev may lift a rule `ask` when it is confident the call is safe (today's behaviour). `0` = Jev can only add asks. Jev never emits `allow`. |
 | `GATE_JEV_LOG` | unset | As today. |
@@ -159,7 +160,7 @@ Generalisation (unchanged from the first draft, minus everything gate-related):
 | WP-G1 | **Port engine as-is**: engine, script scanner, wrapper, tests; `hooks.json` with `${CLAUDE_PLUGIN_ROOT}`; loads one rules file (the flashcards ruleset split into packs) | G0 | Ported tests green unchanged in behaviour |
 | WP-G2 | **New rule capabilities + destructive pack**: flag matching (`whenFlags`, short-flag bundles like `-rf`), argument regex, `mcp-pattern` kind for SQL/content in MCP inputs, SQL detection in `psql -c`; write `destructive.json` with one test per entry | G1 | Destructive matrix test green; `ls`, `git status`, `git push` pass; `git push -f` asks |
 | WP-G3 | **Env configuration**: `config.mjs`, pack composition (`GATE_CHECKS`, `GATE_RULES_FILE`, `GATE_DISABLE_RULES`), `GATE_ENABLED`, `GATE_ENV_GUARD`, `GATE_LOG`; bad values → fail-closed ask | G1 | Config matrix tests green |
-| WP-G4 | **Jev generalisation**: prompt from `GATE_JEV_PROMPT` (built-in `destructive` default, `cloud-change` preset, or file); `GATE_JEV_SCOPE`, `GATE_JEV_CAN_LIFT`; no source-project names in code | G3 | Jev tests green against local mock server |
+| WP-G4 | **Jev generalisation** (prompt part done early): prompt from `GATE_JEV_PROMPT` (built-in `destructive` default, `cloud-change` preset, or file); `GATE_JEV_SCOPE`, `GATE_JEV_CAN_LIFT`; no source-project names in code | G3 | Jev tests green against local mock server |
 | WP-G5 | **`check` skill**: dry-run a command/MCP call through the effective config and print decision + rule id; print effective config (redacting the API key) | G3 | Skill answers for sample commands |
 | WP-G6 | **Docs & release**: README (install, env reference, writing rules, what Jev sends), version bumps, optional CI running `node --test` | G2–G5 | README covers every variable |
 
@@ -216,6 +217,7 @@ start the next open work package."*
 | WP-G0, WP-W0 | Done: both plugin dirs scaffolded, listed in `marketplace.json` (`metadata.version` 0.2.0), validate passes |
 | WP-G1 | Done (destructive-guard 0.1.0, catalog 0.3.0): engine/scanner/Jev in `lib/`, wrapper `hooks/gate.sh`, `hooks/hooks.json`, `.env` guard `hooks/env-guard.sh`; ruleset split into `packs/{base,postgres,terraform}.json` (cloud-provider packs removed); 515 ported tests + 8 new green |
 | WP-G2 | Done (destructive-guard 0.2.0, catalog 0.4.0): `packs/destructive.json` (34 rules with base) is the default; new `cli-gated` fields `whenFlags`, `shortBundles`, `whenArgs`, `ignoreCase`, `matchStdin`, `dynamicArgs`, `scriptScan`; new kind `mcp-pattern`; 682 tests green |
+| WP-G4 (prompt part) | Done ahead of G3 (destructive-guard 0.3.0, catalog 0.5.0): Jev prompt is data (`jev/destructive.json` default, `jev/cloud-change.json` preset), selected by `GATE_JEV_PROMPT`, overridable by `GATE_JEV_INSTRUCTIONS/_CONTEXT/_POLICY`; `ask`/`safe` choice lists drive `jevDecision`. Prompts name no specific MCP server. Remaining G4: `GATE_JEV_SCOPE`, `GATE_JEV_CAN_LIFT` |
 | WP-G3 | **Next**: env configuration and tuning. WP-W1 can run in parallel |
 
 #### WP-G2 notes (read before G3)

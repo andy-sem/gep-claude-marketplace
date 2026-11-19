@@ -9,6 +9,7 @@ import {
   askJev,
   jevDecision,
   buildState,
+  builtinPrompt,
   parseAnswer,
   readJevConfig,
   redact,
@@ -26,6 +27,8 @@ const cfg = {
   allowThreshold: 0.95,
   escalateThreshold: 0.5,
   logPath: undefined,
+  // The ported tests exercise the cloud-change preset (the source's question).
+  prompt: builtinPrompt("cloud-change"),
 }
 
 const probs = (unrelated, read_only, cloud_or_data_change, destructive) => ({
@@ -136,6 +139,7 @@ test("readJevConfig applies defaults", () => {
     escalateThreshold: 0.5,
     timeoutMs: 1500,
     logPath: undefined,
+    prompt: builtinPrompt("destructive"),
   })
 })
 
@@ -251,31 +255,33 @@ test("jevDecision names cloud_or_data_change when it is larger", () => {
 // parseAnswer
 // ---------------------------------------------------------------------------
 
+const parse = (json) => parseAnswer(json, cfg.prompt)
+
 test("parseAnswer accepts a well-formed answer", () => {
   const p = probs(0.7, 0.1, 0.1, 0.1)
-  assert.deepEqual(parseAnswer(answer(p)), p)
+  assert.deepEqual(parse(answer(p)), p)
 })
 
 test("parseAnswer returns null for malformed shapes", () => {
   const good = probs(0.7, 0.1, 0.1, 0.1)
-  assert.equal(parseAnswer(null), null)
-  assert.equal(parseAnswer({}), null)
+  assert.equal(parse(null), null)
+  assert.equal(parse({}), null)
   assert.equal(
-    parseAnswer({
+    parse({
       answers: { cloud_change: { type: "text", probabilities: good } },
     }),
     null,
   )
   assert.equal(
-    parseAnswer({
+    parse({
       answers: { cloud_change: { type: "choice", probabilities: "x" } },
     }),
     null,
   )
-  assert.equal(parseAnswer(answer({ ...good, destructive: undefined })), null)
-  assert.equal(parseAnswer(answer({ ...good, destructive: "0.1" })), null)
-  assert.equal(parseAnswer(answer(probs(1.2, -0.1, 0, -0.1))), null)
-  assert.equal(parseAnswer(answer(probs(0.5, 0.1, 0.1, 0.1))), null)
+  assert.equal(parse(answer({ ...good, destructive: undefined })), null)
+  assert.equal(parse(answer({ ...good, destructive: "0.1" })), null)
+  assert.equal(parse(answer(probs(1.2, -0.1, 0, -0.1))), null)
+  assert.equal(parse(answer(probs(0.5, 0.1, 0.1, 0.1))), null)
 })
 
 // ---------------------------------------------------------------------------
@@ -307,7 +313,7 @@ test("askJev returns probabilities, usage and latency and sends a well-formed re
     "environment",
     "inputs",
     "policy",
-    "projects",
+    "project",
   ])
   assert.deepEqual(Object.keys(body.questions), ["cloud_change"])
   const q = body.questions.cloud_change
@@ -326,7 +332,7 @@ test("askJev returns probabilities, usage and latency and sends a well-formed re
     assert.equal(typeof option.description, "string")
     assert.ok(option.examples.length > 0)
   }
-  // examples cover Bash, scripts, Terraform, workflows, database and cloud MCP, and
+  // examples cover Bash, scripts, Terraform, workflows, generic MCP calls, and
   // unrelated calls
   const examples = Object.values(q.criteria)
     .flatMap((o) => o.examples)
@@ -341,15 +347,14 @@ test("askJev returns probabilities, usage and latency and sends a well-formed re
     "terraform test, where every test file",
     "terraform test, where a test file",
     "gh workflow run",
-    "execute_sql with SELECT",
-    "execute_sql with INSERT",
-    "execute_sql with DROP",
-    "apply_migration",
-    "mcp__cloud__run_command",
+    "runs SQL: SELECT",
+    "runs SQL: INSERT",
+    "runs SQL: DROP",
+    "applies a database migration",
+    "deploys a service",
     "git push --force",
-    "wrangler dev",
-    "editJiraIssue",
-    "computer with a click",
+    "edits the title of an issue",
+    "clicks in a browser",
   ]) {
     assert.ok(examples.includes(needle), needle)
   }

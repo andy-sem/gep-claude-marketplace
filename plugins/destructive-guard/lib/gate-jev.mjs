@@ -1,11 +1,14 @@
 // Optional Jev (TypeSafe) layer for the approval gate. Loaded by
 // gate-engine.mjs only when GATE_JEV is set. For every Bash command and every MCP
-// call it asks Jev whether the call changes cloud services, remote infrastructure
-// or databases. Jev can add an `ask` or lift a rule `ask` (no output, so Claude Code's own
+// call it asks Jev the configured question (default: could the call delete,
+// overwrite or irreversibly change data, locally or remotely; see jev/*.json and
+// GATE_JEV_PROMPT). Jev can add an `ask` or lift a rule `ask` (no output, so Claude Code's own
 // permission rules decide); it never emits an `allow`. Any request failure leaves
 // the rule result unchanged.
 
-import { appendFileSync } from "node:fs"
+import { appendFileSync, readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 
 export const JEV_URL = "https://api.typesafe.ai/v1/systemone"
 
@@ -19,13 +22,8 @@ const MAX_TIMEOUT_MS = 30000
 const MAX_COMMAND_CHARS = 8000
 const MAX_INPUT_CHARS = 8000
 const MAX_SCRIPTS_BYTES = 65536
-const QUESTION = "cloud_change"
-const CHOICES = [
-  "unrelated",
-  "read_only",
-  "cloud_or_data_change",
-  "destructive",
-]
+const PROMPTS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "jev")
+export const DEFAULT_PROMPT = "destructive"
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"])
 
 export class JevConfigError extends Error {
@@ -107,7 +105,90 @@ export function readJevConfig(env) {
     ),
     timeoutMs,
     logPath: optional(env, "GATE_JEV_LOG"),
+    prompt: promptFromEnv(env),
   }
+}
+
+// ---------------------------------------------------------------------------
+// Prompt (the question Jev answers)
+// ---------------------------------------------------------------------------
+
+// A prompt is { question, instructions, context, criteria, ask, safe }:
+// `criteria` maps each choice to { description, examples }, `ask` lists the
+// choices whose probabilities add up to the risk, `safe` the choices that may
+// lift a rule ask. Throws JevConfigError when the shape is wrong.
+export function validatePrompt(p, where = "prompt") {
+  const bad = (msg) => {
+    throw new JevConfigError(`${where}: ${msg}`)
+  }
+  if (p === null || typeof p !== "object" || Array.isArray(p))
+    bad("must be a JSON object")
+  if (typeof p.question !== "string" || !/^[a-z][a-z0-9_]*$/.test(p.question))
+    bad("question must be a snake_case id")
+  if (typeof p.instructions !== "string" || !p.instructions.trim())
+    bad("instructions must be a non-empty string")
+  if (
+    p.context === null ||
+    typeof p.context !== "object" ||
+    Array.isArray(p.context) ||
+    Object.values(p.context).some((v) => typeof v !== "string")
+  )
+    bad("context must be an object of strings")
+  if (p.criteria === null || typeof p.criteria !== "object" || Array.isArray(p.criteria))
+    bad("criteria must be an object")
+  const choices = Object.keys(p.criteria)
+  if (choices.length < 2) bad("criteria needs at least two choices")
+  for (const [c, o] of Object.entries(p.criteria)) {
+    if (
+      typeof o?.description !== "string" ||
+      !Array.isArray(o.examples) ||
+      o.examples.some((e) => typeof e !== "string")
+    )
+      bad(`criteria.${c} needs a description and string examples`)
+  }
+  for (const key of ["ask", "safe"]) {
+    const list = p[key]
+    if (!Array.isArray(list) || !list.length || list.some((c) => !choices.includes(c)))
+      bad(`${key} must be a non-empty list of criteria choices`)
+  }
+  if (p.ask.some((c) => p.safe.includes(c))) bad("ask and safe must not overlap")
+  return p
+}
+
+function readPromptFile(path, where) {
+  let parsed
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8"))
+  } catch (e) {
+    throw new JevConfigError(`${where}: cannot read ${path}: ${e.message}`)
+  }
+  return validatePrompt(parsed, where)
+}
+
+// A built-in prompt by name (jev/<name>.json).
+export function builtinPrompt(name) {
+  if (!/^[a-z0-9-]+$/.test(name))
+    throw new JevConfigError(`unknown built-in Jev prompt "${name}"`)
+  return readPromptFile(join(PROMPTS_DIR, `${name}.json`), `prompt ${name}`)
+}
+
+// GATE_JEV_PROMPT: a built-in name (default "destructive") or a path to a prompt
+// JSON file. GATE_JEV_INSTRUCTIONS, GATE_JEV_CONTEXT and GATE_JEV_POLICY then
+// replace the question text, context.project and context.policy.
+export function promptFromEnv(env) {
+  const ref = optional(env, "GATE_JEV_PROMPT") ?? DEFAULT_PROMPT
+  const base =
+    ref.includes("/") || ref.endsWith(".json")
+      ? readPromptFile(ref, "GATE_JEV_PROMPT")
+      : builtinPrompt(ref)
+  const prompt = { ...base, context: { ...base.context } }
+  const instructions = optional(env, "GATE_JEV_INSTRUCTIONS")
+  if (instructions) prompt.instructions = instructions
+  const project = optional(env, "GATE_JEV_CONTEXT")
+  if (project) prompt.context.project = project
+  const policy = optional(env, "GATE_JEV_POLICY")
+  if (policy) prompt.context.policy = policy
+  return prompt
 }
 
 // ---------------------------------------------------------------------------
@@ -227,93 +308,22 @@ export function redactMcpInput(toolInput) {
 // Jev request
 // ---------------------------------------------------------------------------
 
-// Supporting facts sent with every call.
-const CONTEXT = {
-  environment:
-    "A coding agent runs shell commands and MCP tool calls in a developer's repository. The tool is named in 'tool'.",
-  projects:
-    "The repository may manage cloud resources (for example with Terraform, cloud CLIs or CI workflows that deploy) and may connect to remote databases.",
-  policy:
-    "Only creating, changing, deploying, granting access to or deleting cloud resources, remote infrastructure or database data needs a person. Reading them is safe. Git, Jira, browser and local file actions are unrelated, even when they change something.",
-  inputs:
-    "'command' is a Bash command, 'scripts' holds the contents of project files that command runs or imports (path and content), including the *.tftest.hcl files a terraform test command runs, 'input' is the JSON input of an MCP tool call, and 'notes' lists anything that was cut. Judge what the call does, including what the scripts do.",
-}
-
-// Each option has a description and illustrative examples. The examples are
-// not exhaustive; judge the call by what it does.
-const CRITERIA = {
-  unrelated: {
-    description:
-      "Does not touch cloud services, remote infrastructure or databases, even if it changes something else (local files, git, Jira, the browser)",
-    examples: [
-      "git push --force origin main",
-      "wrangler dev",
-      "pnpm test",
-      "node scripts/format.mjs, a script that only reformats local files",
-      "mcp__plugin_atlassian_atlassian__editJiraIssue with a new summary",
-      "mcp__claude-in-chrome__computer with a click",
-    ],
-  },
-  read_only: {
-    description:
-      "Only reads or inspects cloud, infrastructure or database state, with no change to resources or data",
-    examples: [
-      "aws ec2 describe-instances",
-      "kubectl get pods",
-      "terraform plan",
-      "bash plan.sh, a script that only runs terraform plan",
-      "terraform test, where every test file in 'scripts' declares mock_provider for each provider, so no run block reaches the real cloud",
-      "psql -c 'SELECT count(*) FROM users'",
-      "an MCP database tool such as mcp__db__execute_sql with SELECT * FROM users LIMIT 5",
-      "an MCP cloud tool such as mcp__cloud__run_command with args services list",
-    ],
-  },
-  cloud_or_data_change: {
-    description:
-      "Creates, changes, deploys or grants access to cloud resources, remote infrastructure or database data, directly or through a script, Terraform or a workflow",
-    examples: [
-      "kubectl apply -f deploy.yaml",
-      "terraform apply",
-      "terraform test, where a test file has a run block with command = apply (the default) and a real, unmocked provider",
-      "bash infra/apply.sh --apply",
-      "node scripts/provision-dev.mjs, a script that creates cloud resources",
-      "gh workflow run deploy-dev.yml",
-      "psql -c 'UPDATE users SET ...'",
-      "mcp__db__execute_sql with INSERT INTO users ... or UPDATE users SET ...",
-      "mcp__db__apply_migration",
-      "mcp__cloud__run_command with args deploy api",
-    ],
-  },
-  destructive: {
-    description:
-      "Deletes or overwrites cloud resources, remote infrastructure or database data, or is hard to undo",
-    examples: [
-      "terraform destroy",
-      "terraform state rm aws_db_instance.main",
-      "aws s3 rm --recursive s3://bucket/path",
-      "kubectl delete namespace prod",
-      "mcp__db__execute_sql with DROP TABLE users, DELETE FROM users or TRUNCATE users",
-      "psql -c 'DROP TABLE users'",
-    ],
-  },
-}
-
-const INSTRUCTIONS =
-  "Does this call change cloud services, remote infrastructure or databases?"
-
-function requestBody(state, model) {
+function requestBody(state, model, prompt) {
   return {
     model,
-    state: { ...state, context: CONTEXT },
+    state: { ...state, context: prompt.context },
     questions: {
-      [QUESTION]: {
+      [prompt.question]: {
         type: "choice",
-        instructions: INSTRUCTIONS,
-        criteria: CRITERIA,
+        instructions: prompt.instructions,
+        criteria: prompt.criteria,
       },
     },
   }
 }
+
+let defaultPrompt
+const promptOf = (cfg) => cfg.prompt ?? (defaultPrompt ??= builtinPrompt(DEFAULT_PROMPT))
 
 const byteLength = (text) => Buffer.byteLength(text)
 
@@ -394,8 +404,9 @@ export function buildState(call) {
 }
 
 // Returns the probabilities map, or null when the response is malformed.
-export function parseAnswer(json) {
-  const answer = json?.answers?.[QUESTION]
+export function parseAnswer(json, prompt = promptOf({})) {
+  const CHOICES = Object.keys(prompt.criteria)
+  const answer = json?.answers?.[prompt.question]
   const probs = answer?.probabilities
   if (answer?.type !== "choice" || !probs || typeof probs !== "object")
     return null
@@ -426,7 +437,8 @@ export async function askJev(state, cfg, { fetchImpl = fetch } = {}) {
   const deadline = started + cfg.timeoutMs
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), cfg.timeoutMs)
-  const body = JSON.stringify(requestBody(state, cfg.model))
+  const prompt = promptOf(cfg)
+  const body = JSON.stringify(requestBody(state, cfg.model, prompt))
   const fail = (error) => ({ error, latencyMs: Date.now() - started })
   try {
     for (let attempt = 1; ; attempt++) {
@@ -457,7 +469,7 @@ export async function askJev(state, cfg, { fetchImpl = fetch } = {}) {
       } catch {
         return fail(controller.signal.aborted ? "timeout" : "malformed")
       }
-      const probabilities = parseAnswer(json)
+      const probabilities = parseAnswer(json, prompt)
       if (!probabilities) return fail("malformed")
       return {
         probabilities,
@@ -478,21 +490,24 @@ const fmt = (p) => p.toFixed(2)
 
 // "ask" (risk above the escalate threshold), "pass" (lift any rule ask, safe at or
 // above the allow threshold) or null (no Jev decision). Jev never emits `allow`.
+// Ties go to the choice listed last (the stronger one in the built-in prompts).
+const topOf = (probs, choices) =>
+  choices.reduce((best, c) => (probs[c] >= probs[best] ? c : best))
+
 export function jevDecision(probs, cfg) {
-  const risk = probs.destructive + probs.cloud_or_data_change
+  const { ask: askChoices, safe: safeChoices } = promptOf(cfg)
+  const sum = (choices) => choices.reduce((n, c) => n + probs[c], 0)
+  const risk = sum(askChoices)
   if (risk > cfg.escalateThreshold) {
-    const top =
-      probs.destructive >= probs.cloud_or_data_change
-        ? "destructive"
-        : "cloud_or_data_change"
+    const top = topOf(probs, askChoices)
     return {
       decision: "ask",
       reason: `jev: ${top} p=${fmt(probs[top])} risk=${fmt(risk)}`,
     }
   }
-  const safe = probs.unrelated + probs.read_only
+  const safe = sum(safeChoices)
   if (safe >= cfg.allowThreshold) {
-    const top = probs.unrelated >= probs.read_only ? "unrelated" : "read_only"
+    const top = topOf(probs, [...safeChoices].reverse())
     return {
       decision: "pass",
       reason: `jev: ${top} p=${fmt(probs[top])} safe=${fmt(safe)}`,

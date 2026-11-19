@@ -9,7 +9,7 @@ repository root for the plan and work packages.
 /plugin install destructive-guard --marketplace gep/gep-claude-marketplace
 ```
 
-## What it does (0.2.0)
+## What it does (0.3.0)
 
 Out of the box, with no configuration, it asks before **destructive** calls:
 anything that deletes, overwrites or irreversibly changes data or resources,
@@ -36,11 +36,47 @@ Also:
 - **Read/Edit/Write of `.env*` files** are blocked (except `.env.example`).
 - **Fails closed**: an engine or config error, an unparsable command, or a
   command whose program is a variable (`$EDITOR file`) asks.
-- **Jev classifier** (optional): off unless `GATE_JEV=1` (needs
-  `TYPESAFE_API_KEY`). Its prompt asks whether a call changes cloud services,
-  remote infrastructure or databases.
+- **Jev classifier** (optional, see below).
 
 Requires Node.js on PATH. `jq` is optional.
+
+## Jev classifier (optional)
+
+Off by default. With `GATE_JEV=1` and `TYPESAFE_API_KEY` set, every Bash
+command and MCP call (redacted; commands mentioning `.env` are never sent)
+goes to Jev together with the scripts it runs, a context block and a
+multiple-choice question. Jev decides when it is confident; the rules decide
+otherwise:
+
+| Jev answer | Result |
+| --- | --- |
+| `ask` choices above `GATE_JEV_ESCALATE_THRESHOLD` (0.5) | ask, even if no rule matched |
+| `safe` choices at or above `GATE_JEV_ALLOW_THRESHOLD` (0.95) | no opinion, even if a rule asked |
+| in between, error, timeout | the rule result |
+
+**Default question** (`jev/destructive.json`): *"Could this call delete,
+overwrite or irreversibly change data or resources, on the local machine or
+in any remote service?"* with choices `read_only`, `reversible_change`
+(safe) and `destructive` (ask). Its examples cover local commands (`rm -rf`,
+`git reset --hard`, `git clean`, `stash drop`, force pushes, disks, docker
+volumes), infrastructure, SQL and MCP calls in general.
+
+Change it with env variables:
+
+| Variable | Effect |
+| --- | --- |
+| `GATE_JEV_PROMPT` | `destructive` (default), `cloud-change` (asks before any cloud/infra/database change), or a path to your own prompt JSON |
+| `GATE_JEV_INSTRUCTIONS` | Replaces the question text |
+| `GATE_JEV_CONTEXT` | Replaces `context.project` (describe your project: what is precious, what is regenerable) |
+| `GATE_JEV_POLICY` | Replaces `context.policy` (what needs a person) |
+
+A prompt file has the shape of `jev/destructive.json`: `question` (snake_case
+id), `instructions`, `context` (strings), `criteria` (choice → description
+and examples), `ask` and `safe` (disjoint lists of choices). An invalid
+prompt makes the gate ask with a `gate-config:` reason.
+
+Other variables: `GATE_JEV_URL`, `GATE_JEV_MODEL`, `GATE_JEV_TIMEOUT_MS`,
+`GATE_JEV_ALLOW_THRESHOLD`, `GATE_JEV_ESCALATE_THRESHOLD`, `GATE_JEV_LOG`.
 
 ## Configuration (so far)
 
