@@ -47,7 +47,7 @@ Rules that hold everywhere:
 
 ## 2. Status (read-only)
 
-Read `state.json` and print: ticket, title, stage (and `reviewRound`), branch, worktree, base branch, PR URL if any, the number of recorded decisions with the last question, every entry of `warnings`, and the paths of `ticket.md`, `spec.md`, `plan.md`, `dev-report.md` and `review.md` that exist. "Open questions" means: stage `awaiting_plan_approval` (the plan waits for approval), or the unresolved `## Open questions` of `spec.md` when the stage is `spec`. Write nothing, spawn nothing.
+Read `state.json` and print: ticket, title, stage (and `reviewRound`), branch, worktree, base branch, PR URL if any, the number of recorded decisions with the last question, every entry of `warnings`, and the paths of `ticket.md`, `spec.md`, `plan.md`, `decisions.md`, `dev-report.md` and `review.md` that exist. "Open questions" means: stage `awaiting_plan_approval` (the plan waits for approval), or the unresolved `## Open questions` of `spec.md` when the stage is `spec`. Write nothing, spawn nothing.
 
 ## 3. Kickoff
 
