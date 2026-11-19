@@ -211,7 +211,7 @@ The two tracks only meet at W3.
 Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
 
-Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, WP-G4/G5 not pushed yet;
+Last updated 2026-11-19. Branch `feature/gated-dev-simple-workflow`, pushed (through WP-G5);
 no PR yet. destructive-guard **0.6.0**, gated-dev-simple-workflow 0.0.1,
 catalog `metadata.version` **0.8.0**. 728 tests green, validate passes.
 
