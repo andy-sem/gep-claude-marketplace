@@ -12,12 +12,32 @@ and every stage reads and writes files next to it. No issue tracker is used.
 /ticket add-csv-export Users want to export reports as CSV ...
 /ticket PROJ-1 --status
 /ticket PROJ-1 --resume
+/ticket PROJ-1 --address-review      # address new PR feedback now
 ```
 
 The run stops for you only at fixed points: blocking spec questions,
 **plan approval (always)**, important decisions an agent escalates,
 verification failures, review-loop limits and agent failures. After the plan
 is approved it commits, pushes the ticket branch and opens a PR with `gh`.
+
+### After the PR is open
+
+The session keeps watching the PR (`scripts/watch-pr.mjs` in the background,
+one `gh` poll a minute):
+
+- **New review feedback** from a person (bots and the pipeline's own replies
+  are ignored) starts a follow-up round: each item is classified as change,
+  question or decline in `pr-feedback-<n>.md` (you confirm every decline and
+  decide anything ambiguous or out of scope), the dev agent fixes the changes
+  (`PR-Fix: <comment id>` commits), the reviewer checks them, the branch is
+  pushed and every item gets a reply marked `<!-- gated-dev -->`. Threads stay
+  unresolved and no review is re-requested; that is up to you.
+- **Merged**: you get a notification and the worktree is removed when it is
+  clean and at the merged commit. The branch is kept.
+- **Closed** without a merge: the watch stops; nothing else changes.
+
+Closing the session stops the watch; `/ticket <KEY> --resume` (or the
+launcher) restarts it, and catches up on a merge that happened meanwhile.
 
 Worktrees go to `.claude/worktrees/<key>-<slug>` on branch `<KEY>/<slug>`.
 In Orca they are created with `orca worktree create`; in iTerm2 and other
@@ -40,12 +60,15 @@ ticket worktree. Every stage works on files next to it:
 | `decisions.md` | orchestrator (your answers at stop points) | at plan approval, then on every append |
 | `dev-report.md` | dev agent | by the dev agent |
 | `review.md` | reviewer | after each review round |
+| `pr-feedback-<n>.md` | orchestrator (PR follow-up round `n`) | at the start of the round |
 | `state.json` | orchestrator | never (ignored through `.git/info/exclude`) |
 
 `state.json` records the stage, which `--status` prints and `--resume`
 re-enters from its start: `spec` → `plan` → `awaiting_plan_approval` → `dev`
-→ `review` → `complete` → `done` (or `aborted`). It also holds the branch,
-worktree, base, review round, decisions, warnings and the PR URL.
+→ `review` → `complete` → `done` ⇄ `addressing_review` → `merged` (or
+`aborted`). It also holds the branch, worktree, base, review round,
+decisions, warnings, the PR URL, the time of the last PR feedback handled
+(`lastAddressedCommentAt`) and the watcher's heartbeat (`watch`).
 
 ## Configuration
 
@@ -84,8 +107,7 @@ node <plugin>/scripts/launch.mjs --all                     # every ticket.md wit
 | --- | --- |
 | New ticket, Orca, repo registered in Orca | A new Orca worktree on `<KEY>/<slug>` (base: front matter `base:`, `baseBranch`, `origin/HEAD`, `main`), with `ticket.md` and `.claude/settings.local.json` copied in; the session adopts it |
 | New ticket, iTerm2 (or a repo Orca does not know) | The main checkout; the session creates its worktree |
-| Ticket with a run | Its worktree, with `/ticket <KEY> --resume` |
-| Finished run (`stage: done`) | Skipped |
+| Ticket with a run | Its worktree, with `/ticket <KEY> --resume` (for a finished run, `stage: done`, that restarts the PR watch) |
 
 Sessions are named `<KEY> · <title>` (`<KEY> resume · <title>`) and get
 `TICKET_FLOW_KEY`; `--remote-control` also starts them with Remote Control.
@@ -99,7 +121,9 @@ a permission or gate prompt, a stop point such as plan approval, or an idle
 wait for input. macOS uses `osascript` (with a sound), Linux uses
 `notify-send` when it is installed; other systems stay silent. The message
 comes from the event (needs `jq`, otherwise a generic text). Sessions started
-by hand are never notified. Set `GATED_DEV_NOTIFY=0` to turn it off.
+by hand are never notified by the hook. While a session only watches its PR,
+Claude Code's idle notice fires once too. A merge sends `<KEY> merged` from
+any session. Set `GATED_DEV_NOTIFY=0` to turn all of it off.
 
 ## Agents
 
@@ -123,7 +147,7 @@ gate the table lists the calls it expects to need approval, with
 
 ## Requirements
 
-`git`, and `gh` (authenticated) for the PR; `orca` when running in Orca; `node` for the launcher; optional `jq` and `notify-send` (Linux) for notifications.
+`git`, and `gh` (authenticated) for the PR; `orca` when running in Orca; `node` for the launcher and the PR watcher; optional `jq` and `notify-send` (Linux) for notifications.
 
 ## Install
 

@@ -235,9 +235,9 @@ passes.
   the plan, launcher. Exercised end to end in a private demo repo: runs to a
   PR, `--status`, interrupt + `--resume`, gated rows with real rule IDs,
   `unknown` without the gate, spec questions (H1), denial as a checkpoint.
-- **WP-W4** notifications: done (0.6.0). Open: **WP-W5** (v0.2) PR follow-up
-  (`watch-pr`, `--address-review`, merge cleanup). Sources: "Getting the
-  source" below.
+- **WP-W4** notifications: done (0.6.0). **WP-W5** PR follow-up
+  (`watch-pr`, `--address-review`, merge cleanup): done (0.7.0), checked end
+  to end in the demo.
 - Possible follow-ups, not decided: rename `git-push-force` (it also covers
   `--delete`/`--prune`/`--mirror`; renaming breaks `GATE_DISABLE_RULES`
   values); statically catching destructive commands inside scripts/npm
@@ -267,10 +267,10 @@ passes.
 | WP-G6 | Done: README rewritten (install, every env variable with defaults, what Jev sends, writing rules incl. all rule kinds and top-level keys, troubleshooting); `test/readme.test.mjs` fails when an env variable, pack or prompt is undocumented; CI `.github/workflows/test.yml` (jq manifest check + `node --test`, Node 22); root README lists the plugins; 730 tests | `1d3db86` |
 | WP-W7 | Done: `scripts/launch.mjs` (file-based CLI: keys or `--all`, `--dry-run`, `--remote-control`; new ticket → Orca worktree via `orca worktree create --repo path:<root>` when the repo is registered in Orca, else main checkout; existing run → `--resume` in its worktree; `done` skipped), `skills/launch/SKILL.md`, 37 tests in `test/launch.test.mjs` (CI runs them). Real tabs verified 2026-11-19 against the demo repo: Orca (repo registered → new Orca worktree under Orca's workspace dir, ticket + local settings copied, session adopted it with the plugin loaded) and iTerm2 (main checkout, titled tab). Version 0.4.0 | `fa7c24a` |
 | WP-W4 | Done: `hooks/hooks.json` + `hooks/notify.sh` (`Notification` hook; only sessions with `TICKET_FLOW_KEY`; macOS `osascript`, Linux `notify-send`, silent elsewhere; `GATED_DEV_NOTIFY=0` off; never fails), `test/notify.test.mjs` (9, stubbed `uname`/notifiers), README section; version 0.6.0, catalog 0.14.0. PR #5 merged; checked in the demo (DEMO-6) | `5038f15` |
-| WP-W5 | Deferred to v0.2: PR watch, `--address-review`, merge cleanup | |
+| WP-W5 | Done: `scripts/watch-pr.mjs` (self-contained port; marker `<!-- gated-dev -->`; outcome in one JSON line; exit 0 for feedback/merged/closed, 1 error, 2 usage: the source's 10–13 made Claude Code report a merge as "failed with exit code 11"), skill §9b (`--address-review`, no tracker), §9c (background watch), §9d (merge cleanup: notify via `hooks/notify.sh <title> <msg>`, remove worktree, keep branch); launcher resumes `done` runs (restarts the watch) instead of skipping them; pipeline-spec §5a; 20 watcher tests (incl. the watcher command passing destructive-guard), smoke-tested against real merged/closed demo PRs; end to end in the demo (DEMO-7, see below); version 0.7.0, catalog 0.15.0 | (this commit) |
 | WP-W6 | Done: README without the WIP line, ticket files + `state.json` stages, config example (JSON backslash note); version 0.5.0 | `8d57cfc` |
 
-Suggested order from here: only WP-W5 (v0.2) is open. Every other package is complete and merged.
+Suggested order from here: push and open the PR for W5 (ask the user). Every work package is then complete; remaining items are the undecided follow-ups in the summary above.
 
 ### Progress in the session of 2026-11-19 (W1–W3)
 
@@ -342,7 +342,16 @@ They can differ (as with DEMO-2). Acceptable; the session reports it.
    demo: DEMO-6 launched in Orca, the session notified at the plan-approval
    stop point (user saw it), the run went on to `done` (demo PR #4 merged);
    worktree and branches removed afterwards.
-4. v0.2: WP-W5.
+4. WP-W5 done 2026-11-20 (not pushed). DEMO-7 end to end (launcher, Orca):
+   plan approved → PR #5 → watcher heartbeat → an inline review comment woke
+   the session within a minute → `pr-feedback-1.md` (class `change`),
+   `PR-Fix:` commit, review, push, marked reply in the thread,
+   `lastAddressedCommentAt` set, watch restarted and ignored its own reply →
+   merge → stage `merged`, Orca worktree removed, branch kept. Fixed from the
+   run: `gh pr view` has no `headRefOid` field (§9d uses `gh api …/pulls/{n}
+   --jq .head.sha`); the follow-up review commit is now `add review for PR
+   feedback round <n>` (it repeated `add review round 1`). Demo cleaned up
+   afterwards.
 
 Update the Status table at the end of every work package.
 
