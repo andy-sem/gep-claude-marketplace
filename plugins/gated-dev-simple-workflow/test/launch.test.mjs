@@ -183,6 +183,8 @@ test("readConfig: defaults, overrides and invalid content", () => {
   assert.equal(d.ticketsDir, "docs/tickets")
   assert.ok(d.keyPattern.test("proj-1"))
   assert.equal(d.baseBranch, null)
+  assert.equal(d.orchestratorRules, null)
+  assert.equal(cfg(repo({ config: { orchestratorRules: ".claude/rules.md" } })).orchestratorRules, ".claude/rules.md")
   const c = cfg(repo({ config: { ticketsDir: "t", keyPattern: "^[A-Z]+-\\d+$", baseBranch: "develop", models: {} } }))
   assert.equal(c.ticketsDir, "t")
   assert.equal(c.baseBranch, "develop")
@@ -195,6 +197,9 @@ test("readConfig: defaults, overrides and invalid content", () => {
     [{ ticketsDir: "/abs" }, /ticketsDir/],
     [{ keyPattern: "(" }, /keyPattern/],
     [{ baseBranch: "a b" }, /baseBranch/],
+    [{ orchestratorRules: "../rules.md" }, /orchestratorRules/],
+    [{ orchestratorRules: "/abs/rules.md" }, /orchestratorRules/],
+    [{ orchestratorRules: 3 }, /orchestratorRules/],
   ])
     assert.throws(() => cfg(repo({ config: bad })), re)
 })
@@ -475,6 +480,22 @@ test("launchTicket rejects a key outside keyPattern and a ticket without a file"
   const { root, config, run } = demo({ config: { keyPattern: "^[A-Z]+-\\d+$" } })
   await assert.rejects(launchTicket({ root, key: "k-1", config, env: ITERM, run }), /not a valid/)
   await assert.rejects(launchTicket({ root, key: "K-2", config, env: ITERM, run }), /no ticket file/)
+})
+
+test("launchTicket with orchestratorRules starts a ticket without ticket.md in the main checkout", async () => {
+  const { root, config, run } = demo({ config: { orchestratorRules: ".claude/rules.md" } })
+  for (const env of [ORCA, ITERM]) {
+    const r = await launchTicket({ root, key: "K-2", config, env, run, dryRun: true })
+    assert.equal(r.mode, "main-checkout")
+    assert.equal(r.cwd, root)
+    assert.equal(r.title, "K-2")
+    assert.match(r.command, /"\/ticket K-2"$/)
+    assert.match(r.note, /intake/)
+  }
+  assert.ok(!run.calls.some((c) => c[0] === "orca" && c[1] === "worktree"))
+  // A ticket that has its file still goes the normal way.
+  const r = await launchTicket({ root, key: "K-1", config, env: ORCA, run, dryRun: true })
+  assert.equal(r.mode, "orca-worktree")
 })
 
 // --- CLI ------------------------------------------------------------------------
