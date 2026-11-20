@@ -55,8 +55,13 @@ class Impl:
     def launch(self) -> list[str]:
         return self._script(GD / "scripts", "launch.mjs", "launch.py")
 
-    def watch_pr(self) -> list[str]:
-        return self._script(GD / "scripts", "watch-pr.mjs", "watch_pr.py")
+    def watch_pr(self, fast: bool = False) -> list[str]:
+        """The watcher command line; `fast` makes every poll interval elapse at once (see _fast_timers.mjs)."""
+        if not fast:
+            return self._script(GD / "scripts", "watch-pr.mjs", "watch_pr.py")
+        if self.name == "js":
+            return ["node", "--import", str(Path(__file__).resolve().parent / "_fast_timers.mjs"), str(GD / "scripts" / "watch-pr.mjs")]
+        raise NotImplementedError("the fast watcher runner for the Python port lands in P11")
 
     def notify(self) -> list[str]:
         if self.name == "js":

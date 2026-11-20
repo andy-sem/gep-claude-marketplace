@@ -1,0 +1,265 @@
+"""Units of the launcher through the JS bridge. # retarget to gated_dev in P12"""
+
+import json
+import re
+
+import pytest
+
+from testkit.bridge import BridgeError, bridge, call, js_regexp
+
+MOD = "gated-dev:launch"
+
+
+def launch(export, *args):
+    return bridge(MOD, export, *args)
+
+
+def config_call(root):
+    """The parsed config of `root` as a nested call (its keyPattern is a RegExp, which cannot cross as JSON)."""
+    return call(MOD, "readConfig", {"root": str(root)})
+
+
+def project(tmp_path, *, config=None, tickets=None):
+    """The JS fixture `repo({config, tickets})` without git: .claude/gated-dev.json and ticket files."""
+    if config is not None:
+        (tmp_path / ".claude").mkdir(parents=True, exist_ok=True)
+        (tmp_path / ".claude" / "gated-dev.json").write_text(config if isinstance(config, str) else json.dumps(config))
+    for key, text in (tickets or {}).items():
+        (tmp_path / "docs" / "tickets" / key).mkdir(parents=True, exist_ok=True)
+        (tmp_path / "docs" / "tickets" / key / "ticket.md").write_text(text)
+    return tmp_path
+
+
+# --- names and commands -------------------------------------------------------
+
+
+def test_build_shell_command_quotes_cwd_sets_key_and_names_the_session():
+    assert (
+        launch("buildShellCommand", {"cwd": "/a b/c", "key": "PROJ-1", "args": ["--resume"]})
+        == """cd '/a b/c' && TICKET_FLOW_KEY=PROJ-1 claude --name "PROJ-1 resume" "/ticket PROJ-1 --resume\""""
+    )
+    assert (
+        launch("buildShellCommand", {"cwd": "/x", "key": "PROJ-1", "summary": "Fix it", "remoteControl": True})
+        == """cd '/x' && TICKET_FLOW_KEY=PROJ-1 claude --name "PROJ-1 · Fix it" --remote-control "PROJ-1 · Fix it" "/ticket PROJ-1\""""
+    )
+
+
+def test_build_shell_command_escapes_single_quotes_in_cwd():
+    command = launch("buildShellCommand", {"cwd": "/it's/a\"b\\c", "key": "K-1"})
+    assert re.match(r"^cd '/it'\\''s/a\"b\\c' &&", command)
+
+
+@pytest.mark.parametrize("key", ["", "a b", "K;rm", "K/1", "a..b", "$(x)", "-K"])
+def test_build_shell_command_rejects_unsafe_keys(key):
+    with pytest.raises(BridgeError, match="Invalid ticket key"):
+        launch("buildShellCommand", {"cwd": "/x", "key": key})
+
+
+@pytest.mark.parametrize(
+    ("opts", "message"),
+    [
+        ({"cwd": "x", "key": "K-1"}, "absolute"),
+        ({"cwd": "/x\n", "key": "K-1"}, "absolute"),
+        ({"cwd": "/x", "key": "K-1", "args": ["--yolo"]}, "not allowed"),
+        ({"cwd": "/x", "key": "K-1", "remoteControl": "yes"}, "boolean"),
+    ],
+)
+def test_build_shell_command_rejects_other_args_relative_cwd_bad_remote_control(opts, message):
+    with pytest.raises(BridgeError, match=message):
+        launch("buildShellCommand", opts)
+
+
+def test_short_summary_strips_unsafe_characters_and_cuts_at_a_word_boundary():
+    assert launch("shortSummary", 'Say "hi" $(rm -rf /) `x` \\ !') == "Say hi (rm -rf /) x"
+    assert launch("shortSummary", None) == ""
+    assert launch("shortSummary", "Export reports as CSV with filters and pagination support") == "Export reports as CSV with filters and"
+    assert launch("shortSummary", "a" * 50) == "a" * 40
+
+
+def test_session_name_key_resume_and_summary():
+    assert launch("sessionName", {"key": "K-1"}) == "K-1"
+    assert launch("sessionName", {"key": "K-1", "args": ["--resume"]}) == "K-1 resume"
+    assert launch("sessionName", {"key": "K-1", "summary": "Do it!"}) == "K-1 · Do it"
+
+
+def test_a_hostile_title_cannot_reach_the_shell_or_applescript():
+    summary = "\"; do shell script \"x\" `whoami` $HOME '"
+    command = launch("buildShellCommand", {"cwd": "/x", "key": "K-1", "summary": summary})
+    assert command.count('"') == 4
+    assert not re.search(r"[`$']", command[len("cd '/x' ") :])
+    script = launch("buildAppleScript", {"command": command, "key": "K-1", "summary": summary})
+    name_lines = [line for line in script.split("\n") if "set name to" in line]
+    assert name_lines
+    for line in name_lines:
+        assert re.match(r'^set name to "[^"\\]*"$', line.strip())
+
+
+def test_slugify_follows_the_skill_rule():
+    assert launch("slugify", "Add slugify helper, and drop the legacy folder") == "add-slugify-helper-and-drop-the-legacy-f"
+    assert launch("slugify", "  --Hello  World--  ") == "hello-world"
+    assert launch("slugify", "!!!") == "work"
+    assert launch("slugify", "a" * 39 + " b") == "a" * 39
+
+
+@pytest.mark.parametrize(
+    ("env", "host"),
+    [
+        ({"TERM_PROGRAM": "Orca"}, "orca"),
+        ({"TERM_PROGRAM": "iTerm.app"}, "iterm"),
+        ({"ORCA_TERMINAL_HANDLE": "t1"}, "orca"),
+        ({"ITERM_SESSION_ID": "w0t0p0:X"}, "iterm"),
+        ({"TERM_PROGRAM": "iTerm.app", "ORCA_TERMINAL_HANDLE": "t1"}, "iterm"),
+        ({"TERM_PROGRAM": "Orca", "ITERM_SESSION_ID": "w0t0p0:X"}, "orca"),
+        ({"TERM_PROGRAM": "Apple_Terminal"}, None),
+        ({}, None),
+    ],
+)
+def test_detect_host_term_program_first_then_orca_handle_then_iterm_session(env, host):
+    assert launch("detectHost", env) == host
+
+
+@pytest.mark.parametrize(
+    ("env", "guid"),
+    [
+        ({"ITERM_SESSION_ID": "w0t1p0:AB-12"}, "AB-12"),
+        ({"ITERM_SESSION_ID": "garbage"}, None),
+        ({"ITERM_SESSION_ID": 'w0:a"b'}, None),
+        ({}, None),
+    ],
+)
+def test_iterm_session_id_takes_the_guid_and_ignores_unusable_values(env, guid):
+    assert launch("iTermSessionId", env) == guid
+
+
+def test_build_applescript_escapes_names_the_tab_and_targets_the_launchers_window():
+    assert launch("appleScriptString", 'a"b\\c') == '"a\\"b\\\\c"'
+    script = launch("buildAppleScript", {"command": "cd '/x' && echo \"hi\"", "key": "K-1", "sessionId": "S-1"})
+    assert re.search(r'set name to "K-1"', script)
+    assert re.search(r"write text \"cd '/x' && echo \\\"hi\\\"\"", script)
+    assert re.search(r'if id of s is "S-1" then', script)
+    assert not re.search(r"repeat with w", launch("buildAppleScript", {"command": "c", "key": "K-1"}))
+
+
+def test_build_orca_args_selector_then_launchers_workspace_then_path():
+    base = {"cwd": "/r", "command": "c", "key": "K-1"}
+
+    def at(**o):
+        return launch("buildOrcaArgs", {**base, **o})[3]
+
+    assert at(selector="id:w1", workspaceId="ws") == "id:w1"
+    assert at(workspaceId="ws") == "id:ws"
+    assert at() == "path:/r"
+    assert launch("buildOrcaArgs", {**base, "summary": "T"})[4:] == ["--title", "K-1 · T", "--command", "c", "--json"]
+
+
+def test_orca_worktree_args_name_the_worktree_and_branch_after_key_and_title():
+    assert launch("orcaWorktreeArgs", {"root": "/r", "key": "K-1", "title": "Do it", "base": "main"}) == [
+        "worktree", "create", "--repo", "path:/r", "--name", "k-1-do-it",
+        "--branch", "K-1/do-it", "--base-branch", "origin/main", "--setup", "skip", "--json",
+    ]  # fmt: skip
+
+
+# --- config and tickets -------------------------------------------------------
+
+
+def test_read_config_defaults_overrides_and_invalid_content(tmp_path):
+    def cfg(n, **kw):
+        return launch("readConfig", {"root": str(project(tmp_path / str(n), **kw))})
+
+    d = cfg("d")
+    assert d["ticketsDir"] == "docs/tickets"
+    assert js_regexp(d["keyPattern"]).search("proj-1")
+    assert d["baseBranch"] is None
+    assert d["orchestratorRules"] is None
+    assert cfg("r", config={"orchestratorRules": ".claude/rules.md"})["orchestratorRules"] == ".claude/rules.md"
+    c = cfg("c", config={"ticketsDir": "t", "keyPattern": "^[A-Z]+-\\d+$", "baseBranch": "develop", "models": {}})
+    assert c["ticketsDir"] == "t"
+    assert c["baseBranch"] == "develop"
+    assert not js_regexp(c["keyPattern"]).search("proj-1")
+    bad_cases = [
+        ("{", "invalid JSON"),
+        ("[]", "JSON object"),
+        ({"nope": 1}, 'unknown key "nope"'),
+        ({"ticketsDir": "../x"}, "ticketsDir"),
+        ({"ticketsDir": "/abs"}, "ticketsDir"),
+        ({"keyPattern": "("}, "keyPattern"),
+        ({"baseBranch": "a b"}, "baseBranch"),
+        ({"orchestratorRules": "../rules.md"}, "orchestratorRules"),
+        ({"orchestratorRules": "/abs/rules.md"}, "orchestratorRules"),
+        ({"orchestratorRules": 3}, "orchestratorRules"),
+    ]
+    for n, (bad, message) in enumerate(bad_cases):
+        with pytest.raises(BridgeError, match=message):
+            cfg(f"bad{n}", config=bad)
+
+
+def test_check_key_applies_key_pattern_and_the_safe_character_set(tmp_path):
+    strict = config_call(project(tmp_path / "strict", config={"keyPattern": "^[A-Z]+-\\d+$"}))
+    assert launch("checkKey", "PROJ-1", strict) is None
+    with pytest.raises(BridgeError, match="not a valid ticket key"):
+        launch("checkKey", "proj-1", strict)
+    loose = config_call(project(tmp_path / "loose", config={"keyPattern": "."}))
+    for key in ("a;b", "a..b"):
+        with pytest.raises(BridgeError, match="not a valid"):
+            launch("checkKey", key, loose)
+
+
+def test_read_ticket_title_front_matter_base_missing_file_and_missing_title(tmp_path):
+    root = project(
+        tmp_path,
+        tickets={
+            "K-1": "---\nbase: release/2.x\nowner: me\n---\n\n# Export CSV\n\nText",
+            "K-2": "# Plain\n",
+            "K-3": "no heading\n",
+            "K-4": "---\nbase: 'a b'\n---\n# T\n",
+            "K-5": '---\nbase: "dev"\n---\n# T\n',
+        },
+    )
+    config = config_call(root)
+
+    def read(key):
+        return launch("readTicket", {"root": str(root), "key": key, "config": config})
+
+    t = read("K-1")
+    assert t["title"] == "Export CSV"
+    assert t["base"] == "release/2.x"
+    assert read("K-2")["base"] is None
+    with pytest.raises(BridgeError, match='no "# " title'):
+        read("K-3")
+    with pytest.raises(BridgeError, match="no ticket file"):
+        read("K-9")
+    with pytest.raises(BridgeError, match="invalid base"):
+        read("K-4")
+    assert read("K-5")["base"] == "dev"
+
+
+def test_list_ticket_keys_lists_ticket_dirs_whose_key_matches(tmp_path):
+    root = project(
+        tmp_path / "a",
+        config={"keyPattern": "^[A-Z]+-\\d+$"},
+        tickets={"K-2": "# a", "K-1": "# b", "notes": "# c"},
+    )
+    (root / "docs/tickets/K-3").mkdir()
+    assert launch("listTicketKeys", {"root": str(root), "config": config_call(root)}) == ["K-1", "K-2"]
+    empty = project(tmp_path / "b")
+    assert launch("listTicketKeys", {"root": str(empty), "config": config_call(empty)}) == []
+
+
+# --- CLI arguments --------------------------------------------------------------
+
+
+def test_parse_args_keys_or_all_flags_errors():
+    assert launch("parseArgs", ["-n", "--remote-control", "A-1", "B-2"]) == {
+        "keys": ["A-1", "B-2"], "all": False, "dryRun": True, "remoteControl": True, "cwd": None, "help": False,
+    }  # fmt: skip
+    assert launch("parseArgs", ["--all", "--cwd", "/r"])["cwd"] == "/r"
+    assert launch("parseArgs", ["--help"])["help"]
+    for argv, message in [
+        ([], "keys or --all"),
+        (["--all", "A-1"], "keys or --all"),
+        (["--force", "A-1"], "unknown option"),
+        (["--cwd"], "needs a directory"),
+    ]:
+        with pytest.raises(BridgeError, match=message):
+            launch("parseArgs", argv)
+

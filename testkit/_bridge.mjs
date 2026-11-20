@@ -3,7 +3,8 @@
 //   node _bridge.mjs --batch               (stdin: JSON list of [module, export, args]; results in order)
 // A {"$call": [module, export, args]} marker anywhere in the arguments is replaced by the
 // awaited result of that call. In batch mode an error also carries the failing "index".
-// <module> is a file name without extension under plugins/destructive-guard/lib/.
+// <module> is a file name without extension under plugins/destructive-guard/lib/, or
+// "gated-dev:<name>" for plugins/gated-dev-simple-workflow/scripts/<name>.mjs.
 // A function export is called with the arguments and awaited; any other export is
 // returned as is (arguments must be []). A thrown error exits 1 with
 // {"$error": {"name", "message"}} on stdout.
@@ -11,7 +12,14 @@
 import { dirname, join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
-const LIB = join(dirname(fileURLToPath(import.meta.url)), "..", "plugins", "destructive-guard", "lib")
+const PLUGINS = join(dirname(fileURLToPath(import.meta.url)), "..", "plugins")
+const LIB = join(PLUGINS, "destructive-guard", "lib")
+const GATED_DEV_SCRIPTS = join(PLUGINS, "gated-dev-simple-workflow", "scripts")
+
+function modulePath(name) {
+  if (name.startsWith("gated-dev:")) return join(GATED_DEV_SCRIPTS, `${name.slice("gated-dev:".length)}.mjs`)
+  return join(LIB, `${name}.mjs`)
+}
 
 function replacer(_key, value) {
   if (value === undefined) return null
@@ -28,7 +36,7 @@ async function readStdin() {
 }
 
 async function invoke(moduleName, exportName, args) {
-  const mod = await import(pathToFileURL(join(LIB, `${moduleName}.mjs`)).href)
+  const mod = await import(pathToFileURL(modulePath(moduleName)).href)
   if (!(exportName in mod)) throw new Error(`${moduleName}.mjs has no export "${exportName}"`)
   const target = mod[exportName]
   return typeof target === "function" ? await target(...args) : target

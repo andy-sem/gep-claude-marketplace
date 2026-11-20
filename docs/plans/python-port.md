@@ -189,14 +189,16 @@ One commit per package (repo rule). Each package keeps
   `gate-scripts`, `gate-jev` (120 JS tests, no `todo` row left in `PORTING.md`). The test kit gained nested
   bridge calls (`call`), batching (`bridge_many`), `js_regexp`, and Jev mock headers, `retry_after`, raw
   bodies and answer sequences. The 189 engine classify cases are a third corpus, `cases/gate_engine.json`.
-- **P3** (plan: `docs/plans/python-port-p3.md`) `gated-dev-simple-workflow`: `notify`, `launch` (dry-run + fake
-  `orca`/`osascript`), `watch-pr` (fake `gh`; the test's dependency on
-  `check.mjs` goes through the `check` contract instead of an import).
+- **P3** (plan: `docs/plans/python-port-p3.md`) **done**. `gated-dev-simple-workflow`: `notify`, `launch` (fake
+  `orca`/`osascript` on a private `PATH`, real git repos), `watch-pr` (fake `gh`; the test's dependency on
+  `check.mjs` goes through the `check` contract instead of an import). All 68 JS tests mapped, no `todo` row
+  left in either `PORTING.md`. The test kit gained `FakeBin`, `gitrepo`, bridge module names `gated-dev:<script>`,
+  the `_fast_timers.mjs` preload and `Impl.watch_pr(fast=True)`.
 - Jev (`gate-jev`) tests that need a mock HTTP server stay as contract tests
   through `gate.sh` with a local server (as `gate-hook.test.mjs` does now);
   pure helpers via the bridge.
 
-Exit criterion: `PORTING.md` fully mapped, pytest green with `GD_IMPL=js`.
+Exit criterion (met after P3): `PORTING.md` fully mapped, pytest green with `GD_IMPL=js`.
 
 ### Phase 2: port `destructive-guard` (bottom-up)
 
