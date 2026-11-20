@@ -103,3 +103,18 @@ def test_require_new_python_rejects_old(tmp_path):
         require_new_python({"PATH": str(tmp_path)})
     with pytest.raises(RuntimeError, match="found nothing"):
         require_new_python({"PATH": str(tmp_path / "none")})
+
+
+def test_impl_watch_pr_fast_js():
+    gd = select_impl("gated-dev-simple-workflow", {"GD_IMPL": "js"})
+    argv = gd.watch_pr(fast=True)
+    assert argv[:2] == ["node", "--import"]
+    assert argv[2].endswith("testkit/_fast_timers.mjs")
+    assert argv[3].endswith("scripts/watch-pr.mjs")
+    assert gd.watch_pr() == [argv[0], argv[3]]
+
+
+def test_impl_watch_pr_fast_py_not_yet():
+    gd = select_impl("gated-dev-simple-workflow", {"GD_IMPL": "py"})
+    with pytest.raises(NotImplementedError):
+        gd.watch_pr(fast=True)

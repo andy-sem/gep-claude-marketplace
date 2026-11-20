@@ -71,3 +71,9 @@ def test_bridge_many_raises_on_error():
 
 def test_js_regexp():
     assert js_regexp(bridge("gate-scripts", "globToRegExp", "a/*.js")).search("a/b.js")
+
+
+def test_bridge_gated_dev_module():
+    assert bridge("gated-dev:launch", "slugify", "Fix: Login page!") == "fix-login-page"
+    assert bridge("gated-dev:watch-pr", "POLL_MS") == 60000
+    assert bridge("paths", "projectDir", {"CLAUDE_PROJECT_DIR": "/"}, "/")  # unqualified still means the gate lib
