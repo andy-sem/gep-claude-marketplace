@@ -13,10 +13,11 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests", "plugins"]
 addopts = ["--import-mode=importlib"]
-pythonpath = ["."]
+pythonpath = [".", "plugins/destructive-guard/lib"]
 
 [tool.ruff]
 target-version = "py314"
+src = [".", "plugins/destructive-guard/lib"]
 
 # Entry stubs must parse on Python 3.7 and still check the version themselves.
 [tool.ruff.lint.per-file-ignores]

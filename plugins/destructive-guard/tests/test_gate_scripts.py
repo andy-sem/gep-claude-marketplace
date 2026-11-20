@@ -10,8 +10,9 @@ from pathlib import Path
 
 import pytest
 
+from destructive_guard.rules import RulesError, load_rules
 from testkit import DG
-from testkit.bridge import BridgeError, bridge, bridge_many, call, js_regexp
+from testkit.bridge import bridge_many, call, js_regexp
 from testkit.projects import temp_project
 
 SHIPPED = DG / "tests" / "fixtures" / "rules.json"
@@ -604,21 +605,14 @@ def test_load_rules_validates_script_patterns_and_script_scan_exempt(tmp_path):
         {"scriptScanExempt": "x"},
     ]:
         p.write_text(json.dumps(extra))
-        with pytest.raises(BridgeError) as e:
-            bridge("gate-engine", "loadRules", str(p))
-        assert e.value.name == "RulesError", extra
+        with pytest.raises(RulesError):
+            load_rules(p)
     ok_path = tmp_path / "ok.json"
     ok_path.write_text(json.dumps({"scriptPatterns": ["a+b"], "scriptScanExempt": ["x/*.js"]}))
     empty_path = tmp_path / "empty.json"
     empty_path.write_text(json.dumps({}))
-    ok, empty, shipped = bridge_many(
-        [
-            ("gate-engine", "loadRules", [str(ok_path)]),
-            ("gate-engine", "loadRules", [str(empty_path)]),
-            ("gate-engine", "loadRules", [str(SHIPPED)]),
-        ]
-    )
-    assert js_regexp(ok["scriptPatterns"][0]).search("aab")
+    ok, empty, shipped = load_rules(ok_path), load_rules(empty_path), load_rules(SHIPPED)
+    assert ok["scriptPatterns"][0].search("aab")
     assert ok["scriptScanExempt"] == ["x/*.js"]
     assert empty["scriptPatterns"] == []
     assert empty["scriptScanExempt"] == []
