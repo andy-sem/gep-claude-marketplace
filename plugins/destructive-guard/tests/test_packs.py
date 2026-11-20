@@ -1,33 +1,29 @@
-"""Rule packs (port of packs.test.mjs).
-
-# retarget to destructive_guard in P5
-The pack helpers have no CLI surface, so they go through the JS bridge for now.
-"""
+"""Rule packs (port of packs.test.mjs); the pack helpers run against destructive_guard.rules."""
 
 import json
 import re
 
 import pytest
 
+from destructive_guard.rules import (
+    DEFAULT_PACKS,
+    RulesError,
+    compose_rules,
+    load_packs,
+    pack_path,
+)
 from testkit import DG
-from testkit.bridge import BridgeError, bridge
 from testkit.hook import bash_input, decision, run_hook
 
 FIXTURE = json.loads((DG / "tests" / "fixtures" / "rules.json").read_text())
 
 
-def pack_path(name):
-    return bridge("gate-engine", "packPath", name)
-
-
-def compose(paths):
-    return bridge("gate-engine", "composeRules", paths)
+compose = compose_rules
 
 
 def raises_rules_error(fn):
-    with pytest.raises(BridgeError) as e:
+    with pytest.raises(RulesError):
         fn()
-    assert e.value.name == "RulesError"
 
 
 def test_ported_packs_match_the_test_ruleset():
@@ -44,7 +40,7 @@ def test_ported_packs_match_the_test_ruleset():
 
 @pytest.mark.parametrize("name", ["destructive", "postgres", "terraform"])
 def test_every_pack_loads_after_base(name):
-    bridge("gate-engine", "loadPacks", [pack_path("base"), pack_path(name)])
+    load_packs([pack_path("base"), pack_path(name)])
 
 
 def test_compose_rejects_duplicates_and_bad_shapes(tmp_path):
@@ -72,7 +68,7 @@ def test_compose_merges_string_lists_without_duplicates(tmp_path):
 
 
 def test_default_packs_is_base_and_destructive():
-    assert bridge("gate-engine", "DEFAULT_PACKS") == ["base", "destructive"]
+    assert DEFAULT_PACKS == ["base", "destructive"]
 
 
 def test_without_gate_rules_hook_loads_default_packs(impl, tmp_path):

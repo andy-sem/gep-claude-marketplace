@@ -1,9 +1,8 @@
 """Configuration from env variables (port of config.test.mjs).
 
-# retarget to destructive_guard in P4
-readConfig / availablePacks / DEFAULT_CHECKS go through the JS bridge for now. buildRules and
-classify have no CLI surface of their own, so those rows run through `check --json` with the env
-instead of `buildRules(readConfig(env))`; the hook and env-guard rows run the hook scripts.
+readConfig / availablePacks / DEFAULT_CHECKS run against destructive_guard.config. The buildRules
+and classify rows run through `check --json` with the env (contract tests, JS by default); the
+build_rules rows also run directly. The hook and env-guard rows run the hook scripts.
 """
 
 import json
@@ -13,7 +12,14 @@ from pathlib import Path
 
 import pytest
 
-from testkit.bridge import BridgeError, bridge, bridge_many
+from destructive_guard import config as dg_config
+from destructive_guard.config import (
+    DEFAULT_CHECKS,
+    ConfigError,
+    RulesError,
+    available_packs,
+    build_rules,
+)
 from testkit.check_cli import check_call
 from testkit.envs import clean_env
 from testkit.hook import bash_input, decision, run_hook
@@ -39,19 +45,16 @@ def extra_rules(tmp_path_factory) -> Path:
 
 
 def read_config(env, opts=None):
-    return bridge("config", "readConfig", env, *([opts] if opts is not None else []))
+    return dg_config.read_config(env, **(opts or {}))
 
 
 def read_configs(*envs):
-    return bridge_many([("config", "readConfig", [env]) for env in envs])
+    return [read_config(env) for env in envs]
 
 
 def config_error(env, match=None):
-    with pytest.raises(BridgeError) as e:
+    with pytest.raises(ConfigError, match=match):
         read_config(env)
-    assert e.value.name == "ConfigError", e.value
-    if match is not None:
-        assert re.search(match, e.value.message), e.value.message
 
 
 def make_project(base: Path, extra_rules: Path) -> Path:
@@ -90,7 +93,7 @@ def test_read_config_defaults():
         "strict": False,
         "log": None,
     }
-    assert bridge("config", "DEFAULT_CHECKS") == ["destructive"]
+    assert DEFAULT_CHECKS == ["destructive"]
     # empty values mean "unset"
     assert clean == defaults
 
@@ -176,7 +179,7 @@ def test_relative_paths_resolve_against_git_root_else_cwd(tmp_path, extra_rules)
 
 
 def test_available_packs_lists_shipped_packs():
-    packs = bridge("config", "availablePacks")
+    packs = available_packs()
     for p in ["base", "destructive", "postgres", "terraform"]:
         assert p in packs, p
 
@@ -235,6 +238,44 @@ def test_build_rules_missing_or_broken_file(impl, tmp_path):
     r = result(impl, "ls", {"GATE_RULES_FILE": str(dup)}, tmp_path)
     assert r["source"] == "gate-config"
     assert "duplicate rule id" in r["reason"]
+
+
+def rule_ids(env):
+    return [r["id"] for r in build_rules(read_config(env))["rules"]]
+
+
+def test_build_rules_direct_default_packs_and_extra_file(extra_rules):
+    default = rule_ids({})
+    assert "git-push-force" in default
+    assert "psql" not in default
+    assert "terraform" not in default
+    ids = rule_ids({"GATE_CHECKS": "destructive,postgres,terraform", "GATE_RULES_FILE": str(extra_rules)})
+    assert {"git-push-force", "psql", "terraform", "deployctl"} <= set(ids)
+    assert ids[-1] == "deployctl"
+
+
+def test_build_rules_direct_checks_none_loads_only_file(extra_rules):
+    config = read_config({"GATE_CHECKS": "none", "GATE_RULES_FILE": str(extra_rules)})
+    assert [r["id"] for r in build_rules(config)["rules"]] == ["deployctl"]
+
+
+def test_build_rules_direct_disable_rules():
+    ids = rule_ids({"GATE_DISABLE_RULES": "git-push-force"})
+    assert "git-push-force" not in ids
+    assert "git-reset-hard" in ids
+    with pytest.raises(ConfigError, match=r'GATE_DISABLE_RULES: unknown rule id "git-push-forse", "nope"'):
+        build_rules(read_config({"GATE_DISABLE_RULES": "git-push-forse,git-reset-hard,nope"}))
+
+
+def test_build_rules_direct_missing_or_broken_file(tmp_path):
+    with pytest.raises(RulesError, match="cannot read rules file"):
+        build_rules(read_config({"GATE_RULES_FILE": str(tmp_path / "missing.json")}))
+    dup = tmp_path / "dup.json"
+    dup.write_text(
+        json.dumps({"rules": [{"id": "git-push-force", "kind": "cli-gated", "programs": ["x"], "gatedPrefixes": [[]]}]})
+    )
+    with pytest.raises(RulesError, match="duplicate rule id"):
+        build_rules(read_config({"GATE_RULES_FILE": str(dup)}))
 
 
 # ---------------------------------------------------------------------------

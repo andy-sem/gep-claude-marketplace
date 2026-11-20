@@ -204,7 +204,10 @@ Exit criterion (met after P3): `PORTING.md` fully mapped, pytest green with `GD_
 
 The Python package is built next to the JS; hooks keep calling JS until P9.
 
-- **P4** (plan: `docs/plans/python-port-p4.md`) `paths`, `config` (env → effective config, pack composition).
+- **P4** (plan: `docs/plans/python-port-p4.md`) **done**. `paths`, `config` (env → effective config, pack composition).
+  Rule loading (`loadRules`, `composeRules`, `loadPacks`, `parseRules`) moved out of `gate-engine.mjs` into its own
+  module `rules.py` (`config` needs it, the parser of P5 does not); `gate_engine.py` re-exports it in P5. The package
+  `plugins/destructive-guard/lib/destructive_guard/` is on pytest's `pythonpath` and ruff's `src`.
 - **P5** (plan: `docs/plans/python-port-p5.md`) `gate_engine`: shell parser (`sudo`/`xargs`/`bash -c`/`npx`
   unwrapping), rule evaluation. Largest and riskiest package; may split
   into parser / rules.

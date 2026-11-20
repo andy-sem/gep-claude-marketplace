@@ -1,7 +1,8 @@
 """Gate engine (port of gate-engine.test.mjs; the classify cases are tests/cases/gate_engine.json).
 
 # retarget to destructive_guard in P5
-splitCommand and loadRules have no CLI surface, so they go through the JS bridge for now.
+splitCommand has no CLI surface, so it goes through the JS bridge for now (loadRules runs
+against destructive_guard.rules).
 Reasons go through `check --json`, the CLI rows through the hook.
 """
 
@@ -9,6 +10,8 @@ import json
 
 import pytest
 
+from destructive_guard.rules import RulesError
+from destructive_guard.rules import load_rules as _load_rules
 from testkit import DG, REPO
 from testkit.bridge import BridgeError, bridge
 from testkit.check_cli import check_call
@@ -24,13 +27,15 @@ def reason(impl, command, cwd):
 
 
 def load_rules(path):
-    return bridge("gate-engine", "loadRules", str(path))
+    return _load_rules(path)
 
 
 def raises(name, fn):
-    with pytest.raises(BridgeError) as e:
+    expected = {"RulesError": RulesError, "UnparsableError": BridgeError}[name]
+    with pytest.raises(expected) as e:
         fn()
-    assert e.value.name == name
+    if expected is BridgeError:
+        assert e.value.name == name
 
 
 def write_json(path, value):
@@ -62,7 +67,7 @@ def test_non_object_input_fails_closed(impl, stdin):
     assert decision(out)["permissionDecisionReason"].startswith("unparsable:")
 
 
-# --- splitCommand / loadRules (bridge) ---
+# --- splitCommand (bridge) / loadRules ---
 
 
 def test_split_command():

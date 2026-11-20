@@ -6,7 +6,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from destructive_guard.config import build_rules, read_config
 from testkit import DG
+from testkit.bridge import bridge, call
 from testkit.check_cli import check_call, run_check
 from testkit.hook import decision, mcp_input, run_hook
 from testkit.impl import select_impl
@@ -100,6 +102,16 @@ def test_gate_rules_case(corpus_results, index, case):
 @pytest.mark.parametrize(("index", "case"), _params("gate_engine"))
 def test_gate_engine_case(corpus_results, index, case):
     assert corpus_results[("gate_engine", index)] == case["expect"]
+
+
+@pytest.mark.parametrize("name", CORPORA)
+def test_corpus_env_builds(name, tmp_path):
+    """The corpus env builds the same rules in Python as in JS (pack composition, before the engine is ported)."""
+    env, _ = load_corpus(name)
+    ids = [r["id"] for r in build_rules(read_config(env, cwd=tmp_path))["rules"]]
+    js = bridge("config", "buildRules", call("config", "readConfig", env, {"cwd": str(tmp_path)}))
+    assert ids == [r["id"] for r in js["rules"]]
+    assert ids
 
 
 def test_every_destructive_rule_has_an_asking_case():
