@@ -31,3 +31,21 @@ def test_async_function_is_awaited(tmp_path):
     result = bridge("check", "effectiveConfig", {"CLAUDE_PROJECT_DIR": str(tmp_path)})
     assert isinstance(result, dict)
     assert result != {}
+
+
+def test_error_shape_needs_exit_1():
+    from testkit.bridge import _decode
+
+    shaped = '{"$error": {"name": "X", "message": "m"}}'
+    assert _decode(0, shaped, "", "m.e") == {"$error": {"name": "X", "message": "m"}}
+    with pytest.raises(BridgeError) as e:
+        _decode(1, shaped, "", "m.e")
+    assert e.value.name == "X"
+    with pytest.raises(RuntimeError, match="trace"):
+        _decode(1, "oops", "trace", "m.e")
+
+
+def test_missing_node_is_runtime_error(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATH", str(tmp_path))
+    with pytest.raises(RuntimeError):
+        bridge("config", "DEFAULT_CHECKS")

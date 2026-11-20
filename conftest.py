@@ -6,6 +6,7 @@ import pytest
 
 from testkit import PLUGINS
 from testkit.impl import Impl, select_impl
+from testkit.jev_mock import JevMock
 from testkit.pythons import find_old_python
 
 
@@ -25,3 +26,10 @@ def old_python() -> str:
     if python is None:
         pytest.skip("no Python < 3.14 available")
     return python
+
+
+@pytest.fixture
+def jev():
+    """A local Jev mock; `jev.url`, `jev.answer(...)`, `jev.bodies`, `jev.hits`."""
+    with JevMock() as mock:
+        yield mock

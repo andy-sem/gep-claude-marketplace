@@ -7,17 +7,17 @@ test has a row and that every target exists.
 
 | JS file | JS test | Python test |
 | --- | --- | --- |
-| check.test.mjs | parseArgs: command, MCP call, config and options | todo |
-| check.test.mjs | run: usage errors exit 2 | todo |
-| check.test.mjs | checkCall with default packs: sample commands | todo |
-| check.test.mjs | checkCall honours GATE_DISABLE_RULES, GATE_ENABLED and GATE_CHECKS | todo |
-| check.test.mjs | checkCall reports config errors as gate-config asks | todo |
-| check.test.mjs | checkCall never contacts Jev without --jev, and says when it would | todo |
-| check.test.mjs | effectiveConfig: defaults, rule ids, Jev redaction, errors | todo |
-| check.test.mjs | CLI: text and JSON output, key never printed | todo |
-| check.test.mjs | the skill's documented invocations pass the gate themselves | todo |
-| check.test.mjs | --cwd resolves scripts the command runs | todo |
-| check.test.mjs | checkCall: a relative GATE_RULES_FILE resolves against the git root of --cwd | todo |
+| check.test.mjs | parseArgs: command, MCP call, config and options | tests/test_check.py::test_parse_args_command_mcp_config_and_options |
+| check.test.mjs | run: usage errors exit 2 | tests/test_check.py::test_usage_errors_exit_2 |
+| check.test.mjs | checkCall with default packs: sample commands | tests/test_check.py::test_check_call_default_packs |
+| check.test.mjs | checkCall honours GATE_DISABLE_RULES, GATE_ENABLED and GATE_CHECKS | tests/test_check.py::test_check_call_honours_disable_enabled_and_checks |
+| check.test.mjs | checkCall reports config errors as gate-config asks | tests/test_check.py::test_check_call_config_errors_ask_gate_config |
+| check.test.mjs | checkCall never contacts Jev without --jev, and says when it would | tests/test_check.py::test_check_call_never_contacts_jev_without_flag |
+| check.test.mjs | effectiveConfig: defaults, rule ids, Jev redaction, errors | tests/test_check.py::test_effective_config_defaults_ids_redaction_errors |
+| check.test.mjs | CLI: text and JSON output, key never printed | tests/test_check.py::test_cli_text_and_json_output_key_never_printed |
+| check.test.mjs | the skill's documented invocations pass the gate themselves | tests/test_check.py::test_documented_invocations_pass_the_gate |
+| check.test.mjs | --cwd resolves scripts the command runs | tests/test_check.py::test_cwd_resolves_scripts_the_command_runs |
+| check.test.mjs | checkCall: a relative GATE_RULES_FILE resolves against the git root of --cwd | tests/test_check.py::test_relative_rules_file_resolves_against_git_root_of_cwd |
 | config.test.mjs | defaults: enabled, base + destructive, env guard on, not strict, no log | todo |
 | config.test.mjs | boolean variables accept 0/1/true/false/yes/no/on/off and reject the rest | todo |
 | config.test.mjs | GATE_CHECKS selects packs; base is always first and not duplicated | todo |
@@ -44,18 +44,18 @@ test has a row and that every target exists.
 | config.test.mjs | hook: GATE_LOG is not written when the gate is off, and a bad path never breaks the gate | todo |
 | config.test.mjs | env guard matches env file names only | todo |
 | config.test.mjs | env guard is off with GATE_ENV_GUARD=0 or GATE_ENABLED=0, on for other values | todo |
-| destructive.test.mjs | destructive: ${label} -> ${expected} | todo |
-| destructive.test.mjs | every destructive rule has at least one asking case | todo |
-| destructive.test.mjs | destructive rules do not make the script scan ask | todo |
-| destructive.test.mjs | whenFlags: every group needs one flag; bundles only with shortBundles | todo |
-| destructive.test.mjs | unlessFlags keep exact matching without shortBundles | todo |
-| destructive.test.mjs | dynamicArgs: ask (default) vs ignore | todo |
-| destructive.test.mjs | whenArgs honours ignoreCase and matchStdin | todo |
-| destructive.test.mjs | new rule fields are validated | todo |
-| destructive.test.mjs | mcp-pattern: tool regex alone, words split on camelCase | todo |
-| env-guard.test.mjs | env guard blocks .env files for Read, Edit and Write | todo |
-| env-guard.test.mjs | env guard allows .env.example and ordinary files | todo |
-| env-guard.test.mjs | env guard works without jq | todo |
+| destructive.test.mjs | destructive: ${label} -> ${expected} | tests/test_corpus.py::test_destructive_case |
+| destructive.test.mjs | every destructive rule has at least one asking case | tests/test_corpus.py::test_every_destructive_rule_has_an_asking_case |
+| destructive.test.mjs | destructive rules do not make the script scan ask | tests/test_corpus.py::test_destructive_rules_do_not_make_script_scan_ask |
+| destructive.test.mjs | whenFlags: every group needs one flag; bundles only with shortBundles | tests/test_rule_kinds.py::test_when_flags_groups_and_short_bundles |
+| destructive.test.mjs | unlessFlags keep exact matching without shortBundles | tests/test_rule_kinds.py::test_unless_flags_exact_without_short_bundles |
+| destructive.test.mjs | dynamicArgs: ask (default) vs ignore | tests/test_rule_kinds.py::test_dynamic_args_ask_vs_ignore |
+| destructive.test.mjs | whenArgs honours ignoreCase and matchStdin | tests/test_rule_kinds.py::test_when_args_ignore_case_and_match_stdin |
+| destructive.test.mjs | new rule fields are validated | tests/test_rule_kinds.py::test_new_rule_fields_are_validated |
+| destructive.test.mjs | mcp-pattern: tool regex alone, words split on camelCase | tests/test_rule_kinds.py::test_mcp_pattern_tool_regex_and_camel_case_words |
+| env-guard.test.mjs | env guard blocks .env files for Read, Edit and Write | tests/test_env_guard.py::test_blocks_env_files |
+| env-guard.test.mjs | env guard allows .env.example and ordinary files | tests/test_env_guard.py::test_allows_example_and_ordinary_files |
+| env-guard.test.mjs | env guard works without jq | tests/test_env_guard.py::test_works_without_jq |
 | gate-engine.test.mjs | classify: ${label} -> ${expected} | todo |
 | gate-engine.test.mjs | allowlist reasons name the write verb | todo |
 | gate-engine.test.mjs | dynamic arguments name the reason | todo |
@@ -71,49 +71,49 @@ test has a row and that every target exists.
 | gate-engine.test.mjs | CLI: subagent calls (agent_id) still get ask | todo |
 | gate-engine.test.mjs | CLI: broken rules file asks with gate-config for every call | todo |
 | gate-engine.test.mjs | CLI: unparsable stdin asks (fails closed) | todo |
-| gate-hook.test.mjs | gated command -> ask | todo |
-| gate-hook.test.mjs | git status -> empty stdout, exit 0 | todo |
-| gate-hook.test.mjs | non-JSON stdin -> ask unparsable | todo |
-| gate-hook.test.mjs | invalid rules file -> ask gate-config | todo |
-| gate-hook.test.mjs | node unavailable -> ask | todo |
-| gate-hook.test.mjs | engine exits non-zero after partial JSON -> fixed ask only | todo |
-| gate-hook.test.mjs | engine exits 0 with empty stdout but did not run -> ask | todo |
-| gate-hook.test.mjs | empty stdin -> ask | todo |
-| gate-hook.test.mjs | script scan: a script that runs terraform asks with script: | todo |
-| gate-hook.test.mjs | script scan: a provision script that imports a cloudctl module asks with script: | todo |
-| gate-hook.test.mjs | script scan: a Cloudflare-only script passes | todo |
-| gate-hook.test.mjs | terraform rule: apply, destroy and import ask with terraform: | todo |
-| gate-hook.test.mjs | fallback passes: terraform plan/fmt/validate, --help, tests and git push | todo |
-| gate-hook.test.mjs | GATE_JEV unset -> rules-only output | todo |
-| gate-hook.test.mjs | jev: rule-matched command classified read_only 0.97 -> empty output | todo |
-| gate-hook.test.mjs | jev: in-scope command no rule matched, risk 0.55 -> ask | todo |
-| gate-hook.test.mjs | jev: a command outside every rule's programs goes to Jev and its risk asks | todo |
-| gate-hook.test.mjs | jev: read_only 0.90 -> rule result stands | todo |
-| gate-hook.test.mjs | jev: unparsable command classified read_only 0.97 -> empty output | todo |
-| gate-hook.test.mjs | jev: unparsable command classified risky -> jev ask | todo |
-| gate-hook.test.mjs | jev: unsure or unreachable on unparsable command -> unparsable ask (GATE_STRICT=1) | todo |
-| gate-hook.test.mjs | jev: unparsable command without Jev asks with GATE_STRICT=1 | todo |
-| gate-hook.test.mjs | jev: unparsable command by default (GATE_STRICT unset) -> no opinion | todo |
-| gate-hook.test.mjs | jev: input-level unparsable and gate-config results still ask | todo |
-| gate-hook.test.mjs | jev: missing TYPESAFE_API_KEY -> ask gate-config | todo |
-| gate-hook.test.mjs | jev: unreachable service -> rule result stands | todo |
-| gate-hook.test.mjs | the gate hook stays registered for Bash and every MCP tool only | todo |
-| gate-hook.test.mjs | jev: every Bash and MCP call makes exactly one request; file tools make none | todo |
-| gate-hook.test.mjs | jev: risk above 0.5 asks for Bash and MCP calls no rule matched | todo |
-| gate-hook.test.mjs | jev: unrelated 0.97 gives no output | todo |
-| gate-hook.test.mjs | jev: read_only 0.97 lifts rule asks and script asks | todo |
-| gate-hook.test.mjs | jev: GATE_JEV_SCOPE limits which calls are sent | todo |
-| gate-hook.test.mjs | jev: GATE_JEV_CAN_LIFT=0 keeps rule asks, Jev still adds asks | todo |
-| gate-hook.test.mjs | jev: invalid GATE_JEV_SCOPE or GATE_JEV_CAN_LIFT asks gate-config | todo |
-| gate-hook.test.mjs | jev: the request for a script carries the redacted script | todo |
-| gate-hook.test.mjs | jev: terraform test sends its test files and Jev can lift the terraform ask | todo |
-| gate-hook.test.mjs | jev: files the gate could not read reach Jev as notes | todo |
-| gate-hook.test.mjs | jev: imports are followed to depth 3, with per-file and total caps | todo |
-| gate-hook.test.mjs | jev: a provision script is sent with its imports | todo |
-| gate-hook.test.mjs | jev: MCP calls send the tool name and the redacted input | todo |
-| gate-hook.test.mjs | jev failures give the rule result for Bash and MCP calls | todo |
-| gate-hook.test.mjs | jev: an MCP call without its args and a gate-config result never reach Jev | todo |
-| gate-hook.test.mjs | jev audit log: records carry tool, usage and latencyMs | todo |
+| gate-hook.test.mjs | gated command -> ask | tests/test_gate_hook.py::test_gated_command_asks |
+| gate-hook.test.mjs | git status -> empty stdout, exit 0 | tests/test_gate_hook.py::test_git_status_passes |
+| gate-hook.test.mjs | non-JSON stdin -> ask unparsable | tests/test_gate_hook.py::test_non_json_stdin_asks_unparsable |
+| gate-hook.test.mjs | invalid rules file -> ask gate-config | tests/test_gate_hook.py::test_invalid_rules_file_asks_gate_config |
+| gate-hook.test.mjs | node unavailable -> ask | tests/test_gate_hook.py::test_interpreter_unavailable_asks |
+| gate-hook.test.mjs | engine exits non-zero after partial JSON -> fixed ask only | tests/test_gate_hook.py::test_engine_partial_json_then_nonzero_gives_fixed_ask |
+| gate-hook.test.mjs | engine exits 0 with empty stdout but did not run -> ask | tests/test_gate_hook.py::test_engine_exit_0_without_running_asks |
+| gate-hook.test.mjs | empty stdin -> ask | tests/test_gate_hook.py::test_empty_stdin_asks |
+| gate-hook.test.mjs | script scan: a script that runs terraform asks with script: | tests/test_gate_hook.py::test_script_scan_terraform_script_asks |
+| gate-hook.test.mjs | script scan: a provision script that imports a cloudctl module asks with script: | tests/test_gate_hook.py::test_script_scan_provision_script_importing_cloudctl_asks |
+| gate-hook.test.mjs | script scan: a Cloudflare-only script passes | tests/test_gate_hook.py::test_script_scan_cloudflare_only_script_passes |
+| gate-hook.test.mjs | terraform rule: apply, destroy and import ask with terraform: | tests/test_gate_hook.py::test_terraform_rule_asks |
+| gate-hook.test.mjs | fallback passes: terraform plan/fmt/validate, --help, tests and git push | tests/test_gate_hook.py::test_fallback_passes |
+| gate-hook.test.mjs | GATE_JEV unset -> rules-only output | tests/test_gate_hook_jev.py::test_jev_unset_gives_rules_only_output |
+| gate-hook.test.mjs | jev: rule-matched command classified read_only 0.97 -> empty output | tests/test_gate_hook_jev.py::test_rule_matched_read_only_097_passes |
+| gate-hook.test.mjs | jev: in-scope command no rule matched, risk 0.55 -> ask | tests/test_gate_hook_jev.py::test_in_scope_no_rule_risk_055_asks |
+| gate-hook.test.mjs | jev: a command outside every rule's programs goes to Jev and its risk asks | tests/test_gate_hook_jev.py::test_command_outside_rule_programs_goes_to_jev |
+| gate-hook.test.mjs | jev: read_only 0.90 -> rule result stands | tests/test_gate_hook_jev.py::test_read_only_090_rule_result_stands |
+| gate-hook.test.mjs | jev: unparsable command classified read_only 0.97 -> empty output | tests/test_gate_hook_jev.py::test_unparsable_read_only_097_passes |
+| gate-hook.test.mjs | jev: unparsable command classified risky -> jev ask | tests/test_gate_hook_jev.py::test_unparsable_risky_asks_jev |
+| gate-hook.test.mjs | jev: unsure or unreachable on unparsable command -> unparsable ask (GATE_STRICT=1) | tests/test_gate_hook_jev.py::test_unsure_or_unreachable_unparsable_asks_strict |
+| gate-hook.test.mjs | jev: unparsable command without Jev asks with GATE_STRICT=1 | tests/test_gate_hook_jev.py::test_unparsable_without_jev_asks_strict |
+| gate-hook.test.mjs | jev: unparsable command by default (GATE_STRICT unset) -> no opinion | tests/test_gate_hook_jev.py::test_unparsable_default_no_opinion |
+| gate-hook.test.mjs | jev: input-level unparsable and gate-config results still ask | tests/test_gate_hook_jev.py::test_input_level_unparsable_and_gate_config_still_ask |
+| gate-hook.test.mjs | jev: missing TYPESAFE_API_KEY -> ask gate-config | tests/test_gate_hook_jev.py::test_missing_api_key_asks_gate_config |
+| gate-hook.test.mjs | jev: unreachable service -> rule result stands | tests/test_gate_hook_jev.py::test_unreachable_service_rule_result_stands |
+| gate-hook.test.mjs | the gate hook stays registered for Bash and every MCP tool only | tests/test_gate_hook.py::test_hook_registered_for_bash_and_mcp_only |
+| gate-hook.test.mjs | jev: every Bash and MCP call makes exactly one request; file tools make none | tests/test_gate_hook_jev.py::test_every_bash_and_mcp_call_one_request_file_tools_none |
+| gate-hook.test.mjs | jev: risk above 0.5 asks for Bash and MCP calls no rule matched | tests/test_gate_hook_jev.py::test_risk_above_05_asks_when_no_rule_matched |
+| gate-hook.test.mjs | jev: unrelated 0.97 gives no output | tests/test_gate_hook_jev.py::test_unrelated_097_gives_no_output |
+| gate-hook.test.mjs | jev: read_only 0.97 lifts rule asks and script asks | tests/test_gate_hook_jev.py::test_read_only_097_lifts_rule_and_script_asks |
+| gate-hook.test.mjs | jev: GATE_JEV_SCOPE limits which calls are sent | tests/test_gate_hook_jev.py::test_scope_limits_which_calls_are_sent |
+| gate-hook.test.mjs | jev: GATE_JEV_CAN_LIFT=0 keeps rule asks, Jev still adds asks | tests/test_gate_hook_jev.py::test_can_lift_0_keeps_rule_asks_jev_still_adds |
+| gate-hook.test.mjs | jev: invalid GATE_JEV_SCOPE or GATE_JEV_CAN_LIFT asks gate-config | tests/test_gate_hook_jev.py::test_invalid_scope_or_can_lift_asks_gate_config |
+| gate-hook.test.mjs | jev: the request for a script carries the redacted script | tests/test_gate_hook_jev.py::test_script_request_carries_redacted_script |
+| gate-hook.test.mjs | jev: terraform test sends its test files and Jev can lift the terraform ask | tests/test_gate_hook_jev.py::test_terraform_test_sends_test_files_and_jev_can_lift |
+| gate-hook.test.mjs | jev: files the gate could not read reach Jev as notes | tests/test_gate_hook_jev.py::test_unreadable_files_reach_jev_as_notes |
+| gate-hook.test.mjs | jev: imports are followed to depth 3, with per-file and total caps | tests/test_gate_hook_jev.py::test_imports_followed_to_depth_3_with_caps |
+| gate-hook.test.mjs | jev: a provision script is sent with its imports | tests/test_gate_hook_jev.py::test_provision_script_sent_with_imports |
+| gate-hook.test.mjs | jev: MCP calls send the tool name and the redacted input | tests/test_gate_hook_jev.py::test_mcp_calls_send_tool_name_and_redacted_input |
+| gate-hook.test.mjs | jev failures give the rule result for Bash and MCP calls | tests/test_gate_hook_jev.py::test_jev_failures_give_rule_result |
+| gate-hook.test.mjs | jev: an MCP call without its args and a gate-config result never reach Jev | tests/test_gate_hook_jev.py::test_mcp_without_args_and_gate_config_never_reach_jev |
+| gate-hook.test.mjs | jev audit log: records carry tool, usage and latencyMs | tests/test_gate_hook_jev.py::test_audit_log_records_tool_usage_latency |
 | gate-jev.test.mjs | redact returns null for commands referencing .env files | todo |
 | gate-jev.test.mjs | redact strips URL credentials | todo |
 | gate-jev.test.mjs | redact strips Bearer, Basic and Token values | todo |
@@ -165,9 +165,9 @@ test has a row and that every target exists.
 | gate-jev.test.mjs | redactMcpInput redacts secret keys, Bearer values and .env mentions in nested JSON | todo |
 | gate-jev.test.mjs | redactMcpInput handles an empty input | todo |
 | gate-jev.test.mjs | runJev writes a redacted JSONL audit log with tool, usage and latency | todo |
-| gate-rules.test.mjs | loadRules accepts the shipped rule file | todo |
-| gate-rules.test.mjs | wrangler, pulumi, cf-apply scripts and git push are not gated | todo |
-| gate-rules.test.mjs | ${label} -> ${expected} | todo |
+| gate-rules.test.mjs | loadRules accepts the shipped rule file | tests/test_corpus.py::test_shipped_rule_file_loads |
+| gate-rules.test.mjs | wrangler, pulumi, cf-apply scripts and git push are not gated | tests/test_corpus.py::test_gate_rules_case |
+| gate-rules.test.mjs | ${label} -> ${expected} | tests/test_corpus.py::test_gate_rules_case |
 | gate-scripts.test.mjs | findProjectRoot finds the .git ancestor, falling back to the env and the cwd | todo |
 | gate-scripts.test.mjs | shell scripts are found for every way of running them | todo |
 | gate-scripts.test.mjs | bash -c strings and stdin shells give no file | todo |
@@ -196,19 +196,19 @@ test has a row and that every target exists.
 | gate-scripts.test.mjs | terraform test sends the root module's and the test directory's *.tftest.hcl as exempt context | todo |
 | gate-scripts.test.mjs | terraform test sends nothing when the directory is unknown or not local | todo |
 | gate-scripts.test.mjs | variables assigned earlier in the command resolve script paths | todo |
-| jev-prompt.test.mjs | the default prompt is destructive and covers local and remote calls | todo |
-| jev-prompt.test.mjs | built-in prompts are valid and name no specific MCP server or product | todo |
-| jev-prompt.test.mjs | jevDecision with the destructive prompt | todo |
-| jev-prompt.test.mjs | askJev sends the destructive question and parses its answer | todo |
-| jev-prompt.test.mjs | GATE_JEV_PROMPT selects a built-in or a file | todo |
-| jev-prompt.test.mjs | a relative GATE_JEV_PROMPT or GATE_JEV_LOG resolves against CLAUDE_PROJECT_DIR | todo |
-| jev-prompt.test.mjs | GATE_JEV_INSTRUCTIONS, GATE_JEV_CONTEXT and GATE_JEV_POLICY override the prompt | todo |
-| jev-prompt.test.mjs | bad prompt settings fail with JevConfigError (the gate then asks) | todo |
-| packs.test.mjs | ported packs match the matching parts of the test ruleset | todo |
-| packs.test.mjs | every pack loads on its own after base | todo |
-| packs.test.mjs | composeRules rejects duplicate rule ids and bad shapes | todo |
-| packs.test.mjs | composeRules merges string lists without duplicates | todo |
-| packs.test.mjs | DEFAULT_PACKS is base + destructive | todo |
-| packs.test.mjs | without GATE_RULES the hook loads the default packs | todo |
-| readme.test.mjs | README documents every env variable the gate reads | todo |
-| readme.test.mjs | README lists every built-in pack and Jev prompt | todo |
+| jev-prompt.test.mjs | the default prompt is destructive and covers local and remote calls | tests/test_jev_prompt.py::test_default_prompt_is_destructive_and_covers_local_and_remote |
+| jev-prompt.test.mjs | built-in prompts are valid and name no specific MCP server or product | tests/test_jev_prompt.py::test_builtin_prompts_valid_and_generic |
+| jev-prompt.test.mjs | jevDecision with the destructive prompt | tests/test_jev_prompt.py::test_jev_decision_with_destructive_prompt |
+| jev-prompt.test.mjs | askJev sends the destructive question and parses its answer | tests/test_jev_prompt.py::test_ask_jev_sends_destructive_question |
+| jev-prompt.test.mjs | GATE_JEV_PROMPT selects a built-in or a file | tests/test_jev_prompt.py::test_prompt_env_selects_builtin_or_file |
+| jev-prompt.test.mjs | a relative GATE_JEV_PROMPT or GATE_JEV_LOG resolves against CLAUDE_PROJECT_DIR | tests/test_jev_prompt.py::test_relative_prompt_and_log_resolve_against_project_dir |
+| jev-prompt.test.mjs | GATE_JEV_INSTRUCTIONS, GATE_JEV_CONTEXT and GATE_JEV_POLICY override the prompt | tests/test_jev_prompt.py::test_instructions_context_policy_override_prompt |
+| jev-prompt.test.mjs | bad prompt settings fail with JevConfigError (the gate then asks) | tests/test_jev_prompt.py::test_bad_prompt_settings_raise_jev_config_error |
+| packs.test.mjs | ported packs match the matching parts of the test ruleset | tests/test_packs.py::test_ported_packs_match_the_test_ruleset |
+| packs.test.mjs | every pack loads on its own after base | tests/test_packs.py::test_every_pack_loads_after_base |
+| packs.test.mjs | composeRules rejects duplicate rule ids and bad shapes | tests/test_packs.py::test_compose_rejects_duplicates_and_bad_shapes |
+| packs.test.mjs | composeRules merges string lists without duplicates | tests/test_packs.py::test_compose_merges_string_lists_without_duplicates |
+| packs.test.mjs | DEFAULT_PACKS is base + destructive | tests/test_packs.py::test_default_packs_is_base_and_destructive |
+| packs.test.mjs | without GATE_RULES the hook loads the default packs | tests/test_packs.py::test_without_gate_rules_hook_loads_default_packs |
+| readme.test.mjs | README documents every env variable the gate reads | tests/test_readme.py::test_readme_documents_every_env_variable |
+| readme.test.mjs | README lists every built-in pack and Jev prompt | tests/test_readme.py::test_readme_lists_every_pack_and_jev_prompt |
