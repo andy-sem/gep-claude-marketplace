@@ -30,6 +30,7 @@ const CONFIG_KEYS = new Set([
   "riskPaths",
   "escalationExtra",
   "models",
+  "orchestratorRules",
 ])
 const ALLOWED_ARGS = new Set(["--resume"])
 const MAX_SHORT = 40
@@ -301,7 +302,16 @@ export function readConfig({ root, fs = nodeFs }) {
   const baseBranch = raw.baseBranch ?? null
   if (baseBranch !== null && !SAFE_REF.test(String(baseBranch)))
     throw new Error(`${file}: invalid baseBranch`)
-  return { ticketsDir, keyPattern, baseBranch }
+  const orchestratorRules = raw.orchestratorRules ?? null
+  if (
+    orchestratorRules !== null &&
+    (typeof orchestratorRules !== "string" ||
+      !orchestratorRules ||
+      path.isAbsolute(orchestratorRules) ||
+      orchestratorRules.split(/[\\/]/).includes(".."))
+  )
+    throw new Error(`${file}: orchestratorRules must be a relative path inside the repo`)
+  return { ticketsDir, keyPattern, baseBranch, orchestratorRules }
 }
 
 /** Checks a key against the safe set and the configured pattern. */
@@ -629,6 +639,20 @@ export async function launchTicket({
     })
   }
 
+  // With project rules, the session's `intake` step may write the ticket
+  // file, and it decides title and base: start in the main checkout and let
+  // the session create the worktree.
+  if (
+    config.orchestratorRules &&
+    !fs.existsSync(path.join(root, config.ticketsDir, key, "ticket.md"))
+  )
+    return open({
+      mode: "main-checkout",
+      cwd: root,
+      args: [],
+      summary: null,
+      note: "no ticket.md yet; the session's intake rules write it",
+    })
   const ticket = readTicket({ root, key, config, fs })
   const summary = ticket.title
   const mainCheckout = (note) =>

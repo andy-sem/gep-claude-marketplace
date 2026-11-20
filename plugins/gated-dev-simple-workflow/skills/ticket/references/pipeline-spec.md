@@ -14,6 +14,7 @@ its own and stops for the developer only at the points in §3.
 | Principle | Meaning |
 | --- | --- |
 | Files, not trackers | The ticket is `ticket.md`; context passes between stages only through files in the ticket directory and the recorded decisions. |
+| Project steps are additions | A project can add its own steps at fixed events (`orchestratorRules`, for example to sync an issue tracker). They run in the orchestrator, never in a stage agent, and cannot skip an interaction point or widen what the plan authorises. |
 | Plan approval always required | No product code is written and no gated action is attempted before the developer approves the plan (H2). |
 | Important decisions always escalated | At any stage, including after the plan is approved (§4). |
 | Gates are separate | Approval gates are enforced by a `PreToolUse` hook (for example the `destructive-guard` plugin), not by prompt text. The pipeline treats a gate prompt or denial as a checkpoint and never works around it. It runs the same with or without a gate. |

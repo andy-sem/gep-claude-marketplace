@@ -3,7 +3,9 @@
 `/ticket <KEY>` runs one ticket through **spec → plan → dev → review → PR**,
 one subagent per stage, in its own git worktree. The pipeline is file-based:
 the ticket is a Markdown file (`docs/tickets/<KEY>/ticket.md` by default),
-and every stage reads and writes files next to it. No issue tracker is used.
+and every stage reads and writes files next to it. The pipeline uses no issue
+tracker itself; a project can connect one with its own
+[project rules](#project-rules).
 
 ## Usage
 
@@ -91,6 +93,38 @@ invalid file or an unknown key stops the run with a message. Example:
 Regex backslashes are doubled in JSON (`\\d`, not `\d`). Every key, its
 default and the ticket file format: `skills/ticket/references/config.md`.
 
+### Project rules
+
+`"orchestratorRules": ".claude/gated-dev-rules.md"` points to a Markdown file
+with extra steps the orchestrator runs at fixed events: `intake` (no
+`ticket.md` yet: the rules may write it, for example from an issue tracker),
+`started`, `resumed`, `spec-done`, `plan-approved`, `dev-done`,
+`review-done`, `pr-body`, `pr-opened`, `pr-feedback-addressed`, `merged`,
+`aborted`. One `## <event>` section per event:
+
+```markdown
+Tickets live in the team tracker; use its MCP tools.
+
+## intake
+Fetch the ticket, its parent and linked issues and write them to ticket.md
+(`# <summary>`, then the description). If the parent has a branch
+`feature/<PARENT>/*` on origin, put it in the front matter as `base:`.
+
+## started
+Assign the ticket to me and move it to In Progress if it is in To Do.
+
+## pr-opened
+Comment on the ticket with the PR link.
+
+## merged
+Move the ticket to Done unless it already is.
+```
+
+Steps only add to the pipeline: they cannot skip a stop point, change what
+the stage agents get, or widen what the approved plan allows. A failing step
+is recorded as a warning and the run goes on (except at `intake`). Details:
+`skills/ticket/SKILL.md` section 0a.
+
 ## Launching several tickets
 
 `/gated-dev-simple-workflow:launch` (or the script directly) opens one new
@@ -107,6 +141,7 @@ node <plugin>/scripts/launch.mjs --all                     # every ticket.md wit
 | --- | --- |
 | New ticket, Orca, repo registered in Orca | A new Orca worktree on `<KEY>/<slug>` (base: front matter `base:`, `baseBranch`, `origin/HEAD`, `main`), with `ticket.md` and `.claude/settings.local.json` copied in; the session adopts it |
 | New ticket, iTerm2 (or a repo Orca does not know) | The main checkout; the session creates its worktree |
+| New ticket without `ticket.md`, `orchestratorRules` set | The main checkout; the session's `intake` rules write the ticket, then it creates its worktree |
 | Ticket with a run | Its worktree, with `/ticket <KEY> --resume` (for a finished run, `stage: done`, that restarts the PR watch) |
 
 Sessions are named `<KEY> · <title>` (`<KEY> resume · <title>`) and get

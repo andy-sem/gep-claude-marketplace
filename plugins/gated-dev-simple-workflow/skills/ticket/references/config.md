@@ -16,7 +16,8 @@ stops the run with a message (nothing is guessed).
     "any change to the public API of packages/sdk",
     "a migration that is not additive"
   ],
-  "models": { "plan": "opus", "reviewRisk": "opus" }
+  "models": { "plan": "opus", "reviewRisk": "opus" },
+  "orchestratorRules": ".claude/gated-dev-rules.md"
 }
 ```
 
@@ -30,6 +31,7 @@ stops the run with a message (nothing is guessed).
 | `riskPaths` | see SKILL.md section 8 | Globs; when the diff touches one, the reviewer runs on `models.reviewRisk`. Replaces the default list. |
 | `escalationExtra` | `[]` | Project-specific cases every agent must escalate; passed as `PROJECT_RULES:`. |
 | `models` | `spec: sonnet`, `plan: opus`, `dev: sonnet`, `review: sonnet`, `reviewRisk: opus` | Model per stage; keys given here override the defaults one by one. |
+| `orchestratorRules` | none | Repo-relative path to a Markdown file of extra orchestrator steps, one `## <event>` section per event (SKILL.md section 0a). A missing file or an unknown event heading stops the run. A ticket without `ticket.md` may then be started: the `intake` section writes it. |
 
 ## The ticket file
 
