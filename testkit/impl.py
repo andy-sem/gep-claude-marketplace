@@ -4,10 +4,11 @@ import os
 import shutil
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from . import DG, GD
-from .pythons import find_python
+from .pythons import require_new_python
 
 DEFAULT_IMPL: dict[str, str] = {
     "destructive-guard": "js",
@@ -20,13 +21,24 @@ class Impl:
     name: Literal["js", "py"]
     plugin: str
 
-    def _python(self) -> str:
-        python = find_python(os.environ)
-        if python is None:
-            raise RuntimeError("no Python found (set GATE_INFRA_PYTHON or install python3.14)")
-        return python
+    @property
+    def interpreter_var(self) -> str:
+        return "GATE_INFRA_NODE" if self.name == "js" else "GATE_INFRA_PYTHON"
 
-    def _script(self, base, js: str, py: str) -> list[str]:
+    @property
+    def unavailable_reason(self) -> str:
+        return "unparsable: node unavailable" if self.name == "js" else "unparsable: python unavailable"
+
+    def check_invocation(self, args: str) -> str:
+        """The check command line as the docs (skill, README) write it."""
+        if self.name == "js":
+            return f'node "{DG}/lib/check.mjs" {args}'
+        return f'python3 "{DG}/lib/check.py" {args}'
+
+    def _python(self) -> str:
+        return require_new_python(os.environ)
+
+    def _script(self, base: Path, js: str, py: str) -> list[str]:
         if self.name == "js":
             return ["node", str(base / js)]
         return [self._python(), "-I", str(base / py)]
@@ -53,7 +65,10 @@ class Impl:
 
     def env(self) -> dict[str, str]:
         if self.name == "js":
-            return {"GATE_INFRA_NODE": shutil.which("node") or ""}
+            node = shutil.which("node")
+            if node is None:
+                raise RuntimeError("node not found on PATH")
+            return {"GATE_INFRA_NODE": node}
         return {"GATE_INFRA_PYTHON": self._python()}
 
 

@@ -175,9 +175,16 @@ One commit per package (repo rule). Each package keeps
 
 ### Phase 1: Python tests, green against JS
 
-- **P1** `destructive-guard` contract + corpus: `gate-hook`, `env-guard`,
+- **P1** (done, see `docs/plans/python-port-p1.md`) `destructive-guard` contract + corpus: `gate-hook`, `env-guard`,
   `check`, `destructive`, `gate-rules`, `packs`, `readme`, `jev-prompt`
-  (prompt files and "no named MCP servers" rule).
+  (prompt files and "no named MCP servers" rule). The 344 rule cases live in
+  `tests/cases/*.json` and run through `check --json` (verified equal to
+  `classify`); the two `Read` cases go through `gate.sh`, since `--mcp` only
+  takes `mcp__` tools. The JS handling of invalid UTF-8 on hook stdin (bad bytes
+  replaced, decision as usual) and the exact ask bytes are pinned. CI's Python
+  job uses `actions/setup-python` (`3.14`, `3.x`). With `GD_IMPL=py` the
+  `check` tests fail (placeholder `check.py`); most hook tests still pass
+  because `gate.sh` keeps calling node until P9.
 - **P2** `destructive-guard` units via bridge: `config`, `gate-engine`
   (parser, rule kinds), `gate-scripts`.
 - **P3** `gated-dev-simple-workflow`: `notify`, `launch` (dry-run + fake

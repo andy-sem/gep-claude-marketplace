@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 from . import DG, GD
-from .pythons import find_python
+from .pythons import require_new_python
 
 # (stub path, package module the stub imports)
 STUBS: list[tuple[Path, str]] = [
@@ -43,8 +43,7 @@ def check_old_python_exit_3(old_python: str, stub: Path) -> None:
 def check_314_imports_package(tmp_path: Path, stub: Path, module: str) -> None:
     for planted in ("destructive_guard.py", "gated_dev.py"):
         (tmp_path / planted).write_text("raise SystemExit(99)\n")
-    python = find_python(os.environ)
-    assert python, "no Python >= 3.14 found"
+    python = require_new_python(os.environ)
     proc = subprocess.run([python, "-I", str(stub)], capture_output=True, text=True, cwd=tmp_path, check=False)
     assert proc.returncode == 2, proc.stderr
     assert proc.stderr == f"{module}: not implemented yet\n"
