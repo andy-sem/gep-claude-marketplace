@@ -10,6 +10,7 @@
 import { appendFileSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { projectPath } from "./paths.mjs"
 
 export const JEV_URL = "https://api.typesafe.ai/v1/systemone"
 
@@ -55,6 +56,12 @@ function scope(env) {
       `GATE_JEV_SCOPE must be a comma list of ${SCOPES.join(", ")}`,
     )
   return SCOPES.filter((s) => items.includes(s))
+}
+
+// GATE_JEV_LOG: a relative path resolves against the project (paths.mjs).
+function logPath(env) {
+  const p = optional(env, "GATE_JEV_LOG")
+  return p === undefined ? undefined : projectPath(p, env)
 }
 
 // GATE_JEV_CAN_LIFT: 1 (default) lets a confident safe answer lift a rule ask;
@@ -127,7 +134,7 @@ export function readJevConfig(env) {
       DEFAULTS.escalateThreshold,
     ),
     timeoutMs,
-    logPath: optional(env, "GATE_JEV_LOG"),
+    logPath: logPath(env),
     scope: scope(env),
     canLift: canLift(env),
     prompt: promptFromEnv(env),
@@ -198,13 +205,13 @@ export function builtinPrompt(name) {
 }
 
 // GATE_JEV_PROMPT: a built-in name (default "destructive") or a path to a prompt
-// JSON file. GATE_JEV_INSTRUCTIONS, GATE_JEV_CONTEXT and GATE_JEV_POLICY then
+// JSON file (relative paths resolve against the project, see paths.mjs). GATE_JEV_INSTRUCTIONS, GATE_JEV_CONTEXT and GATE_JEV_POLICY then
 // replace the question text, context.project and context.policy.
 export function promptFromEnv(env) {
   const ref = optional(env, "GATE_JEV_PROMPT") ?? DEFAULT_PROMPT
   const base =
     ref.includes("/") || ref.endsWith(".json")
-      ? readPromptFile(ref, "GATE_JEV_PROMPT")
+      ? readPromptFile(projectPath(ref, env), "GATE_JEV_PROMPT")
       : builtinPrompt(ref)
   const prompt = { ...base, context: { ...base.context } }
   const instructions = optional(env, "GATE_JEV_INSTRUCTIONS")

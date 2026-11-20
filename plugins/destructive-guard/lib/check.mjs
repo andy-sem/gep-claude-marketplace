@@ -114,7 +114,7 @@ export async function checkCall(call, { env = process.env, cwd, jev = false } = 
 
   let config
   try {
-    config = readConfig(env)
+    config = readConfig(env, { cwd: cwd ?? process.cwd() })
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e
     return { ...target, ...answer({ decision: "ask", reason: `gate-config: ${e.message}` }), rule: null }

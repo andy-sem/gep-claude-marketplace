@@ -121,6 +121,27 @@ test("GATE_JEV_PROMPT selects a built-in or a file", () => {
   assert.deepEqual(promptFromEnv({ GATE_JEV_PROMPT: path }), custom)
 })
 
+test("a relative GATE_JEV_PROMPT or GATE_JEV_LOG resolves against CLAUDE_PROJECT_DIR", () => {
+  const root = mkdtempSync(join(tmpdir(), "jev-project-"))
+  const custom = {
+    question: "risky",
+    instructions: "Is this risky?",
+    context: { environment: "e" },
+    criteria: {
+      fine: { description: "fine", examples: ["ls"] },
+      risky: { description: "risky", examples: ["rm -rf /"] },
+    },
+    ask: ["risky"],
+    safe: ["fine"],
+  }
+  writeFileSync(join(root, "prompt.json"), JSON.stringify(custom))
+  const env = { ...baseEnv, CLAUDE_PROJECT_DIR: root, GATE_JEV_PROMPT: "./prompt.json", GATE_JEV_LOG: "jev.jsonl" }
+  const cfg = readJevConfig(env)
+  assert.deepEqual(cfg.prompt, custom)
+  assert.equal(cfg.logPath, join(root, "jev.jsonl"))
+  assert.equal(readJevConfig({ ...baseEnv, GATE_JEV_LOG: "/abs/j.jsonl" }).logPath, "/abs/j.jsonl")
+})
+
 test("GATE_JEV_INSTRUCTIONS, GATE_JEV_CONTEXT and GATE_JEV_POLICY override the prompt", () => {
   const p = promptFromEnv({
     GATE_JEV_INSTRUCTIONS: "Could this lose data?",
