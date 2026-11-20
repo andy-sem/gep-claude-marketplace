@@ -58,6 +58,10 @@ There is no build step. Before committing:
 node --test 'plugins/destructive-guard/test/*.test.mjs'   # quote the glob; Node 25 rejects a bare directory
 claude plugin validate .                                    # marketplace + plugin manifests
 jq . .claude-plugin/marketplace.json
+
+uv sync                                                     # once: dev tools (pytest, ruff); needs uv and Python 3.14
+uv run pytest                                               # Python tests; GD_IMPL=py runs them against the Python port
+uv run ruff check .
 ```
 
 `destructive-guard` needs Node.js; there are no npm dependencies. Keep existing tests green and add tests with every behaviour change. `gated-dev-simple-workflow` tests cover the launcher, the PR watcher and the notification hook: `node --test 'plugins/gated-dev-simple-workflow/test/*.test.mjs'`; its skills and agents (Markdown) have none.

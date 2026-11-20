@@ -8,12 +8,14 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const readme = readFileSync(join(root, "README.md"), "utf8")
 
 // Variables the hook wrapper and the tests use internally; not user settings.
-const INTERNAL = new Set(["GATE_RUN", "GATE_DONE_FILE", "GATE_INFRA_NODE"])
+const INTERNAL = new Set(["GATE_RUN", "GATE_DONE_FILE", "GATE_INFRA_NODE", "GATE_INFRA_PYTHON"])
 
 function envNames() {
   const names = new Set()
   for (const dir of ["lib", "hooks"]) {
-    for (const file of readdirSync(join(root, dir))) {
+    for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
+      if (!entry.isFile()) continue
+      const file = entry.name
       const text = readFileSync(join(root, dir, file), "utf8")
       for (const m of text.matchAll(/\b(?:GATE|TYPESAFE)_[A-Z_]*[A-Z]\b/g))
         if (!INTERNAL.has(m[0])) names.add(m[0])
