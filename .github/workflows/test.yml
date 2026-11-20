@@ -21,3 +21,25 @@ jobs:
         run: node --test 'plugins/destructive-guard/test/*.test.mjs'
       - name: gated-dev-simple-workflow tests
         run: node --test 'plugins/gated-dev-simple-workflow/test/*.test.mjs'
+
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.14", ">=3.14"]
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: astral-sh/setup-uv@v6
+      - name: Install Python 3.9 (for the entry-stub tests)
+        run: |
+          uv python install 3.9
+          echo "OLD_PYTHON=$(uv python find 3.9)" >> "$GITHUB_ENV"
+      - run: uv sync
+      - run: uv run python -V
+      - run: uv run ruff check .
+      - run: uv run pytest

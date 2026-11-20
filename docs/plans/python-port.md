@@ -166,7 +166,7 @@ One commit per package (repo rule). Each package keeps
 
 ### Phase 0: groundwork
 
-- **P0** `pyproject.toml`, `.python-version`, `.venv/` in `.gitignore`,
+- **P0** (done, see `docs/plans/python-port-p0.md`; the `gate.sh` / `run-python.sh` interpreter-lookup tests moved to P9 / P10) `pyproject.toml`, `.python-version`, `.venv/` in `.gitignore`,
   pytest config, `impl` fixture, `_bridge.mjs`, `tests/PORTING.md`
   skeleton, CI job with `astral-sh/setup-uv` (Python 3.14 and latest) next to the
   node job. The D1b version-check stubs (entry stubs that only check the

@@ -1,0 +1,50 @@
+"""Shared logic of the entry-stub tests (one test file per plugin uses it)."""
+
+import ast
+import os
+import re
+import subprocess
+from pathlib import Path
+
+from . import DG, GD
+from .pythons import find_python
+
+# (stub path, package module the stub imports)
+STUBS: list[tuple[Path, str]] = [
+    (DG / "lib" / "gate_main.py", "gate_main"),
+    (DG / "lib" / "check.py", "check"),
+    (GD / "scripts" / "launch.py", "launch"),
+    (GD / "scripts" / "watch_pr.py", "watch_pr"),
+    (GD / "hooks" / "notify.py", "notify"),
+]
+
+TOO_OLD = re.compile(r"^needs Python >= 3\.14 \(found 3\.\d+ at .+\); set GATE_INFRA_PYTHON\n$")
+
+
+def stubs_of(plugin_dir: Path) -> list[tuple[Path, str]]:
+    return [(p, m) for p, m in STUBS if plugin_dir in p.parents]
+
+
+def stub_id(param: tuple[Path, str]) -> str:
+    return param[0].name
+
+
+def check_parses_as_37(stub: Path) -> None:
+    ast.parse(stub.read_text(), filename=str(stub), feature_version=(3, 7))
+
+
+def check_old_python_exit_3(old_python: str, stub: Path) -> None:
+    proc = subprocess.run([old_python, "-I", str(stub)], capture_output=True, text=True, check=False)
+    assert proc.returncode == 3, proc.stderr
+    assert TOO_OLD.match(proc.stderr), proc.stderr
+    assert proc.stdout == ""
+
+
+def check_314_imports_package(tmp_path: Path, stub: Path, module: str) -> None:
+    for planted in ("destructive_guard.py", "gated_dev.py"):
+        (tmp_path / planted).write_text("raise SystemExit(99)\n")
+    python = find_python(os.environ)
+    assert python, "no Python >= 3.14 found"
+    proc = subprocess.run([python, "-I", str(stub)], capture_output=True, text=True, cwd=tmp_path, check=False)
+    assert proc.returncode == 2, proc.stderr
+    assert proc.stderr == f"{module}: not implemented yet\n"
