@@ -219,9 +219,9 @@ The two tracks only meet at W3.
 Start a session with: *"Read `docs/plans/gated-dev-simple-workflow.md` §7 and
 start the next open work package."*
 
-Last updated 2026-11-19 (night). **The port is complete and merged into
-`main`** (PRs #2, #3, #4; last merge `d912876`). destructive-guard **0.6.1**,
-gated-dev-simple-workflow **0.5.0**, catalog `metadata.version` **0.13.0**.
+Last updated 2026-11-20. **The port is complete and merged into
+`main`** (PRs #2–#5; last merge `da58320`). destructive-guard **0.6.1**,
+gated-dev-simple-workflow **0.6.0**, catalog `metadata.version` **0.14.0**.
 Tests: 730 (guard) + 46 (launcher + notify) green; CI green; `claude plugin validate .`
 passes.
 
@@ -266,11 +266,11 @@ passes.
 | W2/W3 dry run | Done: DEMO-1/2/3 ran to `done` (PRs #1–#3); `--status`, interrupt + `--resume`, a gated row with real rule IDs and the `unknown` path all checked (see "Dry run results") | `8d57cfc` |
 | WP-G6 | Done: README rewritten (install, every env variable with defaults, what Jev sends, writing rules incl. all rule kinds and top-level keys, troubleshooting); `test/readme.test.mjs` fails when an env variable, pack or prompt is undocumented; CI `.github/workflows/test.yml` (jq manifest check + `node --test`, Node 22); root README lists the plugins; 730 tests | `1d3db86` |
 | WP-W7 | Done: `scripts/launch.mjs` (file-based CLI: keys or `--all`, `--dry-run`, `--remote-control`; new ticket → Orca worktree via `orca worktree create --repo path:<root>` when the repo is registered in Orca, else main checkout; existing run → `--resume` in its worktree; `done` skipped), `skills/launch/SKILL.md`, 37 tests in `test/launch.test.mjs` (CI runs them). Real tabs verified 2026-11-19 against the demo repo: Orca (repo registered → new Orca worktree under Orca's workspace dir, ticket + local settings copied, session adopted it with the plugin loaded) and iTerm2 (main checkout, titled tab). Version 0.4.0 | `fa7c24a` |
-| WP-W4 | Done: `hooks/hooks.json` + `hooks/notify.sh` (`Notification` hook; only sessions with `TICKET_FLOW_KEY`; macOS `osascript`, Linux `notify-send`, silent elsewhere; `GATED_DEV_NOTIFY=0` off; never fails), `test/notify.test.mjs` (9, stubbed `uname`/notifiers), README section; version 0.6.0, catalog 0.14.0 | (this commit) |
+| WP-W4 | Done: `hooks/hooks.json` + `hooks/notify.sh` (`Notification` hook; only sessions with `TICKET_FLOW_KEY`; macOS `osascript`, Linux `notify-send`, silent elsewhere; `GATED_DEV_NOTIFY=0` off; never fails), `test/notify.test.mjs` (9, stubbed `uname`/notifiers), README section; version 0.6.0, catalog 0.14.0. PR #5 merged; checked in the demo (DEMO-6) | `5038f15` |
 | WP-W5 | Deferred to v0.2: PR watch, `--address-review`, merge cleanup | |
 | WP-W6 | Done: README without the WIP line, ticket files + `state.json` stages, config example (JSON backslash note); version 0.5.0 | `8d57cfc` |
 
-Suggested order from here: push and open the PR for W4 (ask the user first); W5 is v0.2. Every other package is complete.
+Suggested order from here: only WP-W5 (v0.2) is open. Every other package is complete and merged.
 
 ### Progress in the session of 2026-11-19 (W1–W3)
 
@@ -338,9 +338,10 @@ They can differ (as with DEMO-2). Acceptable; the session reports it.
 2. Demo cleanup done 2026-11-19: PR #2 closed, all ticket branches (local and
    remote) and worktrees removed, demo `main` up to date. Kept: the repo, its
    `orca repo` entry and the local-scope plugin install (for further runs).
-3. WP-W4 done 2026-11-19 (notifications; not yet pushed). Not yet seen
-   firing in a real launched session: try it with the demo repo after
-   `claude plugin update gated-dev-simple-workflow@gep-claude-marketplace`.
+3. WP-W4 done and merged (PR #5, `da58320`). Checked 2026-11-20 in the
+   demo: DEMO-6 launched in Orca, the session notified at the plan-approval
+   stop point (user saw it), the run went on to `done` (demo PR #4 merged);
+   worktree and branches removed afterwards.
 4. v0.2: WP-W5.
 
 Update the Status table at the end of every work package.
