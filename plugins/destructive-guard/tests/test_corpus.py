@@ -1,4 +1,4 @@
-"""Rule case corpus (tests/cases/*.json), run through `check --json` (port of destructive / gate-rules cases)."""
+"""Rule case corpus (tests/cases/*.json), run through `check --json` (port of destructive / gate-rules / gate-engine cases)."""
 
 import json
 import os
@@ -14,7 +14,9 @@ from testkit.projects import temp_project
 
 CASES = DG / "tests" / "cases"
 FIXTURES = DG / "tests" / "fixtures"
-CORPORA = ["destructive", "gate_rules"]
+CORPORA = ["destructive", "gate_rules", "gate_engine"]
+# Corpora whose expect is the reason's first segment (as the JS test asserts), not the rule id (source).
+REASON_CORPORA = {"gate_engine"}
 
 
 def load_corpus(name: str) -> tuple[dict, list[dict]]:
@@ -28,12 +30,14 @@ def load_corpus(name: str) -> tuple[dict, list[dict]]:
 
 
 def call_of(case: dict) -> dict:
-    return {k: case[k] for k in ("bash", "mcp", "input") if k in case}
+    return {k: case[k] for k in ("bash", "mcp", "input", "hook") if k in case}
 
 
 def label(case: dict) -> str:
     if "bash" in case:
         return case["bash"]
+    if "hook" in case:
+        return json.dumps(case["hook"], separators=(",", ":"))
     return f"{case['mcp']} {json.dumps(case['input'], separators=(',', ':'))}"
 
 
@@ -44,7 +48,8 @@ def _params(name: str):
 
 @pytest.fixture(scope="module")
 def corpus_results(tmp_path_factory) -> dict[tuple[str, int], str | None]:
-    """Every case of every corpus, run once and concurrently: rule id (source) when it asks, else None."""
+    """Every case of every corpus, run once and concurrently: when it asks, the rule id (source), or the
+    reason's first segment for REASON_CORPORA; else None."""
     impl = select_impl("destructive-guard", os.environ)
     cwd = temp_project(tmp_path_factory.mktemp("corpus"), {})
     jobs = []
@@ -54,12 +59,19 @@ def corpus_results(tmp_path_factory) -> dict[tuple[str, int], str | None]:
 
     def one(job):
         key, call, env = job
-        if "mcp" in call and not call["mcp"].startswith("mcp__"):
-            # check --mcp only takes mcp__ tools; other tool names go through the hook itself.
-            out = run_hook(impl, mcp_input(call["mcp"], call["input"], cwd), env, cwd=cwd).stdout
+        if "hook" in call or not call.get("mcp", "mcp__").startswith("mcp__"):
+            # check --mcp only takes mcp__ tools; other calls go through the hook itself.
+            stdin = (
+                json.dumps({**call["hook"], "cwd": str(cwd)})
+                if "hook" in call
+                else mcp_input(call["mcp"], call["input"], cwd)
+            )
+            out = run_hook(impl, stdin, env, cwd=cwd).stdout
             return key, decision(out)["permissionDecisionReason"].split(":")[0] if out else None
         r = check_call(impl, call, env=env, cwd=cwd)
-        return key, r["source"] if r["decision"] == "ask" else None
+        if r["decision"] != "ask":
+            return key, None
+        return key, r["reason"].split(":")[0] if key[0] in REASON_CORPORA else r["source"]
 
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
         return dict(pool.map(one, jobs))
@@ -71,6 +83,8 @@ def test_corpus_sizes():
     assert len(destructive) == 150
     assert len([c for c in gate_rules if c.get("group") != "not-gated"]) == 194
     assert len([c for c in gate_rules if c.get("group") == "not-gated"]) == 4
+    _, gate_engine = load_corpus("gate_engine")
+    assert len(gate_engine) == 189
 
 
 @pytest.mark.parametrize(("index", "case"), _params("destructive"))
@@ -81,6 +95,11 @@ def test_destructive_case(corpus_results, index, case):
 @pytest.mark.parametrize(("index", "case"), _params("gate_rules"))
 def test_gate_rules_case(corpus_results, index, case):
     assert corpus_results[("gate_rules", index)] == case["expect"]
+
+
+@pytest.mark.parametrize(("index", "case"), _params("gate_engine"))
+def test_gate_engine_case(corpus_results, index, case):
+    assert corpus_results[("gate_engine", index)] == case["expect"]
 
 
 def test_every_destructive_rule_has_an_asking_case():

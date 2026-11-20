@@ -1,6 +1,6 @@
 import pytest
 
-from testkit.bridge import BridgeError, bridge
+from testkit.bridge import BridgeError, bridge, bridge_many, call, js_regexp
 
 
 def test_calls_function(tmp_path):
@@ -49,3 +49,25 @@ def test_missing_node_is_runtime_error(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", str(tmp_path))
     with pytest.raises(RuntimeError):
         bridge("config", "DEFAULT_CHECKS")
+
+
+def test_nested_call_args():
+    result = bridge("gate-engine", "composeRules", [call("gate-engine", "packPath", "destructive")])
+    assert isinstance(result["rules"], list)
+    assert result["rules"]
+
+
+def test_bridge_many_in_order():
+    path = bridge("gate-engine", "packPath", "base")
+    results = bridge_many([("gate-engine", "packPath", ["base"]), ("config", "DEFAULT_CHECKS", [])])
+    assert results == [path, ["destructive"]]
+
+
+def test_bridge_many_raises_on_error():
+    with pytest.raises(BridgeError) as e:
+        bridge_many([("config", "DEFAULT_CHECKS", []), ("gate-engine", "loadRules", ["/nope.json"])])
+    assert e.value.name == "RulesError"
+
+
+def test_js_regexp():
+    assert js_regexp(bridge("gate-scripts", "globToRegExp", "a/*.js")).search("a/b.js")

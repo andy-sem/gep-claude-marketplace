@@ -22,7 +22,8 @@ class JevMock:
 
     def __init__(self) -> None:
         self.bodies: list[dict | None] = []
-        self._answer: dict[str, Any] = {"kind": "ok", "probs": {}, "question": "cloud_change", "usage": None}
+        self.headers: list[dict[str, str]] = []
+        self._answers: list[dict[str, Any]] = [self._build()]
         self._release = threading.Event()
         self._lock = threading.Lock()
         mock = self
@@ -39,18 +40,23 @@ class JevMock:
                     body = None
                 with mock._lock:
                     mock.bodies.append(body)
-                    a = dict(mock._answer)
+                    mock.headers.append({k.lower(): v for k, v in self.headers.items()})
+                    a = dict(mock._answers[min(len(mock.bodies), len(mock._answers)) - 1])
                 if a["kind"] == "hang":
                     mock._release.wait(HANG_MAX_SECONDS)
                     self.close_connection = True
                     return
                 if a["kind"] == "status":
                     self.send_response(a["status"])
+                    if a["retry_after"] is not None:
+                        self.send_header("retry-after", a["retry_after"])
                     self.send_header("content-length", "0")
                     self.end_headers()
                     return
                 if a["kind"] == "malformed":
                     payload = b"{"
+                elif a["kind"] == "raw":
+                    payload = json.dumps(a["body"]).encode()
                 else:
                     payload = json.dumps(
                         {
@@ -74,6 +80,33 @@ class JevMock:
     def hits(self) -> int:
         return len(self.bodies)
 
+    @staticmethod
+    def _build(
+        probs: dict | None = None,
+        *,
+        kind: str = "ok",
+        status: int | None = None,
+        question: str = "cloud_change",
+        usage: dict | None = None,
+        retry_after: str | None = None,
+        body: dict | None = None,
+    ) -> dict[str, Any]:
+        if kind == "ok" and status is not None:
+            kind = "status"
+        if kind == "status" and status is None:
+            raise ValueError("answer(kind='status') needs a status code")
+        if kind == "raw" and body is None:
+            raise ValueError("answer(kind='raw') needs a body")
+        return {
+            "kind": kind,
+            "probs": probs or {},
+            "status": status,
+            "question": question,
+            "usage": usage,
+            "retry_after": retry_after,
+            "body": body,
+        }
+
     def answer(
         self,
         probs: dict | None = None,
@@ -82,15 +115,31 @@ class JevMock:
         status: int | None = None,
         question: str = "cloud_change",
         usage: dict | None = None,
+        retry_after: str | None = None,
+        body: dict | None = None,
     ) -> None:
         """Set the next answers and reset the recorded requests."""
-        if kind == "ok" and status is not None:
-            kind = "status"
-        if kind == "status" and status is None:
-            raise ValueError("answer(kind='status') needs a status code")
+        self.sequence(
+            {
+                "probs": probs,
+                "kind": kind,
+                "status": status,
+                "question": question,
+                "usage": usage,
+                "retry_after": retry_after,
+                "body": body,
+            }
+        )
+
+    def sequence(self, *answers: dict) -> None:
+        """Serve answers in order (each dict is `answer()` kwargs), the last repeating; reset recorded requests."""
+        built = [self._build(**a) for a in answers]
+        if not built:
+            raise ValueError("sequence() needs at least one answer")
         with self._lock:
-            self._answer = {"kind": kind, "probs": probs or {}, "status": status, "question": question, "usage": usage}
+            self._answers = built
             self.bodies = []
+            self.headers = []
 
     def __enter__(self) -> Self:
         self._thread.start()
