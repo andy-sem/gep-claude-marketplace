@@ -3,10 +3,13 @@
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
+from functools import cache
+from pathlib import Path
 
 import pytest
 
 from destructive_guard.config import build_rules, read_config
+from destructive_guard.gate_engine import classify
 from testkit import DG
 from testkit.bridge import bridge, call
 from testkit.check_cli import check_call, run_check
@@ -48,6 +51,33 @@ def _params(name: str):
     return [pytest.param(i, c, id=label(c)) for i, c in enumerate(cases)]
 
 
+@cache
+def _engine(env_items: tuple[tuple[str, str], ...]) -> tuple[dict, bool]:
+    config = read_config(dict(env_items), cwd=Path.cwd())
+    return build_rules(config), bool(config["strict"])
+
+
+def hook_input(case: dict) -> dict:
+    """The hook input a corpus case stands for."""
+    if "hook" in case:
+        return case["hook"]
+    if "bash" in case:
+        return {"tool_name": "Bash", "tool_input": {"command": case["bash"]}}
+    return {"tool_name": case["mcp"], "tool_input": case["input"]}
+
+
+def classify_case(corpus_env: dict, case: dict) -> str | None:
+    """In-process leg: the rule id (the reason's first segment) when the case asks, else None; the same
+    value the contract leg gets from `check --json` (`source`) or the hook reason."""
+    rules, strict = _engine(tuple(sorted(corpus_env.items())))
+    result = classify(hook_input(case), rules, strict=strict)
+    if not result or result["decision"] != "ask":
+        return None
+    reason = result["reason"]
+    i = reason.find(":")
+    return reason[:i] if i > 0 else reason
+
+
 @pytest.fixture(scope="module")
 def corpus_results(tmp_path_factory) -> dict[tuple[str, int], str | None]:
     """Every case of every corpus, run once and concurrently: when it asks, the rule id (source), or the
@@ -77,6 +107,26 @@ def corpus_results(tmp_path_factory) -> dict[tuple[str, int], str | None]:
 
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
         return dict(pool.map(one, jobs))
+
+
+def _py_params(name: str):
+    env, cases = load_corpus(name)
+    return [pytest.param(env, c, id=label(c)) for c in cases]
+
+
+@pytest.mark.parametrize(("env", "case"), _py_params("destructive"))
+def test_destructive_case_py(env, case):
+    assert classify_case(env, case) == case["expect"]
+
+
+@pytest.mark.parametrize(("env", "case"), _py_params("gate_rules"))
+def test_gate_rules_case_py(env, case):
+    assert classify_case(env, case) == case["expect"]
+
+
+@pytest.mark.parametrize(("env", "case"), _py_params("gate_engine"))
+def test_gate_engine_case_py(env, case):
+    assert classify_case(env, case) == case["expect"]
 
 
 def test_corpus_sizes():
