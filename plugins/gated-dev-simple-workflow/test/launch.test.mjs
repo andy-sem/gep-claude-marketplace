@@ -426,15 +426,16 @@ test("launchTicket resumes an existing run in its worktree", async () => {
   assert.match(create.at(-2), /"\/ticket K-1 --resume"$/)
 })
 
-test("launchTicket skips a finished run", async () => {
+test("launchTicket resumes a finished run (restarts the PR watch)", async () => {
   const wt = mkdtempSync(path.join(tmpdir(), "wt-"))
   mkdirSync(path.join(wt, "docs/tickets/K-1"), { recursive: true })
   writeFileSync(path.join(wt, "docs/tickets/K-1/state.json"), '{"stage":"done"}')
   const { root, config, run } = demo({ worktrees: [[wt, "K-1/x"]] })
-  const r = await launchTicket({ root, key: "K-1", config, env: ITERM, run })
-  assert.equal(r.mode, "skip")
-  assert.ok(!r.launched)
-  assert.ok(!run.calls.some((c) => c[0] === "osascript"))
+  const r = await launchTicket({ root, key: "K-1", config, env: ITERM, run, dryRun: true })
+  assert.equal(r.mode, "resume")
+  assert.equal(r.cwd, wt)
+  assert.match(r.command, /"\/ticket K-1 --resume"$/)
+  assert.match(r.note, /PR watch/)
 })
 
 test("launchTicket dry run changes nothing and plans the Orca worktree", async () => {

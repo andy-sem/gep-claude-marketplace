@@ -4,7 +4,9 @@
 
 A developer types `/ticket <KEY>` (or "start working on ticket <KEY>"). The
 ticket then runs through **kickoff → spec → plan → dev → review → complete**,
-each stage in its own subagent, in its own git worktree. The pipeline works on
+each stage in its own subagent, in its own git worktree. After the PR is open
+the session watches it: new review feedback is addressed in a follow-up round
+(§5a), and a merge removes the worktree. The pipeline works on
 its own and stops for the developer only at the points in §3.
 
 ## 2. Principles
@@ -79,12 +81,31 @@ Every file lives in `<ticketsDir>/<KEY>/` in the ticket worktree.
 | dev | dev agent (all tools) | `plan.md`, `spec.md`, `decisions.md` | one commit per step (`Plan-Step: N`), `dev-report.md` | steps done, verification passes (2 fix attempts, then H6) |
 | review | reviewer (read-only) | diff vs base, `spec.md`, `plan.md`, `dev-report.md` | `review.md`: critical / important / minor findings, `VERDICT: PASS|CHANGES_REQUIRED` | PASS, or H5 after 2 fix rounds |
 | complete | orchestrator | `plan.md`, `review.md`, `state.json` | push, PR | PR open, stage `done` |
+| done | orchestrator + `watch-pr.mjs` (background) | the PR | `watch` heartbeat in `state.json` | feedback → `addressing_review`, merged → `merged`, closed → stop |
+| addressing_review | orchestrator, dev (`MODE=fix-pr`), reviewer (`REVIEW_SINCE`) | PR reviews and comments | `pr-feedback-<n>.md`, `PR-Fix: <id>` commits, push, replies | back to `done` |
+| merged | orchestrator | the PR | notification | worktree removed (branch kept) |
 
 Read-only stages may change only the ticket directory; the orchestrator checks
 `git status --porcelain` after them (scope check → H7). Review fix rounds run
 the dev agent with `MODE=fix-review` (critical and important only, commits
 with `Review-Fix: <n>`). Minor findings go into the PR. The reviewer runs on a
 stronger model when the diff touches `riskPaths`.
+
+### 5a. PR follow-up
+
+In stage `done` the session starts `scripts/watch-pr.mjs` in the background.
+It polls the PR with `gh` once a minute and exits on new human feedback (not
+from a bot, not one of the pipeline's own replies, which carry
+`<!-- gated-dev -->`, newer than `lastAddressedCommentAt`), a merge, a close,
+or 5 failed polls in a row. Feedback starts a round (`--address-review` does
+the same by hand): the orchestrator classifies every item as change, question
+or decline in `pr-feedback-<n>.md` (asking the developer for declines,
+ambiguous items and anything the escalation list of §4 covers), the dev agent
+fixes the change items, the reviewer checks the new commits, then the branch is
+pushed (never forced) and every item gets a marked reply. Threads are not
+resolved and reviews not re-requested. A merge notifies the developer and
+removes the worktree when it is clean and at the merged commit; the branch is
+kept. Closing the session stops the watch; `--resume` restarts it.
 
 ## 6. Hosts
 
@@ -114,24 +135,24 @@ hint; launched sessions carry `TICKET_FLOW_KEY` and are already named.
   "branch": "PROJ-1/export-reports-as-csv",
   "worktree": "/abs/repo/.claude/worktrees/proj-1-export-reports-as-csv",
   "host": "orca | iterm | plain",
-  "stage": "spec | plan | awaiting_plan_approval | dev | review | complete | done | aborted",
+  "stage": "spec | plan | awaiting_plan_approval | dev | review | complete | done | addressing_review | merged | aborted",
   "abortedFrom": "dev",
   "reviewRound": 0,
   "decisions": [{ "stage": "plan", "question": "...", "answer": "...", "at": "ISO-8601" }],
   "warnings": [{ "stage": "dev", "command": "...", "reason": "...", "at": "ISO-8601" }],
   "prUrl": null,
+  "lastAddressedCommentAt": "ISO-8601 (newest PR feedback handled)",
+  "watch": { "pid": 123, "startedAt": "ISO-8601", "heartbeatAt": "ISO-8601" },
   "updatedAt": "ISO-8601"
 }
 ```
 
 `--resume` re-enters the recorded stage from its start. Stages are safe to run
 again: they overwrite their own file, and dev skips steps whose `Plan-Step: N`
-commit already exists. Abort keeps the worktree and branch.
+commit already exists. In stage `done` it restarts the PR watch, in
+`addressing_review` the feedback round, in `merged` the cleanup. Only the
+watcher writes `watch`. Abort keeps the worktree and branch.
 
 ## 8. Not in this version
 
-- PR follow-up: watching the PR, addressing review comments
-  (`--address-review`, dev `MODE=fix-pr`), merge cleanup.
-- Notifications.
-- A launcher that opens one session per ticket in Orca or iTerm2 tabs.
 - Running without a developer present, or in CI.
