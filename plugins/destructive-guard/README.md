@@ -59,6 +59,17 @@ Only env variables; no config file is needed. Set them in the `env` block of
 { "env": { "GATE_CHECKS": "destructive,postgres", "GATE_DISABLE_RULES": "git-clean" } }
 ```
 
+**Paths.** File variables (`GATE_RULES_FILE`, `GATE_RULES`, `GATE_LOG`,
+`GATE_JEV_PROMPT` as a file, `GATE_JEV_LOG`) take absolute paths or paths
+relative to the project: `CLAUDE_PROJECT_DIR` (Claude Code sets it for hooks),
+else the git root of the current directory. So a project can commit its own
+rules next to its code and keep working after the session `cd`s into a
+subdirectory:
+
+```json
+{ "env": { "GATE_CHECKS": "none", "GATE_RULES_FILE": ".claude/gate-rules.json" } }
+```
+
 ### Gate
 
 | Variable | Default | Meaning |

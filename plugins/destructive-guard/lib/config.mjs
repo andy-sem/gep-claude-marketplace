@@ -13,6 +13,7 @@ import {
   packPath,
   parseRules,
 } from "./gate-engine.mjs"
+import { projectPath } from "./paths.mjs"
 
 export class ConfigError extends Error {
   constructor(message) {
@@ -76,11 +77,18 @@ function readChecks(env, packs) {
 
 // env → { enabled, packs, rulesFiles, disableRules, envGuard, strict, log }.
 // `packs` are full pack names in load order (`base` first) or [] for none.
-export function readConfig(env = process.env, { packs = availablePacks() } = {}) {
+// Relative paths (rules files, log) resolve against the project (paths.mjs);
+// `cwd` only matters when CLAUDE_PROJECT_DIR is unset.
+export function readConfig(
+  env = process.env,
+  { packs = availablePacks(), cwd = process.cwd() } = {},
+) {
+  const path = (p) => projectPath(p, env, cwd)
   const enabled = flag(env, "GATE_ENABLED", true)
   const envGuard = flag(env, "GATE_ENV_GUARD", true)
   const strict = flag(env, "GATE_STRICT", false)
-  const log = value(env, "GATE_LOG") ?? null
+  const logValue = value(env, "GATE_LOG")
+  const log = logValue === undefined ? null : path(logValue)
 
   // GATE_RULES (deprecated): one rules file replacing every pack.
   const legacy = value(env, "GATE_RULES")
@@ -91,11 +99,11 @@ export function readConfig(env = process.env, { packs = availablePacks() } = {})
         "GATE_RULES cannot be combined with GATE_CHECKS or GATE_RULES_FILE (use GATE_CHECKS=none GATE_RULES_FILE=…)",
       )
     checks = []
-    rulesFiles = [legacy]
+    rulesFiles = [path(legacy)]
   } else {
     checks = readChecks(env, packs)
     const files = value(env, "GATE_RULES_FILE")
-    rulesFiles = files === undefined ? [] : list(files, ":")
+    rulesFiles = files === undefined ? [] : list(files, ":").map(path)
   }
   const packNames = checks.length ? ["base", ...checks.filter((c) => c !== "base")] : []
   if (!packNames.length && !rulesFiles.length)
@@ -124,3 +132,4 @@ export function buildRules(config) {
 }
 
 export { RulesError }
+export { projectDir, projectPath } from "./paths.mjs"

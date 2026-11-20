@@ -1,6 +1,6 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { spawnSync } from "node:child_process"
@@ -43,6 +43,7 @@ const CLEAN = {
   GATE_STRICT: "",
   GATE_LOG: "",
   GATE_JEV: "",
+  CLAUDE_PROJECT_DIR: "",
 }
 
 // ---------------------------------------------------------------------------
@@ -115,6 +116,35 @@ test("GATE_DISABLE_RULES and GATE_LOG are read as given", () => {
   const c = readConfig({ GATE_DISABLE_RULES: "git-push-force, git-clean,git-clean", GATE_LOG: "/tmp/g.log" })
   assert.deepEqual(c.disableRules, ["git-push-force", "git-clean"])
   assert.equal(c.log, "/tmp/g.log")
+})
+
+// A project with a rules file in .claude/, a .git directory and a subdirectory
+// the session may have cd'ed into.
+function makeProject() {
+  const root = mkdtempSync(join(tmpdir(), "gate-project-"))
+  mkdirSync(join(root, ".git"))
+  mkdirSync(join(root, ".claude"))
+  mkdirSync(join(root, "apps", "web"), { recursive: true })
+  writeFileSync(join(root, ".claude", "rules.json"), readFileSync(extraRules))
+  return root
+}
+
+test("relative paths resolve against CLAUDE_PROJECT_DIR; absolute paths are kept", () => {
+  const c = readConfig(
+    { CLAUDE_PROJECT_DIR: "/proj", GATE_RULES_FILE: ".claude/r.json:/abs/x.json", GATE_LOG: "logs/g.jsonl" },
+    { cwd: "/elsewhere" },
+  )
+  assert.deepEqual(c.rulesFiles, ["/proj/.claude/r.json", "/abs/x.json"])
+  assert.equal(c.log, "/proj/logs/g.jsonl")
+  assert.deepEqual(readConfig({ CLAUDE_PROJECT_DIR: "/proj", GATE_RULES: "r.json" }).rulesFiles, ["/proj/r.json"])
+})
+
+test("without CLAUDE_PROJECT_DIR relative paths resolve against the git root of cwd, else cwd", () => {
+  const root = makeProject()
+  const c = readConfig({ GATE_RULES_FILE: ".claude/rules.json" }, { cwd: join(root, "apps", "web") })
+  assert.deepEqual(c.rulesFiles, [join(root, ".claude", "rules.json")])
+  const bare = mkdtempSync(join(tmpdir(), "gate-nogit-"))
+  assert.deepEqual(readConfig({ GATE_RULES_FILE: "r.json" }, { cwd: bare }).rulesFiles, [join(bare, "r.json")])
 })
 
 test("availablePacks lists the shipped packs", () => {
@@ -233,6 +263,23 @@ test("hook: pack selection, extra file and disabled rules", () => {
   assert.equal(hook("git push --force", { GATE_CHECKS: "postgres" }), null)
   assert.match(hook("deployctl release v1", { GATE_RULES_FILE: extraRules }), /^deployctl:/)
   assert.equal(hook("git push --force", { GATE_DISABLE_RULES: "git-push-force" }), null)
+})
+
+test("hook: a relative GATE_RULES_FILE works after the session cd'ed into a subdirectory", () => {
+  const root = makeProject()
+  const sub = join(root, "apps", "web")
+  const run = (env) => {
+    const r = spawnSync("bash", [wrapper], {
+      cwd: sub,
+      input: JSON.stringify({ ...bashCall("deployctl release v1"), cwd: sub }),
+      encoding: "utf8",
+      env: { ...process.env, ...CLEAN, GATE_INFRA_NODE: process.execPath, GATE_RULES_FILE: ".claude/rules.json", ...env },
+    })
+    assert.equal(r.status, 0)
+    return JSON.parse(r.stdout).hookSpecificOutput.permissionDecisionReason
+  }
+  assert.match(run({ CLAUDE_PROJECT_DIR: root }), /^deployctl:/)
+  assert.match(run({}), /^deployctl:/) // git root of the hook's cwd
 })
 
 test("hook: GATE_LOG appends one redacted JSON line per decision", () => {

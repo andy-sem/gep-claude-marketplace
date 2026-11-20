@@ -1,7 +1,7 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { mkdtempSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -163,4 +163,19 @@ test("--cwd resolves scripts the command runs", async () => {
   assert.match(r.reason, /x\.sh runs terraform/)
   const elsewhere = await checkCall(bash("bash x.sh"), { env, cwd: tmpdir() })
   assert.equal(elsewhere.decision, "none")
+})
+
+test("checkCall: a relative GATE_RULES_FILE resolves against the git root of --cwd", async () => {
+  const root = mkdtempSync(join(tmpdir(), "check-project-"))
+  mkdirSync(join(root, ".git"))
+  mkdirSync(join(root, ".claude"))
+  mkdirSync(join(root, "src"))
+  writeFileSync(
+    join(root, ".claude", "rules.json"),
+    JSON.stringify({ rules: [{ id: "deployctl", kind: "cli-gated", programs: ["deployctl"], gatedPrefixes: [["release"]] }] }),
+  )
+  const env = { GATE_CHECKS: "none", GATE_RULES_FILE: ".claude/rules.json" }
+  const r = await checkCall(bash("deployctl release v1"), { env, cwd: join(root, "src") })
+  assert.equal(r.decision, "ask")
+  assert.equal(r.source, "deployctl")
 })
