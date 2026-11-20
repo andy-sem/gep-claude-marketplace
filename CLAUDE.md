@@ -18,7 +18,7 @@ The two plugins are independent and installable on their own:
 | Plugin | What it is | Ships |
 | --- | --- | --- |
 | `destructive-guard` | Deterministic `PreToolUse` approval gate. Installed once, globally; protects every session (human or agent). Configured **only through env variables**; useful with zero config. | hooks, gate engine, rule packs, Jev prompts, `check` skill |
-| `gated-dev-simple-workflow` | File-based ticket → spec → plan → dev → review → PR pipeline (`/ticket`). Knows nothing about gate internals; works with or without the gate and treats any gate prompt or denial as a checkpoint, never something to work around. | `ticket` skill, four stage agents, launcher, `Notification` hook |
+| `gated-dev-simple-workflow` | File-based ticket → spec → plan → dev → review → PR pipeline (`/ticket`). Knows nothing about gate internals; works with or without the gate and treats any gate prompt or denial as a checkpoint, never something to work around. | `ticket` skill, four stage agents, launcher, PR watcher, `Notification` hook |
 
 ### `destructive-guard` (`plugins/destructive-guard/`)
 
@@ -35,14 +35,14 @@ The two plugins are independent and installable on their own:
 - `skills/ticket/SKILL.md` is the orchestrator: it runs in the main session, never writes product code, and drives one subagent per stage in a worktree per ticket (`git worktree`, Orca or iTerm2).
 - Agents in `agents/`: `ticket-spec` → `spec.md`, `ticket-planner` → `plan.md`, `ticket-dev` → commits + `dev-report.md`, `ticket-reviewer` → `review.md`. Each ends with `RESULT: OK <file>` or a `NEEDS_DECISION` block.
 - File-based: the ticket is `docs/tickets/<KEY>/ticket.md` by default, and stages read/write files next to it. **No issue tracker (no Jira)**: agents have no tracker tools or wording.
-- Plan approval is always a stop point; after it the run commits, pushes and opens a PR with `gh`.
+- Plan approval is always a stop point; after it the run commits, pushes and opens a PR with `gh`, then watches the PR (`scripts/watch-pr.mjs`, background): new feedback → follow-up round (`--address-review`, dev `MODE=fix-pr`, replies marked `<!-- gated-dev -->`), merge → notification and worktree removal (branch kept).
 - With `destructive-guard` enabled the planner dry-runs its calls through `destructive-guard:check` and lists the ones that will ask in the plan's `## Gated operations` table.
 - `hooks/notify.sh` (`Notification` hook): desktop notification for launcher-started sessions (`TICKET_FLOW_KEY`); macOS `osascript`, Linux `notify-send`, silent elsewhere; `GATED_DEV_NOTIFY=0` disables. Tests in `test/notify.test.mjs`.
 - Per-project settings: `.claude/gated-dev.json` (see `skills/ticket/references/config.md`); pipeline contract in `skills/ticket/references/pipeline-spec.md`.
 
 ## Work in progress
 
-Both plugins are ported and merged into `main`; only WP-W5 (PR follow-up, v0.2) remains. Plan, status, binding decisions and handoff: `docs/plans/gated-dev-simple-workflow.md` (§7 is the entry point for a new session). Read it before changing either plugin.
+Both plugins are ported; WP-W5 (PR follow-up) is the last package (see the plan for its status). Plan, status, binding decisions and handoff: `docs/plans/gated-dev-simple-workflow.md` (§7 is the entry point for a new session). Read it before changing either plugin.
 
 ## Public repo hygiene (binding)
 
@@ -60,7 +60,7 @@ claude plugin validate .                                    # marketplace + plug
 jq . .claude-plugin/marketplace.json
 ```
 
-`destructive-guard` needs Node.js; there are no npm dependencies. Keep existing tests green and add tests with every behaviour change. `gated-dev-simple-workflow` tests cover the launcher and notification hook: `node --test 'plugins/gated-dev-simple-workflow/test/*.test.mjs'`; its skills and agents (Markdown) have none.
+`destructive-guard` needs Node.js; there are no npm dependencies. Keep existing tests green and add tests with every behaviour change. `gated-dev-simple-workflow` tests cover the launcher, the PR watcher and the notification hook: `node --test 'plugins/gated-dev-simple-workflow/test/*.test.mjs'`; its skills and agents (Markdown) have none.
 
 ## Adding or changing a plugin
 

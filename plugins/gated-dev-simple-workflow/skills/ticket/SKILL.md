@@ -1,6 +1,6 @@
 ---
 name: ticket
-description: Run a ticket file through the spec, plan, dev, review and PR pipeline with one subagent per stage, in its own git worktree. Use when the user invokes /ticket <KEY> (optionally with --resume or --status), or says "start working on ticket <KEY>", "pick up <KEY>", "resume <KEY>" or "status of <KEY>". The ticket is a Markdown file (docs/tickets/<KEY>/ticket.md by default) or a description the user pastes.
+description: Run a ticket file through the spec, plan, dev, review and PR pipeline with one subagent per stage, in its own git worktree. Use when the user invokes /ticket <KEY> (optionally with --resume, --status or --address-review), or says "start working on ticket <KEY>", "pick up <KEY>", "resume <KEY>", "status of <KEY>", "address review on <KEY>" or "fix PR comments on <KEY>". The ticket is a Markdown file (docs/tickets/<KEY>/ticket.md by default) or a description the user pastes.
 ---
 
 # /ticket: ticket pipeline orchestrator
@@ -19,12 +19,13 @@ The pipeline is file-based: the ticket is `ticket.md`, and every stage reads and
 Rules that hold everywhere:
 
 - Every stop for the developer goes through `AskUserQuestion`, recommended option first (the H-points). Calls that an approval gate stops use the normal permission prompt (H4); you do not handle those.
-- Spawn every stage subagent in the **foreground** (never `run_in_background`) and pass `model` explicitly (section 4).
+- Spawn every stage subagent in the **foreground** (never `run_in_background`) and pass `model` explicitly (section 4). The only background work is the PR watcher of section 9c: a Bash command with `run_in_background: true`, not a subagent.
 - Never launch, restart or stop apps, dev servers or Docker. If something needs them and they are down, that is an infrastructure blocker (H6).
 - Never route around an approval gate, and never run a gated operation that the approved plan does not list. Do not edit product files yourself.
-- Keep `state.json` current: after every transition set the new `stage` and `updatedAt` (ISO-8601). Re-read it before every write and write the whole file.
+- Keep `state.json` current: after every transition set the new `stage` and `updatedAt` (ISO-8601). Re-read it before every write, write the whole file and keep its `watch` field as it is: only the watcher of section 9c writes `watch`.
 - `state.json` is never committed. Never stage it, and never run a bare `git add -A`: when staging everything, use `git -C <wt> add -A -- . ':(exclude)<ticketsDir>/*/state.json'`.
 - Commit trailer: end every commit message you write with the `Co-Authored-By` attribution line that your session's instructions specify for commits. Do not hard-code a model name; if the session specifies no attribution, add none. "The trailer" below means this line.
+- Scripts and hooks of this plugin live under `${CLAUDE_PLUGIN_ROOT}` (`scripts/watch-pr.mjs`, `hooks/notify.sh`).
 - Formatting: "format `<files>`" below means: run `<formatCommand> <files>` in the worktree when `formatCommand` is configured; otherwise do nothing.
 
 ## 0. Configuration and host
@@ -37,17 +38,18 @@ Rules that hold everywhere:
 ## 1. Arguments
 
 1. Take the key from the user's text. It must match `keyPattern` and must not contain `/` or `..`; otherwise ask for it and stop.
-2. Flags: `--resume` ("resume <KEY>"), `--status` ("status of <KEY>"). At most one. No flag means a new run ("start working on", "pick up").
+2. Flags: `--resume` ("resume <KEY>"), `--status` ("status of <KEY>"), `--address-review` ("address review on <KEY>", "fix PR comments on <KEY>"). At most one; if several are given, ask which. No flag means a new run ("start working on", "pick up").
 3. Find an existing run: in `git worktree list --porcelain`, look for a worktree whose branch matches `refs/heads/<KEY>/*`. Its state file is `<wt>/<ticketsDir>/<KEY>/state.json`. If several match, keep the one whose `stage` is not `aborted`; if that still leaves zero or more than one, ask which to use. Set `TICKET_DIR=<wt>/<ticketsDir>/<KEY>`.
 4. Cases:
    - `--status`: no worktree or no state file: report "no state found for <KEY>", change nothing, stop. Otherwise section 2.
-   - `--resume`: no worktree or no state file: say there is nothing to resume and offer a new run. Otherwise section 9.
+   - `--resume`: no worktree or no state file: say there is nothing to resume and offer a new run. Otherwise section 9 (stage `done` restarts the PR watch of section 9c, stage `merged` re-runs section 9d).
+   - `--address-review`: no worktree or no state file: report "no state found for <KEY>", change nothing, stop. Otherwise section 9b.
    - No flag, state exists: ask Resume (recommended) · Restart. Restart asks once more for confirmation, sets the old run to `aborted` (section 10), and runs kickoff with a fresh slug suffix (`-2`, `-3`, ...) so the branch differs. Never delete a worktree or branch.
    - No flag, no state: kickoff (section 3). A worktree found in step 3 without a state file (opened by a launcher or by Orca, no run started yet) is adopted by kickoff, not duplicated (section 3, step 5.1).
 
 ## 2. Status (read-only)
 
-Read `state.json` and print: ticket, title, stage (and `reviewRound`), branch, worktree, base branch, PR URL if any, the number of recorded decisions with the last question, every entry of `warnings`, and the paths of `ticket.md`, `spec.md`, `plan.md`, `decisions.md`, `dev-report.md` and `review.md` that exist. "Open questions" means: stage `awaiting_plan_approval` (the plan waits for approval), or the unresolved `## Open questions` of `spec.md` when the stage is `spec`. Write nothing, spawn nothing.
+Read `state.json` and print: ticket, title, stage (and `reviewRound`), branch, worktree, base branch, PR URL if any, `lastAddressedCommentAt` if set (stage `addressing_review` means PR feedback is being addressed), `watch.heartbeatAt` if set (the PR watcher of section 9c is alive while it is less than 3 minutes old), the number of recorded decisions with the last question, every entry of `warnings`, and the paths of `ticket.md`, `spec.md`, `plan.md`, `decisions.md`, `dev-report.md`, `review.md` and `pr-feedback-<n>.md` that exist. "Open questions" means: stage `awaiting_plan_approval` (the plan waits for approval), or the unresolved `## Open questions` of `spec.md` when the stage is `spec`. Write nothing, spawn nothing.
 
 ## 3. Kickoff
 
@@ -88,8 +90,10 @@ WORKTREE=<abs worktree path>
 KEY=<KEY>
 TICKET_DIR=<abs worktree path>/<ticketsDir>/<KEY>
 BASE_BRANCH=<BASE_REF, e.g. origin/main>
-MODE=implement|fix-review          (ticket-dev only)
+MODE=implement|fix-review|fix-pr   (ticket-dev only)
 REVIEW_ROUND=<n>                   (ticket-dev with MODE=fix-review only)
+FEEDBACK=<abs path>                (ticket-dev with MODE=fix-pr only, section 9b)
+REVIEW_SINCE=<commit>              (ticket-reviewer in section 9b only)
 FORMAT_CMD=<formatCommand>         (ticket-dev only, when configured)
 GATE_CHECK=<command>               (ticket-planner only, when found in section 0)
 DECISIONS:
@@ -165,8 +169,8 @@ Minor findings are never auto-fixed; they are listed in the PR.
 `--resume` (and Resume from section 1) re-enters the recorded `stage` from its start. First:
 
 1. Read the config again (section 0) and repeat the exclude and `check-ignore` checks of section 3, steps 4 and 6 (the exclude entries may be missing in a fresh clone).
-2. `git -C <wt> status --porcelain`. In stages `spec`, `plan` and `awaiting_plan_approval`, changes inside `<ticketsDir>/<KEY>/` are the stage's own output; in stage `review` the same holds for `review.md`. Any other change must be shown before you spawn anything: in stages `dev` and `complete` ask **Keep and continue (recommended)** · **Stash** · **Abort**; in every other stage ask **Stash (recommended)** · **Abort**.
-3. Stage `awaiting_plan_approval`: ask H2 again. Stage `aborted`: ask which stage to re-enter (default `abortedFrom`). Stage `done`: report the PR and stop.
+2. `git -C <wt> status --porcelain`. In stages `spec`, `plan` and `awaiting_plan_approval`, changes inside `<ticketsDir>/<KEY>/` are the stage's own output; in stage `review` the same holds for `review.md`. Any other change must be shown before you spawn anything: Stage `merged` needs no question (section 9d keeps a dirty worktree). In stages `dev`, `complete`, `done` and `addressing_review` ask **Keep and continue (recommended)** · **Stash** · **Abort**; in every other stage ask **Stash (recommended)** · **Abort**.
+3. Stage `awaiting_plan_approval`: ask H2 again. Stage `aborted`: ask which stage to re-enter (default `abortedFrom`). Stage `addressing_review`: section 9b from step 1 (its PR-state check sends a merged PR to section 9d and stops on a closed one; for an open PR it continues at step 3, the tree check was done here). Stage `done`: report the PR and go to section 9c (the watch restarts). Stage `merged`: section 9d.
 4. Stage `dev`: re-run the agent (it skips steps whose `Plan-Step: N` trailer is already in the log). Stage `review`: re-run the reviewer. Stage `complete`: section 9a (it reuses an existing PR).
 
 ## 9a. Complete
@@ -184,7 +188,49 @@ Stage `complete`. You do this yourself; no subagent.
 
    End the body with the pull-request attribution line your session's instructions specify, if any.
 4. Open the PR: if `gh pr list --head <branch> --json url` returns one, reuse it; otherwise `gh pr create --base <baseBranch> --head <branch> --title "<type>(<KEY>): <title>" --body-file <file>`. The type comes from the spec (`feat` by default, `fix` for bugs, `docs` for documentation-only work). Save the URL as `prUrl`.
-5. Set `stage: "done"` and print the final report: PR URL, worktree path, the decisions taken, the warnings, the minor findings still open. The worktree and branch are kept; remove them after the merge (`git worktree remove <wt>`, or `orca worktree rm --worktree path:<wt>` when the host is `orca`).
+5. Set `stage: "done"` and print the final report: PR URL, worktree path, the decisions taken, the warnings, the minor findings still open. Then go to section 9c.
+
+## 9b. Address PR review (`--address-review`)
+
+Stage `addressing_review`. Runs when the PR of a finished run has new human feedback: started by the developer with `--address-review`, or by the watch of section 9c. The only subagents are `ticket-dev` (`MODE=fix-pr`, then `fix-review` if needed) and `ticket-reviewer`. This section authorises the commits, the plain push of the ticket branch and the GitHub replies below, and nothing else. Never force push, resolve a review thread or re-request a review. Every PR reply starts with the marker line `<!-- gated-dev -->`; the watcher ignores comments that carry it.
+
+1. **Preconditions.** `stage` must be `done` or `addressing_review`, and `prUrl` must be set with `gh pr view <prUrl> --json state,number,createdAt,headRefName` reporting `OPEN`. `MERGED`: section 9d. `CLOSED`: report it and stop. Any other stage or state: report it and stop. Whenever it stops here it changes nothing except `updatedAt`. Unless you arrive from section 9 (which did both), run the working-tree check of section 9, step 2 (stage `done` counts like `complete`) and the exclude and `check-ignore` checks of section 3, steps 4 and 6.
+2. **Stage.** Set `stage: "addressing_review"`.
+3. **Collect feedback.** Read reviews and issue comments with `gh pr view <prUrl> --json reviews,comments` and inline comments with `gh api repos/{owner}/{repo}/pulls/{n}/comments --paginate`, keeping `id`, `path`, `line`, `in_reply_to_id`, `created_at`, `user.login` and `body`. A review's time is its `submittedAt`. Keep an item only if it is newer than `lastAddressedCommentAt` (the PR's `createdAt` when that is absent), its author is not a bot (login ends in `[bot]`), and its body is not empty and does not contain the marker; a review with an empty body counts only when its state is `CHANGES_REQUESTED`. For a reply inside a thread, also keep the thread's root comment as context.
+   - If the highest-numbered `pr-feedback-<n>.md` has an item newer than `lastAddressedCommentAt`, that round was interrupted: reuse that file and number and go to step 4 (items already fixed or answered show up as `PR-Fix:` trailers and marked replies; steps 6 and 8 skip them). Otherwise `n` is the next free number.
+   - Nothing kept: set `lastAddressedCommentAt` to the newest time among the items that passed the time filter (if any, so the watcher does not wake for them again), `stage: "done"`, report "no new PR feedback" and go to section 9c.
+4. **Sync the branch.** `git -C <wt> fetch origin <branch>`, then `git -C <wt> merge --ff-only origin/<branch>` so the local branch is not behind. If the branches diverged, show the divergence and ask H6-style **Retry** · **Abort**; never rebase, merge or force push on your own.
+5. **Classify.** Write `TICKET_DIR/pr-feedback-<n>.md`: a header with the PR URL, the collection time and `Base commit: <sha of HEAD now>`, then one `## Item <id>` block per item with `Source` (inline, review or comment), `Author`, `Created`, `Location` (`path:line` or n/a), `Thread` (root id or none), `Body`, `Class` and `Plan` (what to change, the draft answer, or the reason to decline). Decide `Class` yourself: `change` (actionable), `question` (needs an answer, no code), `decline` (you would not make the change). Answer `question` items from `spec.md`, `plan.md`, `dev-report.md` and the diff. Ask the developer (H3, recommended option first) before dev runs when an item is ambiguous, changes scope or acceptance criteria, falls under the escalation list of the pipeline (`references/pipeline-spec.md` §4, plus `escalationExtra`), needs a gated operation the plan does not list, is a `question` you cannot answer, or is a `decline` (always confirm: **Decline with reason (recommended)** · **Make the change** · **Skip without a reply**). Record the answers per section 4 (stage `addressing_review`), update `Class` and `Plan` to the outcome, then format the file and commit it alone as `docs(<KEY>): add PR feedback round <n>` plus the trailer. If no item is `change`, skip steps 6 and 7 and the verification and push of step 8, and only post the replies.
+6. **Dev.** Spawn `ticket-dev` with `MODE=fix-pr` and `FEEDBACK=<abs path of pr-feedback-<n>.md>`. It fixes every `change` item, commits with `PR-Fix: <comment id>` trailers and appends `## PR feedback round <n>` to `dev-report.md`. Handle the result as in section 7: `NEEDS_DECISION` per section 4 (H6 for `verification failed:`); `RESULT: OK` needs at least one commit in `git -C <wt> log --grep='^PR-Fix: ' <Base commit>..HEAD` (instead of `Plan-Step:`) and a clean tree.
+7. **Review.** Spawn `ticket-reviewer` with `REVIEW_SINCE=<Base commit>` and the model choice of section 8. Run the scope check, then format and commit `review.md` as `docs(<KEY>): add review for PR feedback round <n>` plus the trailer (not the section 8 subject, so the rounds stay distinguishable). `VERDICT: CHANGES_REQUIRED`: increment `reviewRound`, run one `ticket-dev` `MODE=fix-review` round (section 8), review again; if it still returns `CHANGES_REQUIRED`, ask H5 as in section 8 (**Accept as is**, recorded in `state.warnings` and listed in the summary comment of step 8 · **One more round** · **Take over manually**, leaving `stage: "addressing_review"`).
+8. **Verify, push, reply.**
+   1. Run the `## Verification` commands of `plan.md` as in section 9a, step 1 (H6 on failure). The tree must be clean; then push with a plain `git -C <wt> push` (never force).
+   2. Reply on GitHub. Write each body to a file in the scratchpad and post it with `-F body=@<file>`. Every body starts with the marker line, then a short note: the commit hash(es) (`git log --grep="^PR-Fix: <id>"`) for a `change`, the answer for a `question`, the reason for a `decline`. Skip an item that already has a later marked comment in its thread (for reviews and issue comments: a PR comment containing `PR feedback round <n>`), so a re-run never posts twice.
+      - Inline comment: reply in its thread, to the root comment id: `gh api repos/{owner}/{repo}/pulls/{n}/comments/{id}/replies -F body=@<file>`.
+      - Review or issue comment: one PR comment for all of them, `gh pr comment <prUrl> --body-file <file>`: the marker line, a heading `PR feedback round <n>`, one line per item (id, outcome), plus any checks skipped or findings accepted in this round (`state.warnings`).
+9. **Close.** Set `lastAddressedCommentAt` to the newest `Created` among the items of `pr-feedback-<n>.md` (ISO-8601) and `stage: "done"`. Print: PR URL, items by class, commits, replies posted, warnings. Threads stay unresolved and no review is requested; the developer does that. Then go to section 9c. **Take over manually** and **Abort** do not restart the watch.
+
+## 9c. Watch the PR
+
+Stage `done`, PR `OPEN`. The session stays open and wakes itself when there is something to do.
+
+1. Re-read `state.json` and write `updatedAt` (stage unchanged).
+2. Start the watcher with the Bash tool and `run_in_background: true`: `node "${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr.mjs" --state <TICKET_DIR>/state.json` (absolute path). It polls the PR about once a minute with `gh`, writes `watch.heartbeatAt` into `state.json`, and ends with one JSON line on stdout.
+3. Print one line ("Watching <prUrl>; this session wakes on new feedback, merge or close. Closing it stops the watch; `/ticket <KEY> --resume` restarts it.") and end the turn. Do nothing else while it runs.
+4. On wake-up, read the last stdout line of the background command as JSON (`outcome`):
+   - `feedback`: section 9b from step 1; it comes back here when done;
+   - `merged`: section 9d;
+   - `closed`: report that the PR was closed without a merge, stop watching, change nothing else;
+   - `error`, a last line that is not JSON, or a killed process: report the message, stop watching, and say that `/ticket <KEY> --resume` restarts the watch.
+
+## 9d. Merge cleanup
+
+Stage `merged`. Runs when the watcher reports `merged`, when section 9b finds the PR merged, and on `--resume` in stage `merged`. Every step can run again safely.
+
+1. Confirm with `gh pr view <prUrl> --json state,mergedAt` that the PR is `MERGED`, then set `stage: "merged"`. Take the PR's head commit from `gh api repos/{owner}/{repo}/pulls/{n} --jq .head.sha` (`gh pr view` has no head-commit field in every `gh` version).
+2. Print the final report: PR URL, merge time, worktree path, branch (it is kept), and whether the worktree will be removed (step 4).
+3. Notify: `bash "${CLAUDE_PLUGIN_ROOT}/hooks/notify.sh" "<KEY> merged" "<one line>"`. A failure is ignored; the report is already printed.
+4. Remove the worktree, as the very last action, and only when `git -C <wt> status --porcelain` prints nothing (the ignored `state.json` does not count) and `git -C <wt> rev-parse HEAD` equals that head commit; otherwise keep it and say why. If `orca` is on `PATH` and `orca worktree list --repo path:<root> --json --limit 500` has an entry whose `path` equals `<wt>` and whose `isMainWorktree` is false (do not use `ORCA_WORKTREE_ID`): `orca worktree rm --worktree path:<wt> --json`; exit 143 with no output is expected when this session runs inside that worktree. Otherwise: `git -C <root> worktree remove <wt>`. Never pass `--force` or `--delete-branch`, and never delete a branch.
 
 ## 10. Abort
 

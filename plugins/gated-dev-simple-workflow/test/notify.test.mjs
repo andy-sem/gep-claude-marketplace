@@ -18,7 +18,7 @@ const jq = findJq()
 // Stub bin dir: `uname` prints the given OS; osascript and notify-send record
 // their arguments. PATH is only the stub dir plus /bin for bash builtins'
 // helpers, so the real notifiers are never reached.
-function run({ os = "Darwin", env = {}, input = "", withJq = true, notifiers = ["osascript", "notify-send"] } = {}) {
+function run({ os = "Darwin", env = {}, input = "", withJq = true, notifiers = ["osascript", "notify-send"], args = [] } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "notify-"))
   const log = path.join(dir, "log")
   const stub = (name, body) => {
@@ -30,7 +30,7 @@ function run({ os = "Darwin", env = {}, input = "", withJq = true, notifiers = [
   stub("cat", `exec /bin/cat "$@"`)
   for (const n of notifiers) stub(n, `printf '%s\\n' "${n}" "$@" > "${log}"`)
   if (withJq && jq) symlinkSync(jq, path.join(dir, "jq"))
-  const r = spawnSync("/bin/bash", [script], {
+  const r = spawnSync("/bin/bash", [script, ...args], {
     input,
     encoding: "utf8",
     env: { PATH: dir, ...env },
@@ -106,4 +106,12 @@ test("a failing notifier does not fail the hook", () => {
   })
   assert.equal(r.status, 0)
   assert.equal(r.stderr, "")
+})
+
+test("direct mode: title and message from arguments, no TICKET_FLOW_KEY needed", () => {
+  const r = run({ os: "Linux", args: ["PROJ-1 merged", "PR #7 merged"] })
+  assert.equal(r.status, 0)
+  assert.deepEqual(r.calls, ["notify-send", "--", "PROJ-1 merged", "PR #7 merged"])
+  const off = run({ os: "Linux", args: ["PROJ-1 merged", "x"], env: { GATED_DEV_NOTIFY: "0" } })
+  assert.equal(off.calls, null)
 })

@@ -6,7 +6,8 @@
 //   node launch.mjs [--dry-run] [--remote-control] --all
 //
 // A ticket with a run (a worktree on a `<KEY>/*` branch) is reopened in that
-// worktree with `--resume`; a finished run (`stage: done`) is skipped. A new
+// worktree with `--resume` (for a finished run, `stage: done`, that restarts
+// the PR watch, which also cleans up after a merge). A new
 // ticket gets its own Orca worktree when the host is Orca and the repo is
 // registered there; otherwise the session starts in the main checkout and the
 // skill creates the worktree.
@@ -563,7 +564,7 @@ export async function launchTab({
 /**
  * Plans and (unless `dryRun`) opens the session for one ticket. Returns
  * `{ key, mode, host, cwd, command, title, base, worktree, note, launched }`
- * where `mode` is `resume`, `orca-worktree`, `main-checkout` or `skip`.
+ * where `mode` is `resume`, `orca-worktree` or `main-checkout`.
  * A dry run calls only read-only commands (`git worktree list`,
  * `git symbolic-ref`, `orca repo show`).
  */
@@ -617,20 +618,12 @@ export async function launchTicket({
     try {
       summary = readTicket({ root: existing.path, key, config, fs }).title
     } catch {}
-    if (existing.stage === "done")
-      return {
-        ...base,
-        mode: "skip",
-        cwd: existing.path,
-        worktree: existing,
-        note: "run is done",
-        launched: false,
-      }
     return open({
       mode: "resume",
       cwd: existing.path,
       args: ["--resume"],
       summary,
+      note: existing.stage === "done" ? "run is done; resuming restarts the PR watch" : null,
       worktree: existing,
       selector: `path:${existing.path}`,
     })

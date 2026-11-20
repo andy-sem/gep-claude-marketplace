@@ -3,17 +3,26 @@
 # the launcher (TICKET_FLOW_KEY set) needs you: a permission prompt, a stop
 # point, or an idle wait. macOS: osascript; Linux: notify-send when installed;
 # silent elsewhere. GATED_DEV_NOTIFY=0 turns it off. Never fails, never blocks.
-KEY="${TICKET_FLOW_KEY:-}"
-[ -z "$KEY" ] && exit 0
+#
+#   notify.sh                    hook mode: event JSON on stdin
+#   notify.sh <title> <message>  direct mode (the /ticket skill, e.g. after a
+#                                merge); needs no TICKET_FLOW_KEY
 [ "${GATED_DEV_NOTIFY:-1}" = "0" ] && exit 0
 
-INPUT="$(cat 2>/dev/null)"
-MSG=""
-if command -v jq >/dev/null 2>&1; then
-  MSG="$(printf '%s' "$INPUT" | jq -r '.message // .title // empty' 2>/dev/null)"
+if [ "$#" -ge 2 ]; then
+  TITLE="$1"
+  MSG="$2"
+else
+  KEY="${TICKET_FLOW_KEY:-}"
+  [ -z "$KEY" ] && exit 0
+  INPUT="$(cat 2>/dev/null)"
+  MSG=""
+  if command -v jq >/dev/null 2>&1; then
+    MSG="$(printf '%s' "$INPUT" | jq -r '.message // .title // empty' 2>/dev/null)"
+  fi
+  [ -z "$MSG" ] && MSG="Claude needs your attention"
+  TITLE="$KEY needs you"
 fi
-[ -z "$MSG" ] && MSG="Claude needs your attention"
-TITLE="$KEY needs you"
 
 case "$(uname -s 2>/dev/null)" in
   Darwin)
