@@ -102,3 +102,37 @@ def test_old_python_env_accepted_when_old(monkeypatch):
         pytest.skip("no Python < 3.14 available")
     monkeypatch.setenv("OLD_PYTHON", old)
     assert find_old_python() == old
+
+
+def test_jev_mock_records_headers():
+    with JevMock() as jev:
+        req = urllib.request.Request(jev.url, data=b"{}", headers={"X-Probe": "abc"})
+        urllib.request.urlopen(req, timeout=5).read()
+        assert len(jev.headers) == 1
+        assert jev.headers[0]["x-probe"] == "abc"
+        jev.answer()
+        assert jev.headers == []
+
+
+def test_jev_mock_retry_after_and_raw():
+    with JevMock() as jev:
+        req = urllib.request.Request(jev.url, data=b"{}")
+        jev.answer(kind="status", status=429, retry_after="0")
+        with pytest.raises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(req, timeout=5)
+        assert e.value.code == 429
+        assert e.value.headers["retry-after"] == "0"
+        jev.answer(kind="raw", body={"answers": {}})
+        status, raw = _post(jev.url, {})
+        assert status == 200
+        assert json.loads(raw) == {"answers": {}}
+
+
+def test_jev_mock_sequence_repeats_last():
+    with JevMock() as jev:
+        jev.sequence({"kind": "status", "status": 429}, {"probs": probs(0, 0, 0, 1)})
+        codes = [_post(jev.url, {})[0] for _ in range(3)]
+        assert codes == [429, 200, 200]
+        assert jev.hits == 3
+        jev.sequence({"kind": "malformed"})
+        assert jev.hits == 0

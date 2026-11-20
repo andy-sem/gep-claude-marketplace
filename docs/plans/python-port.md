@@ -185,9 +185,11 @@ One commit per package (repo rule). Each package keeps
   job uses `actions/setup-python` (`3.14`, `3.x`). With `GD_IMPL=py` the
   `check` tests fail (placeholder `check.py`); most hook tests still pass
   because `gate.sh` keeps calling node until P9.
-- **P2** `destructive-guard` units via bridge: `config`, `gate-engine`
-  (parser, rule kinds), `gate-scripts`.
-- **P3** `gated-dev-simple-workflow`: `notify`, `launch` (dry-run + fake
+- **P2** (plan: `docs/plans/python-port-p2.md`) **done**. `destructive-guard` units: `config`, `gate-engine`,
+  `gate-scripts`, `gate-jev` (120 JS tests, no `todo` row left in `PORTING.md`). The test kit gained nested
+  bridge calls (`call`), batching (`bridge_many`), `js_regexp`, and Jev mock headers, `retry_after`, raw
+  bodies and answer sequences. The 189 engine classify cases are a third corpus, `cases/gate_engine.json`.
+- **P3** (plan: `docs/plans/python-port-p3.md`) `gated-dev-simple-workflow`: `notify`, `launch` (dry-run + fake
   `orca`/`osascript`), `watch-pr` (fake `gh`; the test's dependency on
   `check.mjs` goes through the `check` contract instead of an import).
 - Jev (`gate-jev`) tests that need a mock HTTP server stay as contract tests
@@ -200,32 +202,32 @@ Exit criterion: `PORTING.md` fully mapped, pytest green with `GD_IMPL=js`.
 
 The Python package is built next to the JS; hooks keep calling JS until P9.
 
-- **P4** `paths`, `config` (env → effective config, pack composition).
-- **P5** `gate_engine`: shell parser (`sudo`/`xargs`/`bash -c`/`npx`
+- **P4** (plan: `docs/plans/python-port-p4.md`) `paths`, `config` (env → effective config, pack composition).
+- **P5** (plan: `docs/plans/python-port-p5.md`) `gate_engine`: shell parser (`sudo`/`xargs`/`bash -c`/`npx`
   unwrapping), rule evaluation. Largest and riskiest package; may split
   into parser / rules.
-- **P6** `gate_scripts`.
-- **P7** `gate_jev` (prompts, redaction, request, uncertain band).
-- **P8** `check` CLI + hook entry point (`GATE_RUN`, done-file protocol).
-- **P9** Cutover: `gate.sh` → D1a interpreter lookup, `GATE_INFRA_PYTHON`, skill and
+- **P6** (plan: `docs/plans/python-port-p6.md`) `gate_scripts`.
+- **P7** (plan: `docs/plans/python-port-p7.md`) `gate_jev` (prompts, redaction, request, uncertain band).
+- **P8** (plan: `docs/plans/python-port-p8.md`) `check` CLI + hook entry point (`GATE_RUN`, done-file protocol).
+- **P9** (plan: `docs/plans/python-port-p9.md`) Cutover: `gate.sh` → D1a interpreter lookup, `GATE_INFRA_PYTHON`, skill and
   README updates, flip `impl` default to `py` for this plugin, delete
   `lib/*.mjs` and `test/*.test.mjs`, version bump. Dogfood in a real
   session and in the demo repo before merging.
 
 ### Phase 3: port `gated-dev-simple-workflow`
 
-- **P10** `notify.py` + `run-python.sh` (D4a); `hooks.json` switches to it,
+- **P10** (plan: `docs/plans/python-port-p10.md`) `notify.py` + `run-python.sh` (D4a); `hooks.json` switches to it,
   `notify.sh` is deleted. The P3 notify contract tests stay unchanged
   except the `jq`-missing case, which becomes "no Python → silent".
-- **P11** `watch_pr.py` (PR polling, heartbeat, follow-up rounds, marker).
-- **P12** `launch.py` (worktrees, Orca/iTerm2, `--dry-run`, `--all`).
-- **P13** Cutover: `ticket`/`launch` skills, `SKILL.md` gate dry-run step
+- **P11** (plan: `docs/plans/python-port-p11.md`) `watch_pr.py` (PR polling, heartbeat, follow-up rounds, marker).
+- **P12** (plan: `docs/plans/python-port-p12.md`) `launch.py` (worktrees, Orca/iTerm2, `--dry-run`, `--all`).
+- **P13** (plan: `docs/plans/python-port-p13.md`) Cutover: `ticket`/`launch` skills, `SKILL.md` gate dry-run step
   (`lib/check.py`), README requirements (Python ≥ 3.14 instead of `node`
   and `jq`), delete JS + node tests, version bump.
 
 ### Phase 4: cleanup
 
-- **P14** Remove `_bridge.mjs`, the `js` impl, the node CI job, and the
+- **P14** (plan: `docs/plans/python-port-p14.md`) Remove `_bridge.mjs`, the `js` impl, the node CI job, and the
   `node` mentions in this repo's docs; add the "no JS in the repo" test; update
   `CLAUDE.md` (test commands, "needs Node.js" → "needs Python ≥ 3.14"),
   catalog descriptions and `metadata.version`; close this plan.
