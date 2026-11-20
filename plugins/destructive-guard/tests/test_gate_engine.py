@@ -1,19 +1,17 @@
 """Gate engine (port of gate-engine.test.mjs; the classify cases are tests/cases/gate_engine.json).
 
-# retarget to destructive_guard in P5
-splitCommand has no CLI surface, so it goes through the JS bridge for now (loadRules runs
-against destructive_guard.rules).
-Reasons go through `check --json`, the CLI rows through the hook.
+Reasons go through `check --json` (and in-process through `classify`), the CLI rows through the
+hook; `split_command` and `load_rules` run in-process.
 """
 
 import json
 
 import pytest
 
+from destructive_guard.gate_engine import UnparsableError, classify, split_command
 from destructive_guard.rules import RulesError
 from destructive_guard.rules import load_rules as _load_rules
 from testkit import DG, REPO
-from testkit.bridge import BridgeError, bridge
 from testkit.check_cli import check_call
 from testkit.hook import decision, run_hook
 
@@ -31,11 +29,9 @@ def load_rules(path):
 
 
 def raises(name, fn):
-    expected = {"RulesError": RulesError, "UnparsableError": BridgeError}[name]
-    with pytest.raises(expected) as e:
+    expected = {"RulesError": RulesError, "UnparsableError": UnparsableError}[name]
+    with pytest.raises(expected):
         fn()
-    if expected is BridgeError:
-        assert e.value.name == name
 
 
 def write_json(path, value):
@@ -67,13 +63,74 @@ def test_non_object_input_fails_closed(impl, stdin):
     assert decision(out)["permissionDecisionReason"].startswith("unparsable:")
 
 
-# --- splitCommand (bridge) / loadRules ---
+# --- classify (in-process) ---
+
+
+@pytest.fixture(scope="module")
+def engine_rules():
+    return load_rules(ENGINE_RULES)
+
+
+def bash_input(command):
+    return {"tool_name": "Bash", "tool_input": {"command": command}}
+
+
+def test_classify_reasons_in_process(engine_rules):
+    def why(command):
+        return classify(bash_input(command), engine_rules)["reason"]
+
+    assert why("cloudctl things delete config get") == 'cloudctl: write verb "delete"'
+    assert why("cloudctl version apply") == 'cloudctl: write verb "apply"'
+    assert why("dbtool $ACTION") == "dbtool: dynamic argument"
+    assert why("echo push | xargs dbtool") == "dbtool: dynamic argument"
+    assert why("echo x | bash") == "unparsable: shell reads stdin"
+    assert why('eval "$CMD"') == "unparsable: dynamic shell command"
+    assert classify(bash_input("ls"), engine_rules) is None
+
+
+def test_classify_marks_unparsable_commands(engine_rules):
+    result = classify(bash_input('echo "x'), engine_rules)
+    assert result == {
+        "decision": "ask",
+        "reason": "unparsable: unterminated double quote",
+        "commandUnparsable": True,
+    }
+    assert classify(bash_input('echo "x'), engine_rules, strict=False) is None
+
+
+def test_classify_loose_still_checks_the_readable_parts(engine_rules):
+    result = classify(bash_input('echo "x; dbtool push'), engine_rules, strict=False)
+    assert result is None  # the whole string is unreadable: no opinion
+    result = classify(bash_input("bash -c 'echo $HOME' && dbtool push"), engine_rules, strict=False)
+    assert result["reason"].startswith("dbtool:")
+
+
+@pytest.mark.parametrize("value", [None, "x", ["a"], 3])
+def test_classify_non_object_input(engine_rules, value):
+    assert classify(value, engine_rules) == {"decision": "ask", "reason": "unparsable: hook input is not an object"}
+
+
+def test_classify_input_level_failures_always_ask(engine_rules):
+    for strict in (True, False):
+        assert classify({}, engine_rules, strict=strict)["reason"] == "unparsable: hook input has no tool_name"
+        assert classify({"tool_name": "Bash"}, engine_rules, strict=strict)["reason"] == "unparsable: Bash call has no command"
+        assert classify({"tool_name": "Bash", "tool_input": []}, engine_rules, strict=strict)["decision"] == "ask"
+
+
+def test_rules_api_is_reexported():
+    from destructive_guard import gate_engine, rules
+
+    for name in ("RulesError", "PACKS_DIR", "DEFAULT_PACKS", "pack_path", "load_rules", "compose_rules", "load_packs", "parse_rules"):
+        assert getattr(gate_engine, name) is getattr(rules, name)
+
+
+# --- splitCommand / loadRules ---
 
 
 def test_split_command():
-    assert bridge("gate-engine", "splitCommand", 'a b && c "d e"; f') == [["a", "b"], ["c", "d e"], ["f"]]
-    raises("UnparsableError", lambda: bridge("gate-engine", "splitCommand", 'echo "x'))
-    raises("UnparsableError", lambda: bridge("gate-engine", "splitCommand", "(echo x"))
+    assert split_command('a b && c "d e"; f') == [["a", "b"], ["c", "d e"], ["f"]]
+    raises("UnparsableError", lambda: split_command('echo "x'))
+    raises("UnparsableError", lambda: split_command("(echo x"))
 
 
 def test_load_rules_runners(tmp_path):
