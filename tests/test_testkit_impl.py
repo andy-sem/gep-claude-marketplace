@@ -1,5 +1,6 @@
 import os
 import stat
+import subprocess
 
 import pytest
 
@@ -116,10 +117,26 @@ def test_impl_watch_pr_fast_js():
     assert gd.watch_pr() == [argv[0], argv[3]]
 
 
-def test_impl_watch_pr_fast_py_not_yet():
+def test_impl_watch_pr_fast_py(tmp_path):
     gd = select_impl("gated-dev-simple-workflow", {"GD_IMPL": "py"})
-    with pytest.raises(NotImplementedError):
-        gd.watch_pr(fast=True)
+    argv = gd.watch_pr(fast=True)
+    assert argv[1] == "-I"
+    assert argv[2].endswith("testkit/_fast_sleep.py")
+    assert argv[3].endswith("scripts/watch_pr.py")
+    # The runner records the delay in ms and returns at once; the target runs as __main__ with its own argv.
+    target = tmp_path / "target.py"
+    target.write_text("import sys, time\ntime.sleep(60)\ntime.sleep(0.5)\nprint(sys.argv[1:])\nsys.exit(4)\n")
+    log = tmp_path / "sleeps.log"
+    proc = subprocess.run(
+        [argv[0], "-I", argv[2], str(target), "a", "b"],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "GD_TEST_SLEEP_LOG": str(log)},
+        timeout=30,
+        check=False,
+    )
+    assert (proc.returncode, proc.stdout) == (4, "['a', 'b']\n")
+    assert log.read_text().split() == ["60000", "500"]
 
 
 def test_gate_hook_is_the_shipped_gate_sh():
