@@ -5,6 +5,11 @@ from testkit.porting import js_tests, read_map
 
 PLUGIN_DIRS = [DG, GD]
 
+# JS tests deleted before their plugin's JS: the row stays as the record of the Python twin.
+REMOVED_JS_TESTS = {
+    ("watch-pr.test.mjs", "the watcher command passes destructive-guard with its defaults"),  # P9: imported check.mjs
+}
+
 
 def _ids(d):
     return d.name
@@ -19,10 +24,11 @@ def test_every_js_test_is_mapped(plugin_dir):
 
 @pytest.mark.parametrize("plugin_dir", PLUGIN_DIRS, ids=_ids)
 def test_no_stale_rows(plugin_dir):
+    # a plugin whose JS tests are gone (destructive-guard since P9) keeps its rows as the record
     if not (plugin_dir / "test").is_dir():
         pytest.skip("JS tests are gone")
     existing = set(js_tests(plugin_dir))
-    stale = sorted({(f, n) for f, n, _ in read_map(plugin_dir / "tests" / "PORTING.md")} - existing)
+    stale = sorted({(f, n) for f, n, _ in read_map(plugin_dir / "tests" / "PORTING.md")} - existing - REMOVED_JS_TESTS)
     assert not stale, f"stale rows in PORTING.md, e.g. {stale[:5]}"
 
 
@@ -40,7 +46,14 @@ def test_targets_exist(plugin_dir):
     assert not problems, problems[:10]
 
 
+@pytest.mark.parametrize("plugin_dir", PLUGIN_DIRS, ids=_ids)
+def test_no_todo_rows(plugin_dir):
+    todo = [(f, n) for f, n, target in read_map(plugin_dir / "tests" / "PORTING.md") if target == "todo"]
+    assert not todo, todo[:5]
+
+
 def test_js_tests_found():
-    tests = js_tests(DG)
-    assert len(tests) >= 200
-    assert ("gate-hook.test.mjs", "node unavailable -> ask") in tests
+    # destructive-guard's JS tests are gone (P9); its PORTING.md stays as the record.
+    assert not (DG / "test").exists()
+    tests = js_tests(GD)
+    assert len(tests) >= 60

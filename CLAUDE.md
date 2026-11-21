@@ -22,12 +22,12 @@ The two plugins are independent and installable on their own:
 
 ### `destructive-guard` (`plugins/destructive-guard/`)
 
-- `hooks/hooks.json`: `Bash|mcp__.*` → `hooks/gate.sh` (fail-closed wrapper around `lib/gate-engine.mjs`); `Read|Edit|Write` → `hooks/env-guard.sh` (blocks `.env*` files except `.env.example`).
+- `hooks/hooks.json`: `Bash|mcp__.*` → `hooks/gate.sh` (fail-closed wrapper: finds Python via `GATE_INFRA_PYTHON`, `python3.14`, `python3`, runs `lib/gate_main.py` with `-I`); `Read|Edit|Write` → `hooks/env-guard.sh` (blocks `.env*` files except `.env.example`).
 - The gate **asks or has no opinion; it never allows**. It parses shell commands (sees through `sudo`, `xargs`, `bash -c`, `npx`) rather than grepping. Engine or config errors ask with a `gate-config:` reason.
-- `lib/config.mjs` is the single place that turns env vars into config. Main vars: `GATE_ENABLED`, `GATE_CHECKS` (packs: `destructive` default, `postgres`, `terraform`; `base` always loaded), `GATE_RULES_FILE`, `GATE_DISABLE_RULES`, `GATE_STRICT` (default `0`), `GATE_LOG`, `GATE_JEV_*`.
-- Rule packs live in `packs/*.json`; `lib/gate-scripts.mjs` scans scripts a command runs.
-- Optional **Jev** classifier (`lib/gate-jev.mjs`, prompts in `jev/*.json`, off by default). With Jev on, its confident answer wins; rules decide in the uncertain band, on errors and when Jev is off. Fail-closed cases always ask and are never sent to Jev.
-- `skills/check` + `lib/check.mjs`: dry-run a command/MCP call through the gate, or print effective config (`/destructive-guard:check`).
+- `lib/destructive_guard/config.py` is the single place that turns env vars into config. Main vars: `GATE_ENABLED`, `GATE_CHECKS` (packs: `destructive` default, `postgres`, `terraform`; `base` always loaded), `GATE_RULES_FILE`, `GATE_DISABLE_RULES`, `GATE_STRICT` (default `0`), `GATE_LOG`, `GATE_JEV_*`.
+- Rule packs live in `packs/*.json`; `lib/destructive_guard/gate_scripts.py` scans scripts a command runs.
+- Optional **Jev** classifier (`lib/destructive_guard/gate_jev.py`, prompts in `jev/*.json`, off by default). With Jev on, its confident answer wins; rules decide in the uncertain band, on errors and when Jev is off. Fail-closed cases always ask and are never sent to Jev.
+- `skills/check` + `lib/check.py`: dry-run a command/MCP call through the gate, or print effective config (`/destructive-guard:check`).
 - The README is the user-facing reference for rules and configuration; keep it in sync with behaviour.
 
 ### `gated-dev-simple-workflow` (`plugins/gated-dev-simple-workflow/`)
@@ -55,7 +55,6 @@ Both plugins are ported; WP-W5 (PR follow-up) is the last package (see the plan 
 There is no build step. Before committing:
 
 ```bash
-node --test 'plugins/destructive-guard/test/*.test.mjs'   # quote the glob; Node 25 rejects a bare directory
 claude plugin validate .                                    # marketplace + plugin manifests
 jq . .claude-plugin/marketplace.json
 
@@ -64,7 +63,7 @@ uv run pytest                                               # Python tests; GD_I
 uv run ruff check .
 ```
 
-`destructive-guard` needs Node.js; there are no npm dependencies. Keep existing tests green and add tests with every behaviour change. `gated-dev-simple-workflow` tests cover the launcher, the PR watcher and the notification hook: `node --test 'plugins/gated-dev-simple-workflow/test/*.test.mjs'`; its skills and agents (Markdown) have none.
+`destructive-guard` needs Python >= 3.14 (standard library only; tests: `uv run pytest plugins/destructive-guard`). Keep existing tests green and add tests with every behaviour change. `gated-dev-simple-workflow` tests cover the launcher, the PR watcher and the notification hook: `node --test 'plugins/gated-dev-simple-workflow/test/*.test.mjs'`; its skills and agents (Markdown) have none.
 
 ## Adding or changing a plugin
 

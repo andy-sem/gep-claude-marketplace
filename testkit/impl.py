@@ -11,7 +11,7 @@ from . import DG, GD
 from .pythons import require_new_python
 
 DEFAULT_IMPL: dict[str, str] = {
-    "destructive-guard": "js",
+    "destructive-guard": "py",
     "gated-dev-simple-workflow": "js",
 }
 
@@ -23,16 +23,14 @@ class Impl:
 
     @property
     def interpreter_var(self) -> str:
-        return "GATE_INFRA_NODE" if self.name == "js" else "GATE_INFRA_PYTHON"
+        return "GATE_INFRA_PYTHON"
 
     @property
     def unavailable_reason(self) -> str:
-        return "unparsable: node unavailable" if self.name == "js" else "unparsable: python unavailable"
+        return "unparsable: python unavailable"
 
     def check_invocation(self, args: str) -> str:
         """The check command line as the docs (skill, README) write it."""
-        if self.name == "js":
-            return f'node "{DG}/lib/check.mjs" {args}'
         return f'python3 "{DG}/lib/check.py" {args}'
 
     def _python(self) -> str:
@@ -44,16 +42,13 @@ class Impl:
         return [self._python(), "-I", str(base / py)]
 
     def gate_hook(self) -> list[str]:
-        if self.name == "py" and os.environ.get("GATE_HOOK_IMPL") == "py-direct":
-            # Test-only: the Python engine behind the same done-file protocol (deleted in P9).
-            return ["bash", str(Path(__file__).resolve().parent / "_gate_py.sh")]
         return ["bash", str(DG / "hooks" / "gate.sh")]
 
     def env_guard(self) -> list[str]:
         return ["bash", str(DG / "hooks" / "env-guard.sh")]
 
     def check(self) -> list[str]:
-        return self._script(DG / "lib", "check.mjs", "check.py")
+        return [self._python(), "-I", str(DG / "lib" / "check.py")]
 
     def launch(self) -> list[str]:
         return self._script(GD / "scripts", "launch.mjs", "launch.py")
@@ -86,4 +81,6 @@ def select_impl(plugin: str, env: Mapping[str, str]) -> Impl:
     name = env.get("GD_IMPL") or DEFAULT_IMPL[plugin]
     if name not in ("js", "py"):
         raise ValueError(f"GD_IMPL must be js or py, got {name!r}")
+    if name == "js" and plugin == "destructive-guard":
+        raise ValueError("destructive-guard has no JS implementation any more; GD_IMPL=js is only for gated-dev-simple-workflow")
     return Impl(name, plugin)

@@ -1,7 +1,6 @@
 """Rule loading and pack composition (destructive_guard.rules)."""
 
 import json
-import re
 
 import pytest
 
@@ -16,32 +15,8 @@ from destructive_guard.rules import (
     pack_path,
     parse_rules,
 )
-from testkit.bridge import bridge
 
 PACKS = sorted(p.stem for p in PACKS_DIR.glob("*.json"))
-
-
-def to_json(value):
-    """Rules with patterns as {"$regexp", "flags"}, the shape the JS bridge returns."""
-    if isinstance(value, re.Pattern):
-        return {"$regexp": value.pattern, "flags": "i" if value.flags & re.IGNORECASE else ""}
-    if isinstance(value, dict):
-        return {k: to_json(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [to_json(v) for v in value]
-    return value
-
-
-def normalize_js(value):
-    """The JS bridge result with every {"$regexp"} compiled by the Python rules (same translation)."""
-    if isinstance(value, dict):
-        if set(value) == {"$regexp", "flags"}:
-            # RegExp.source escapes `/`; the rule file did not
-            return to_json(compile_js_regex(value["$regexp"].replace("\\/", "/"), value["flags"]))
-        return {k: normalize_js(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [normalize_js(v) for v in value]
-    return value
 
 
 def write(path, obj):
@@ -59,23 +34,6 @@ def test_every_pack_regex_compiles():
     for name in PACKS:
         rules = load_packs([pack_path("base"), pack_path(name)] if name != "base" else [pack_path("base")])
         assert rules["rules"] or name == "base", name
-
-
-@pytest.mark.parametrize("name", PACKS)
-def test_parse_rules_matches_js_shape(name):
-    path = pack_path(name)
-    js = bridge("gate-engine", "loadRules", path)
-    assert normalize_js(js) == to_json(load_rules(path))
-
-
-def test_parse_rules_matches_js_shape_for_composed_packs():
-    paths = [pack_path(n) for n in PACKS]
-    assert normalize_js(bridge("gate-engine", "loadPacks", paths)) == to_json(load_packs(paths))
-
-
-def test_compose_matches_js():
-    paths = [pack_path(n) for n in ("base", "destructive", "postgres", "terraform")]
-    assert compose_rules(paths) == bridge("gate-engine", "composeRules", paths)
 
 
 def test_regex_translation():

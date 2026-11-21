@@ -8,10 +8,8 @@ import {
   writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
-import { dirname, join, resolve } from "node:path"
-import { fileURLToPath } from "node:url"
+import { join } from "node:path"
 import { MARKER, POLL_MS, main, normalizePr, parsePrUrl, watch } from "../scripts/watch-pr.mjs"
-import { checkCall } from "../../destructive-guard/lib/check.mjs"
 
 const PR_URL = "https://github.com/o/r/pull/7"
 const T0 = "2026-10-22T08:00:00Z"
@@ -385,17 +383,4 @@ test("a PR url that cannot be parsed counts as a failed poll", async () => {
   const res = await watch(h.deps)
   assert.equal(res.outcome, "error")
   assert.match(res.message, /cannot parse/)
-})
-
-test("the watcher command passes destructive-guard with its defaults", async () => {
-  const here = dirname(fileURLToPath(import.meta.url))
-  const script = resolve(here, "..", "scripts", "watch-pr.mjs")
-  const state = "/abs/repo/.claude/worktrees/proj-1-x/docs/tickets/PROJ-1/state.json"
-  for (const command of [
-    `node '${script}' --state '${state}'`,
-    `cd /abs/repo && node '${script}' --state '${state}'`,
-  ]) {
-    const r = await checkCall({ mode: "bash", command }, { env: {}, cwd: "/abs/repo" })
-    assert.equal(r.decision, "none", command)
-  }
 })

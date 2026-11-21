@@ -13,7 +13,7 @@ ENV_NAME = re.compile(r"\b(?:GATE|TYPESAFE)_[A-Z_]*[A-Z]\b")
 
 
 def env_names() -> list[str]:
-    files = [p for p in (DG / "lib").rglob("*") if p.is_file() and p.suffix in (".mjs", ".py")]
+    files = [p for p in (DG / "lib").rglob("*") if p.is_file() and p.suffix == ".py"]
     files += [p for p in (DG / "hooks").iterdir() if p.is_file()]
     names = {m for p in files for m in ENV_NAME.findall(p.read_text())}
     return sorted(names - INTERNAL)

@@ -38,12 +38,6 @@ def _fake_engine(tmp_path, name, body):
     return str(p)
 
 
-def test_fixture_copy_matches_js():
-    js = DG / "test" / "fixtures" / "rules.json"
-    if js.exists():
-        assert (HERE / "fixtures" / "rules.json").read_bytes() == js.read_bytes()
-
-
 def test_gated_command_asks(run):
     r = run(bash_input("terraform apply", HERE))
     assert r.status == 0
