@@ -1,32 +1,26 @@
-"""Script collection and scanning (port of gate-scripts.test.mjs).
-
-# retarget to destructive_guard in P6
-collectScripts, scanScripts, findProjectRoot and globToRegExp have no CLI surface, so they go
-through the JS bridge for now. Each test batches its calls into one node process.
-"""
+"""Script collection and scanning (port of gate-scripts.test.mjs), in-process on destructive_guard.gate_scripts."""
 
 import json
 from pathlib import Path
 
 import pytest
 
+from destructive_guard.gate_scripts import (
+    collect_scripts,
+    find_project_root,
+    glob_to_regexp,
+    scan_scripts,
+)
 from destructive_guard.rules import RulesError, load_rules
 from testkit import DG
-from testkit.bridge import bridge_many, call, js_regexp
-from testkit.projects import temp_project
+from testkit.projects import provision_project, temp_project
 
 SHIPPED = DG / "tests" / "fixtures" / "rules.json"
-
-# Resolved inside node by the nested-call marker: parsed rules (RegExps) never cross JSON.
-RULES = call("gate-engine", "loadRules", str(SHIPPED))
-
-
-def _opts(root: Path, cwd: Path | None) -> dict:
-    return {"cwd": str(cwd or root), "root": str(root)}
+RULES = load_rules(SHIPPED)
 
 
 def collect_many(root: Path, commands: list[str], cwd: Path | None = None) -> list[dict]:
-    return bridge_many([("gate-scripts", "collectScripts", [c, RULES, _opts(root, cwd)]) for c in commands])
+    return [collect_scripts(c, RULES, cwd=str(cwd or root), root=str(root)) for c in commands]
 
 
 def collect(root: Path, command: str) -> dict:
@@ -38,25 +32,16 @@ def paths(c: dict) -> list[str]:
 
 
 def scan_many(root: Path, commands: list[str]) -> list[str | None]:
-    results = bridge_many(
-        [
-            ("gate-scripts", "scanScripts", [call("gate-scripts", "collectScripts", c, RULES, _opts(root, None)), RULES])
-            for c in commands
-        ]
-    )
+    results = [scan_scripts(c, RULES) for c in collect_many(root, commands)]
     return [r["reason"] if r else None for r in results]
 
 
 def test_find_project_root_git_ancestor_env_and_cwd_fallback(tmp_path, tmp_path_factory):
     root = temp_project(tmp_path, {"a/b/c.txt": "x"})
     bare = tmp_path_factory.mktemp("gate-noroot-").resolve()
-    found, env_fallback, cwd_fallback = bridge_many(
-        [
-            ("gate-scripts", "findProjectRoot", [str(root / "a/b")]),
-            ("gate-scripts", "findProjectRoot", [str(bare), {"CLAUDE_PROJECT_DIR": str(root)}]),
-            ("gate-scripts", "findProjectRoot", [str(bare), {}]),
-        ]
-    )
+    found = find_project_root(str(root / "a/b"))
+    env_fallback = find_project_root(str(bare), {"CLAUDE_PROJECT_DIR": str(root)})
+    cwd_fallback = find_project_root(str(bare), {})
     assert found == str(root)
     assert env_fallback == str(root), "env fallback"
     assert cwd_fallback == str(bare), "cwd fallback"
@@ -504,14 +489,8 @@ def test_scan_scripts_program_names_patterns_and_reasons(tmp_path):
     assert words is None
     assert cf is None
     assert ssr is None
-    empty, undefined = bridge_many(
-        [
-            ("gate-scripts", "scanScripts", [{"files": [], "problems": []}, RULES]),
-            ("gate-scripts", "scanScripts", [None, RULES]),
-        ]
-    )
-    assert empty is None
-    assert undefined is None
+    assert scan_scripts({"files": [], "problems": []}, RULES) is None
+    assert scan_scripts(None, RULES) is None
 
 
 def test_scan_scripts_workflow_with_acmecloud_actions_step_asks(tmp_path):
@@ -589,9 +568,8 @@ def test_glob_to_regexp_supports_doublestar_slash_doublestar_star_and_question()
         ("a/**", "a/x/y", True),
         ("a.b", "axb", False),
     ]
-    regexps = bridge_many([("gate-scripts", "globToRegExp", [glob]) for glob, _, _ in cases])
-    for (glob, text, expected), rx in zip(cases, regexps, strict=True):
-        assert bool(js_regexp(rx).search(text)) is expected, (glob, text)
+    for glob, text, expected in cases:
+        assert bool(glob_to_regexp(glob).search(text)) is expected, (glob, text)
 
 
 def test_load_rules_validates_script_patterns_and_script_scan_exempt(tmp_path):
@@ -686,3 +664,19 @@ def test_variables_assigned_earlier_resolve_script_paths(tmp_path):
         assert paths(c) == ["infra/apply.sh"], command
     # a prefix assignment applies to its own command only
     assert paths(prefix) == []
+
+
+def test_scan_matches_hook_rows_on_corpus_projects(tmp_path):
+    """The script rows of test_gate_hook.py, through the Python scan."""
+    terraform = temp_project(
+        tmp_path, {"infra/cloud/apply.sh": "#!/bin/bash\nterraform -chdir=environments/dev apply dev.tfplan\n"}
+    )
+    cloudflare = temp_project(
+        tmp_path,
+        {"scripts/cf.mjs": 'await fetch("https://api.cloudflare.com/client/v4/x")\nspawn("wrangler", ["deploy"])\n'},
+    )
+    (tf,) = scan_many(terraform, ["bash infra/cloud/apply.sh --apply"])
+    assert tf == "script: infra/cloud/apply.sh runs terraform"
+    (provision,) = scan_many(provision_project(tmp_path), ["node scripts/provision-cloud-app-dev.mjs"])
+    assert provision.startswith("script: scripts/provision-cloud-app-dev.mjs ")
+    assert scan_many(cloudflare, ["node scripts/cf.mjs"]) == [None]
