@@ -313,10 +313,13 @@ Decisions made with the user while porting it:
   `check` skill is installed, the planner dry-runs its calls through it.
   Otherwise (or without `dryRunGate`) it writes `Gate: unknown`. No path into
   the other plugin is hard-coded.
-- **File-based, no issue tracker.** The ticket is
-  `<ticketsDir>/<KEY>/ticket.md`, and the key is free-form. Agents have no
-  tracker tools or tracker wording. A project that wants tracker steps adds
-  them through `orchestratorRules` (one section per pipeline event).
+- **Files by default, Jira optional.** The ticket is
+  `<ticketsDir>/<KEY>/ticket.md`, and the key is free-form. The first port
+  ruled out any tracker (2026-11-19). That was reversed on 2026-11-21: with
+  `tracker` in `.claude/gated-dev.json`, the orchestrator fetches the issue
+  into `ticket.md` and moves it through its statuses using the session's own
+  Jira tools. The stage agents stay tracker-free either way. Other tracker
+  steps go into `orchestratorRules` (one section per pipeline event).
 - **Orca and iTerm2 are supported**, as well as plain `git worktree`. The
   skill detects the host and adopts a linked worktree it was opened in. The
   launcher opens one session per ticket.
