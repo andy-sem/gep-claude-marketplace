@@ -75,7 +75,7 @@ def test_interpreter_unavailable_asks(run, impl):
 
 
 def test_engine_partial_json_then_nonzero_gives_fixed_ask(run, impl, tmp_path):
-    fake = _fake_engine(tmp_path, "partial.sh", """printf '{"hookSpecificOutput":{"permi'; exit 3""")
+    fake = _fake_engine(tmp_path, "partial.sh", """printf '{"hookSpecificOutput":{"permi'; exit 4""")
     r = run(bash_input("git status", HERE), {impl.interpreter_var: fake})
     assert _ask(r.stdout)["permissionDecisionReason"] == "gate-config: engine failed"
 
