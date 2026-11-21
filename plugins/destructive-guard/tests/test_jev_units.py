@@ -1,6 +1,6 @@
 """Jev pure helpers (port of gate-jev.test.mjs, pure part).
 
-Runs in-process against destructive_guard.gate_jev. askJev / runJev rows are in test_jev_http.py
+Runs in-process against destructive_guard.jev.decider. askJev / runJev rows are in test_jev_http.py
 (through the hook) and test_jev_request_py.py (in-process).
 """
 
@@ -8,8 +8,12 @@ import json
 
 import pytest
 
-from destructive_guard import gate_jev
 from destructive_guard.errors import JevConfigError
+from destructive_guard.jev.config import JevConfig
+from destructive_guard.jev.decider import JevDecider
+from destructive_guard.jev.prompt import JevPrompt
+from destructive_guard.jev.redactor import Redactor
+from destructive_guard.jev.request import JevRequest
 from testkit.jev_mock import probs
 
 BASE_ENV = {"GATE_JEV": "1", "TYPESAFE_API_KEY": "key-123"}
@@ -22,12 +26,13 @@ CFG = {
     "timeoutMs": 500,
     "allowThreshold": 0.95,
     "escalateThreshold": 0.5,
-    "prompt": gate_jev.builtin_prompt("cloud-change"),
+    "prompt": JevPrompt.builtin_prompt("cloud-change"),
 }
 
 
 def jev_many(fn, *arg_lists):
-    return [getattr(gate_jev, fn)(*args) for args in arg_lists]
+    owner = JevConfig if fn in ("read",) else Redactor if fn.startswith("redact") else JevRequest if fn in ("parse_answer", "build_state") else JevDecider
+    return [getattr(owner, fn)(*args) for args in arg_lists]
 
 
 def answer(p):
@@ -40,7 +45,7 @@ def bash_call(command, scripts=None):
 
 def jev_config_error(env):
     with pytest.raises(JevConfigError):
-        gate_jev.read_jev_config(env)
+        JevConfig.read(env)
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +114,7 @@ def test_redact_leaves_ordinary_commands_unchanged():
 
 
 def read_jev_configs(*envs):
-    return jev_many("read_jev_config", *([e] for e in envs))
+    return jev_many("read", *([e] for e in envs))
 
 
 def test_read_jev_config_null_when_off():
@@ -117,7 +122,7 @@ def test_read_jev_config_null_when_off():
 
 
 def test_read_jev_config_defaults():
-    config, prompt = gate_jev.read_jev_config(BASE_ENV), gate_jev.builtin_prompt("destructive")
+    config, prompt = JevConfig.read(BASE_ENV), JevPrompt.builtin_prompt("destructive")
     assert config == {
         "apiKey": "key-123",
         "url": JEV_URL,

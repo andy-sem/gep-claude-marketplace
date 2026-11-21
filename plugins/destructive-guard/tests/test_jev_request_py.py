@@ -1,6 +1,6 @@
 """Jev request and Jev layer, in-process (Python twin of test_jev_http.py).
 
-Drives `ask_jev` / `run_jev` from destructive_guard.gate_jev against the local JevMock server (real
+Drives `JevClient.ask_jev` / `run_jev` from destructive_guard.jev.decider against the local JevMock server (real
 HTTP) or a fake opener. Every row of test_jev_http.py has its counterpart here; the rule result and the
 call are built by hand as the hook would build them.
 """
@@ -11,7 +11,11 @@ import urllib.error
 
 import pytest
 
-from destructive_guard import gate_jev
+from destructive_guard.jev.client import JevClient
+from destructive_guard.jev.config import JevConfig
+from destructive_guard.jev.decider import JevDecider
+from destructive_guard.jev.prompt import JevPrompt
+from destructive_guard.jev.request import JevRequest
 from testkit.jev_mock import probs
 
 DOWN = "http://127.0.0.1:1/v1/systemone"
@@ -54,8 +58,8 @@ def go(jev, jev_env, tmp_path):
 
     def run(call, rule_result=None, **env):
         log.unlink(missing_ok=True)
-        cfg = gate_jev.read_jev_config({**jev_env, **env}, cwd=tmp_path)
-        final = gate_jev.run_jev(call, rule_result, cfg)
+        cfg = JevConfig.read({**jev_env, **env}, cwd=tmp_path)
+        final = JevDecider.run_jev(call, rule_result, cfg)
         records = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
         return final, records
 
@@ -70,8 +74,8 @@ def go(jev, jev_env, tmp_path):
 def test_request_shape(jev, jev_env, tmp_path):
     p = READ_ONLY
     jev.answer(p, usage={"input_tokens": 900, "output_tokens": 12})
-    cfg = gate_jev.read_jev_config(jev_env, cwd=tmp_path)
-    r = gate_jev.ask_jev(gate_jev.build_state(bash("git status")), cfg)
+    cfg = JevConfig.read(jev_env, cwd=tmp_path)
+    r = JevClient().ask_jev(JevRequest.build_state(bash("git status")), cfg)
     assert r["probabilities"] == p
     assert r["usage"] == {"input_tokens": 900, "output_tokens": 12}
     assert isinstance(r["latencyMs"], int)
@@ -173,8 +177,8 @@ def test_retry_budget_covers_sleeps():
     def opener(req, timeout):
         raise urllib.error.HTTPError(req.full_url, 429, "busy", {"retry-after": "2"}, None)
 
-    cfg = {"apiKey": "k", "url": "https://x.test/", "model": "m", "timeoutMs": 5000, "prompt": gate_jev.builtin_prompt("cloud-change")}
-    r = gate_jev.ask_jev({"tool": "Bash", "command": "ls", "scripts": [], "notes": []}, cfg, opener=opener, sleep=sleep, clock=clock)
+    cfg = {"apiKey": "k", "url": "https://x.test/", "model": "m", "timeoutMs": 5000, "prompt": JevPrompt.builtin_prompt("cloud-change")}
+    r = JevClient(sleep=sleep).ask_jev({"tool": "Bash", "command": "ls", "scripts": [], "notes": []}, cfg, opener=opener, clock=clock)
     assert r["error"] == "http 429"
     assert slept == [2.0, 2.0]  # a third wait of 2 s would end past the 5 s budget
     assert r["latencyMs"] == 4000
@@ -198,19 +202,19 @@ def test_ask_jev_never_raises(error):
     def opener(req, timeout):
         raise error
 
-    cfg = {"apiKey": "k", "url": "https://x.test/", "model": "m", "timeoutMs": 500, "prompt": gate_jev.builtin_prompt("cloud-change")}
-    r = gate_jev.ask_jev({"tool": "Bash", "command": "ls", "scripts": [], "notes": []}, cfg, opener=opener)
+    cfg = {"apiKey": "k", "url": "https://x.test/", "model": "m", "timeoutMs": 500, "prompt": JevPrompt.builtin_prompt("cloud-change")}
+    r = JevClient().ask_jev({"tool": "Bash", "command": "ls", "scripts": [], "notes": []}, cfg, opener=opener)
     assert set(r) == {"error", "latencyMs"}
     assert r["error"] in {"network", "timeout", "http 500"}
 
 
 def test_retry_delay_forms():
-    assert gate_jev.retry_delay(1, "3") == 3000
-    assert gate_jev.retry_delay(1, "0") == 0
-    assert 100 <= gate_jev.retry_delay(1, None) < 150
-    assert 200 <= gate_jev.retry_delay(2, "garbage") < 250
-    assert 200 <= gate_jev.retry_delay(2, "-1") < 250
-    assert gate_jev.retry_delay(1, "Wed, 21 Oct 2015 07:28:00 GMT") == 0  # a past HTTP-date: retry now
+    assert JevClient().retry_delay(1, "3") == 3000
+    assert JevClient().retry_delay(1, "0") == 0
+    assert 100 <= JevClient().retry_delay(1, None) < 150
+    assert 200 <= JevClient().retry_delay(2, "garbage") < 250
+    assert 200 <= JevClient().retry_delay(2, "-1") < 250
+    assert JevClient().retry_delay(1, "Wed, 21 Oct 2015 07:28:00 GMT") == 0  # a past HTTP-date: retry now
 
 
 # ---------------------------------------------------------------------------
@@ -306,13 +310,13 @@ def test_mcp_payload_input_and_cut_note(jev, go):
 
 def test_audit_log_redacted_records(jev, jev_env, tmp_path):
     log = tmp_path / "audit.jsonl"
-    cfg = gate_jev.read_jev_config(jev_env, cwd=tmp_path)
+    cfg = JevConfig.read(jev_env, cwd=tmp_path)
     jev.answer(probs(0.01, 0.98, 0.005, 0.005), usage={"input_tokens": 1000})
-    gate_jev.run_jev(bash("TOPSECRET_X=supersecret123 node a.mjs", [{"path": "a.mjs", "content": "x"}]), None, cfg)
-    gate_jev.run_jev(bash("cat .env"), None, cfg)
-    gate_jev.run_jev(mcp(DBHOST_SQL, {"password": "supersecret123", "q": 1}), DB_RULE, cfg)
+    JevDecider.run_jev(bash("TOPSECRET_X=supersecret123 node a.mjs", [{"path": "a.mjs", "content": "x"}]), None, cfg)
+    JevDecider.run_jev(bash("cat .env"), None, cfg)
+    JevDecider.run_jev(mcp(DBHOST_SQL, {"password": "supersecret123", "q": 1}), DB_RULE, cfg)
     jev.answer(status=401)
-    gate_jev.run_jev(bash("terraform apply"), TF_RULE, cfg)
+    JevDecider.run_jev(bash("terraform apply"), TF_RULE, cfg)
     text = log.read_text()
     assert "supersecret123" not in text, text
     lines = [json.loads(line) for line in text.strip().split("\n")]

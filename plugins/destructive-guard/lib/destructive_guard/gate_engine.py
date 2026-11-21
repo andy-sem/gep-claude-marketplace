@@ -37,7 +37,7 @@ def _closed(result: dict | None) -> bool:
 
 
 def apply_jev(input: Any, result: dict | None, rules: Rules, collected: dict | None, env: Mapping[str, str]) -> dict | None:
-    """The optional Jev layer (gate_jev, imported only when GATE_JEV is set so the output is unchanged
+    """The optional Jev layer (JevDecider, imported only when GATE_JEV is set so the output is unchanged
     without it). Whatever the rules said stays the answer when Jev fails or is unsure; a missing or
     invalid Jev variable asks."""
     if not env.get("GATE_JEV"):
@@ -45,9 +45,10 @@ def apply_jev(input: Any, result: dict | None, rules: Rules, collected: dict | N
     if _closed(result):
         return result
     try:
-        from . import gate_jev
+        from .jev.config import JevConfig
+        from .jev.decider import JevDecider
 
-        cfg = gate_jev.read_jev_config(env)
+        cfg = JevConfig.read(env)
     except Exception as e:  # noqa: BLE001 - any failure here is a config problem: ask
         return Verdict.ask("gate-config", str(e))
     if not cfg:
@@ -70,7 +71,7 @@ def apply_jev(input: Any, result: dict | None, rules: Rules, collected: dict | N
     if scope and ("bash" if tool == "Bash" else "mcp") not in scope:
         return result
     try:
-        return gate_jev.run_jev(call, result, cfg)
+        return JevDecider.run_jev(call, result, cfg)
     except Exception:  # noqa: BLE001
         return result
 

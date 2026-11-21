@@ -77,9 +77,9 @@ def _jev_summary(env: Mapping[str, str]) -> dict[str, Any]:
     if not toggle or toggle.strip() in ("", "0"):
         return {"enabled": False}
     try:
-        from .gate_jev import read_jev_config
+        from .jev.config import JevConfig
 
-        cfg = read_jev_config(env)
+        cfg = JevConfig.read(env)
         if not cfg:
             return {"enabled": False}
         rest = {k: v for k, v in cfg.items() if k not in ("apiKey", "prompt")}

@@ -1,6 +1,6 @@
 """Effective destructive-guard configuration from environment variables (port of config.mjs).
 
-All env parsing for the rules layer lives here; the Jev variables are read by gate_jev.
+All env parsing for the rules layer lives here; the Jev variables are read by the jev package.
 `read_config` is pure (env in, config out) and raises ConfigError for any value it does not
 understand, so the gate can fail closed instead of guessing.
 """
