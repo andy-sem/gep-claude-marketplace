@@ -133,18 +133,18 @@ class TicketLauncher:
                 }
             )
 
-        # With project rules, the session's `intake` step may write the ticket file, and it decides
-        # title and base: start in the main checkout and let the session create the worktree.
-        if config["orchestratorRules"] and not (Path(root) / config["ticketsDir"] / key / "ticket.md").exists():
-            return open_session(
-                {
-                    "mode": "main-checkout",
-                    "cwd": root,
-                    "args": [],
-                    "summary": None,
-                    "note": "no ticket.md yet; the session's intake rules write it",
-                }
-            )
+        # Without a ticket.md, the session's intake writes it (from the tracker or from the project
+        # rules), and it decides title and base: start in the main checkout and let the session create
+        # the worktree. Without a tracker or rules, read_ticket raises the "no ticket file" error.
+        if not (Path(root) / config["ticketsDir"] / key / "ticket.md").exists():
+            if config["tracker"]:
+                note = "no ticket.md yet; the session fetches it from Jira"
+            elif config["orchestratorRules"]:
+                note = "no ticket.md yet; the session's intake rules write it"
+            else:
+                note = None
+            if note:
+                return open_session({"mode": "main-checkout", "cwd": root, "args": [], "summary": None, "note": note})
         ticket = TicketProject(root).read_ticket(key=key, config=config)
         summary = ticket["title"]
 

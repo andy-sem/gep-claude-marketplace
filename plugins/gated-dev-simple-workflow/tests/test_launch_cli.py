@@ -400,6 +400,49 @@ def test_launch_ticket_with_orchestrator_rules_starts_a_ticket_without_ticket_md
     assert normal.stdout.startswith("K-1: orca-worktree\n")
 
 
+# --- tracker ----------------------------------------------------------------------
+
+TRACKER_CONFIG = {"tracker": {"type": "jira"}}
+
+
+def test_dry_run_tracker_key_without_ticket_file(impl, tmp_path):
+    p = Project(tmp_path, config=TRACKER_CONFIG)
+    p.orca()
+    p.osascript()
+    r = p.launch(impl, "--dry-run", "PROJ-7", host=ORCA)
+    assert r.status == 0, r.stderr
+    assert r.stdout.startswith("PROJ-7: main-checkout\n")
+    assert re.search(r"^  note:    .*Jira", r.stdout, re.MULTILINE)
+    assert p.fb.calls("orca") == [] and p.fb.calls("osascript") == []
+
+
+def test_dry_run_tracker_rejects_non_jira_key(impl, tmp_path):
+    p = Project(tmp_path, config=TRACKER_CONFIG)
+    p.orca()
+    r = p.launch(impl, "--dry-run", "add-csv", host=ORCA)
+    assert r.status == 1
+    assert re.search(r"add-csv: .*not a valid ticket key", r.stderr)
+    assert "keyPattern ^[A-Z][A-Z0-9]*-\\d+$" in r.stderr
+    assert r.stdout == ""
+
+
+def test_invalid_tracker_config_exits_1(impl, tmp_path):
+    p = Project(tmp_path, config={"tracker": {"type": "linear"}})
+    r = p.launch(impl, "--dry-run", "PROJ-7", host=ORCA)
+    assert r.status == 1
+    assert "tracker.type" in r.stderr
+
+
+def test_all_with_tracker_lists_only_ticket_files(impl, tmp_path):
+    p = Project(tmp_path, config=TRACKER_CONFIG, tickets={"PROJ-1": "# One\n"})
+    p.orca()
+    r = p.launch(impl, "--all", "--dry-run", host=ITERM)
+    assert r.status == 0, r.stderr
+    assert r.stdout.startswith("PROJ-1: main-checkout\n")
+    assert r.stdout.count(": main-checkout") + r.stdout.count(": orca-worktree") == 1
+    assert p.fb.calls("osascript") == []
+
+
 # --- main -----------------------------------------------------------------------
 
 
