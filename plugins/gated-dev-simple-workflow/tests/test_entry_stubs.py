@@ -28,7 +28,7 @@ def test_old_python_gets_exit_3(old_python, stub):
     check_old_python_exit_3(old_python, stub[0])
 
 
-@pytest.mark.parametrize("stub", [s for s in STUBS if s[1] not in ("notify", "watch_pr")], ids=stub_id)
+@pytest.mark.parametrize("stub", [s for s in STUBS if s[1] not in ("notify", "watch_pr", "launch")], ids=stub_id)
 def test_314_imports_package(tmp_path, stub):
     check_314_imports_package(tmp_path, *stub)
 
@@ -60,3 +60,18 @@ def test_314_watch_pr_stub_hands_over_to_the_real_package(tmp_path):
     )
     assert proc.returncode == 2, proc.stderr
     assert json.loads(proc.stdout)["outcome"] == "usage"
+
+
+def test_314_launch_stub_hands_over_to_the_real_package(tmp_path):
+    # P12: not the planted module next to the cwd; --help prints the usage without any git or orca call.
+    (tmp_path / "gated_dev.py").write_text("raise SystemExit(99)\n")
+    proc = subprocess.run(
+        [require_new_python(os.environ), "-I", str(GD / "scripts" / "launch.py"), "--help"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env=clean_env(),
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("Usage: launch.mjs ")
