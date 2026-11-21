@@ -29,7 +29,7 @@ The two plugins are independent and installable on their own:
 - Optional **Jev** classifier (`lib/destructive_guard/jev/`, prompts in `jev/*.json`, off by default). With Jev on, its confident answer wins; rules decide in the uncertain band, on errors and when Jev is off. Fail-closed cases always ask and are never sent to Jev.
 - `skills/check` + `lib/check.py`: dry-run a command/MCP call through the gate, or print effective config (`/destructive-guard:check`).
 - The README is the user-facing reference for rules and configuration; keep it in sync with behaviour.
-- `formal/`: Lean 4 model of the planned lean gate (`SimpleGate.lean`, theses S1–S8; plan in `docs/plans/lean-gate.md`). Dev-only: ships as source but users never build it, and the plugin runs without Lean. Build with `elan` (`~/.elan`, toolchain pinned in `lean-toolchain`): `cd plugins/destructive-guard/formal && PATH="$HOME/.elan/bin:$PATH" lake build`; keep it free of errors and `sorry`. `.lake/` is gitignored.
+- `formal/`: Lean 4 model of the planned lean gate (`SimpleGate.lean`, theses S1–S8). Dev-only: ships as source but users never build it, and the plugin runs without Lean. Build with `elan` (`~/.elan`, toolchain pinned in `lean-toolchain`): `cd plugins/destructive-guard/formal && PATH="$HOME/.elan/bin:$PATH" lake build`; keep it free of errors and `sorry`. `.lake/` is gitignored.
 
 ### `gated-dev-simple-workflow` (`plugins/gated-dev-simple-workflow/`)
 
@@ -43,7 +43,7 @@ The two plugins are independent and installable on their own:
 
 ## Work in progress
 
-Both plugins run on Python; the repo contains no JavaScript (`tests/test_no_js.py` keeps it that way). Design decisions and history of each plugin (origin, binding decisions, Python port, class refactor) are in the "Design decisions and history" section of its README; read it before changing a plugin. Open plan: `docs/plans/lean-gate.md` (proposal to simplify `destructive-guard` to Jev only; decisions pending).
+Both plugins run on Python; the repo contains no JavaScript (`tests/test_no_js.py` keeps it that way). Design decisions and history of each plugin (origin, binding decisions, Python port, class refactor) are in the "Design decisions and history" section of its README; read it before changing a plugin.
 ## Public repo hygiene (binding)
 
 - Never write the source project's app name, ticket keys, cloud/database project ids or branch names here. Use neutral placeholders (`my-app-dev`, `apps/web`, `PROJ-1`).
