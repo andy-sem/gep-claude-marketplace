@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from .errors import JevConfigError
 from .paths import project_path
 
 JEV_URL = "https://api.typesafe.ai/v1/systemone"
@@ -45,10 +46,6 @@ PROMPTS_DIR = Path(__file__).resolve().parent.parent.parent / "jev"
 DEFAULT_PROMPT = "destructive"
 LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 SCOPES = ["bash", "mcp"]
-
-
-class JevConfigError(Exception):
-    pass
 
 
 # ---------------------------------------------------------------------------

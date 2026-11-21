@@ -9,7 +9,7 @@ import json
 import pytest
 
 from destructive_guard import gate_jev
-from destructive_guard.gate_jev import JevConfigError
+from destructive_guard.errors import JevConfigError
 from testkit.jev_mock import probs
 
 BASE_ENV = {"GATE_JEV": "1", "TYPESAFE_API_KEY": "key-123"}

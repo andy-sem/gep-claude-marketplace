@@ -4,11 +4,11 @@ import pytest
 
 from destructive_guard import gate_scripts
 from destructive_guard.gate_engine import gate
-from destructive_guard.rules import load_rules
+from destructive_guard.rules.rule_loader import RuleLoader
 from testkit import DG
 from testkit.projects import provision_project, temp_project
 
-RULES = load_rules(DG / "tests" / "fixtures" / "rules.json")
+RULES = RuleLoader.load_rules(DG / "tests" / "fixtures" / "rules.json")
 
 
 def bash(command, cwd):

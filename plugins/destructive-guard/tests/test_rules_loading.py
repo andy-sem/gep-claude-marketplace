@@ -4,19 +4,12 @@ import json
 
 import pytest
 
-from destructive_guard.rules import (
-    DEFAULT_PACKS,
-    PACKS_DIR,
-    RulesError,
-    compile_js_regex,
-    compose_rules,
-    load_packs,
-    load_rules,
-    pack_path,
-    parse_rules,
-)
+from destructive_guard.errors import RulesError
+from destructive_guard.rules.js_regex import JsRegex
+from destructive_guard.rules.rule_loader import RuleLoader
+from destructive_guard.rules.rule_parser import RuleParser
 
-PACKS = sorted(p.stem for p in PACKS_DIR.glob("*.json"))
+PACKS = sorted(p.stem for p in RuleLoader.PACKS_DIR.glob("*.json"))
 
 
 def write(path, obj):
@@ -25,25 +18,25 @@ def write(path, obj):
 
 
 def test_constants():
-    assert DEFAULT_PACKS == ["base", "destructive"]
-    assert pack_path("base") == str(PACKS_DIR / "base.json")
+    assert RuleLoader.DEFAULT_PACKS == ["base", "destructive"]
+    assert RuleLoader.pack_path("base") == str(RuleLoader.PACKS_DIR / "base.json")
     assert PACKS == ["base", "destructive", "postgres", "terraform"]
 
 
 def test_every_pack_regex_compiles():
     for name in PACKS:
-        rules = load_packs([pack_path("base"), pack_path(name)] if name != "base" else [pack_path("base")])
+        rules = RuleLoader.load_packs([RuleLoader.pack_path("base"), RuleLoader.pack_path(name)] if name != "base" else [RuleLoader.pack_path("base")])
         assert rules["rules"] or name == "base", name
 
 
 def test_regex_translation():
-    assert compile_js_regex(r"^a$").search("a\n") is None
-    assert compile_js_regex(r"[$]").search("$")
-    assert compile_js_regex(r"\$x").search("$x")
-    assert compile_js_regex(r"(?<n>a)\1?").search("a")
-    assert compile_js_regex("(?<!a)b").search("cb")
-    assert compile_js_regex(r"\d").search("٣") is None  # JS \d is ASCII
-    assert compile_js_regex("ab", "i").search("AB")
+    assert JsRegex.compile_js_regex(r"^a$").search("a\n") is None
+    assert JsRegex.compile_js_regex(r"[$]").search("$")
+    assert JsRegex.compile_js_regex(r"\$x").search("$x")
+    assert JsRegex.compile_js_regex(r"(?<n>a)\1?").search("a")
+    assert JsRegex.compile_js_regex("(?<!a)b").search("cb")
+    assert JsRegex.compile_js_regex(r"\d").search("٣") is None  # JS \d is ASCII
+    assert JsRegex.compile_js_regex("ab", "i").search("AB")
 
 
 def test_load_rules_errors_name_the_problem(tmp_path):
@@ -76,12 +69,12 @@ def test_load_rules_errors_name_the_problem(tmp_path):
     for text, match in cases.items():
         write(p, text)
         with pytest.raises(RulesError, match=match):
-            load_rules(p)
+            RuleLoader.load_rules(p)
     with pytest.raises(RulesError, match="cannot read rules file"):
-        load_rules(tmp_path / "missing.json")
+        RuleLoader.load_rules(tmp_path / "missing.json")
     with pytest.raises(RulesError, match="cannot read rules file"):
         write(p, '{"x": NaN}')
-        load_rules(p)
+        RuleLoader.load_rules(p)
 
 
 def test_runners_legacy_forms_merge(tmp_path):
@@ -89,14 +82,14 @@ def test_runners_legacy_forms_merge(tmp_path):
         tmp_path / "r.json",
         {"runners": [["npx"], ["pnpm", "exec"], {"program": "pnpm", "valueOptions": ["-C"]}, ["pnpm", "dlx"]]},
     )
-    runners = {r["program"]: r for r in load_rules(p)["runners"]}
+    runners = {r["program"]: r for r in RuleLoader.load_rules(p)["runners"]}
     assert runners["npx"] == {"program": "npx", "valueOptions": [], "subcommands": [], "shellOptions": [], "bareBin": True}
     assert runners["pnpm"]["subcommands"] == ["exec", "dlx"]
     assert runners["pnpm"]["valueOptions"] == ["-C"]
 
 
 def test_parse_rules_defaults():
-    parsed = parse_rules({"rules": [{"id": "g", "kind": "cli-gated"}, {"id": "m", "kind": "mcp-pattern", "toolWords": ["Drop"]}]})
+    parsed = RuleParser.parse_rules({"rules": [{"id": "g", "kind": "cli-gated"}, {"id": "m", "kind": "mcp-pattern", "toolWords": ["Drop"]}]})
     g, m = parsed["rules"]
     assert g["scriptScan"] is True
     assert g["dynamicArgs"] == "ask"
@@ -104,7 +97,7 @@ def test_parse_rules_defaults():
     assert m["tool"].pattern == "^mcp__"
     assert m["toolWords"] == ["drop"]
     assert m["inputPattern"] is None
-    assert parse_rules({}) == {
+    assert RuleParser.parse_rules({}) == {
         "wrappers": [],
         "runners": [],
         "inertPrograms": [],
@@ -116,34 +109,34 @@ def test_parse_rules_defaults():
 
 
 def test_when_args_follow_ignore_case():
-    rule = parse_rules({"rules": [{"id": "g", "kind": "cli-gated", "whenArgs": ["^PROD"], "ignoreCase": True}]})["rules"][0]
+    rule = RuleParser.parse_rules({"rules": [{"id": "g", "kind": "cli-gated", "whenArgs": ["^PROD"], "ignoreCase": True}]})["rules"][0]
     assert rule["whenArgs"][0].search("prod-1")
-    rule = parse_rules({"rules": [{"id": "g", "kind": "cli-gated", "whenArgs": ["^PROD"]}]})["rules"][0]
+    rule = RuleParser.parse_rules({"rules": [{"id": "g", "kind": "cli-gated", "whenArgs": ["^PROD"]}]})["rules"][0]
     assert rule["whenArgs"][0].search("prod-1") is None
 
 
 def test_compose_errors(tmp_path):
     a = write(tmp_path / "a.json", {"rules": [{"id": "x", "kind": "cli-gated", "programs": ["x"], "gatedPrefixes": [[]]}]})
     with pytest.raises(RulesError, match=r'a\.json: duplicate rule id "x"'):
-        compose_rules([a, a])
+        RuleLoader.compose_rules([a, a])
     with pytest.raises(RulesError, match="must contain a JSON object"):
-        compose_rules([write(tmp_path / "b.json", "[]")])
+        RuleLoader.compose_rules([write(tmp_path / "b.json", "[]")])
     with pytest.raises(RulesError, match="inertUnsafeFlags.rg must be an array"):
-        compose_rules([write(tmp_path / "d.json", {"inertUnsafeFlags": {"rg": "x"}})])
+        RuleLoader.compose_rules([write(tmp_path / "d.json", {"inertUnsafeFlags": {"rg": "x"}})])
     with pytest.raises(RulesError, match="inertUnsafeFlags must be an object"):
-        compose_rules([write(tmp_path / "e.json", {"inertUnsafeFlags": []})])
+        RuleLoader.compose_rules([write(tmp_path / "e.json", {"inertUnsafeFlags": []})])
     one = write(tmp_path / "f.json", {"extra": 1})
     with pytest.raises(RulesError, match="extra is set by more than one pack"):
-        compose_rules([one, one])
+        RuleLoader.compose_rules([one, one])
     arr = write(tmp_path / "g.json", {"extra": [1]})
     with pytest.raises(RulesError, match="extra must be an array"):
-        compose_rules([one, arr])
+        RuleLoader.compose_rules([one, arr])
 
 
 def test_compose_merges_in_first_seen_order(tmp_path):
     a = write(tmp_path / "a.json", {"inertPrograms": ["ls", "cat"], "inertUnsafeFlags": {"rg": ["--pre"]}, "runners": [["npx"]]})
     b = write(tmp_path / "b.json", {"inertPrograms": ["cat", "wc"], "inertUnsafeFlags": {"rg": ["--pre", "-z"], "fd": ["-x"]}, "runners": [["npx"]]})
-    m = compose_rules([a, b])
+    m = RuleLoader.compose_rules([a, b])
     assert m["inertPrograms"] == ["ls", "cat", "wc"]
     assert m["inertUnsafeFlags"] == {"rg": ["--pre", "-z"], "fd": ["-x"]}
     assert m["runners"] == [["npx"], ["npx"]]  # non-string lists are concatenated, not de-duplicated

@@ -25,7 +25,8 @@ from .gate_engine import (
     strip_wrappers,
 )
 from .gate_engine import Cmd as _Cmd
-from .rules import Rules
+from .rules.rule_loader import Rules
+from .verdict import Verdict
 
 __all__ = [
     "MAX_FILES",
@@ -759,10 +760,6 @@ def collect_scripts(command: str, rules: Rules, *, cwd: str, root: str) -> dict[
 # ---------------------------------------------------------------------------
 
 
-def ask(rule_id: str, detail: str) -> dict[str, str]:
-    return {"decision": "ask", "reason": f"{rule_id}: {detail}"}
-
-
 def escape_re(s: str) -> str:
     return re.escape(s)
 
@@ -795,15 +792,15 @@ def scan_scripts(collected: dict | None, rules: Rules) -> dict | None:
         return None
     problem = next((p for p in collected["problems"] if not p["exempt"]), None)
     if problem:
-        return ask("script", f"{problem['path']} {problem['reason']}")
+        return Verdict.ask("script", f"{problem['path']} {problem['reason']}")
     scanned = [f for f in collected["files"] if not f["exempt"]]
     names = [(name, re.compile(rf"(?<![\w.@-]){escape_re(name)}(?![\w-])", re.ASCII)) for name in programs]
     for f in scanned:
         for name, rx in names:
             if rx.search(f["content"]):
-                return ask("script", f"{f['path']} runs {name}")
+                return Verdict.ask("script", f"{f['path']} runs {name}")
     for f in scanned:
         for rx in patterns:
             if rx.search(f["content"]):
-                return ask("script", f"{f['path']} references {rx.pattern}")
+                return Verdict.ask("script", f"{f['path']} references {rx.pattern}")
     return None

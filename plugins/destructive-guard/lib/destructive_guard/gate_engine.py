@@ -14,33 +14,16 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-from .rules import (
-    DEFAULT_PACKS,
-    PACKS_DIR,
-    Rules,
-    RulesError,
-    compose_rules,
-    load_packs,
-    load_rules,
-    pack_path,
-    parse_rules,
-)
+from .errors import UnparsableError
+from .rules.rule_loader import Rules
+from .verdict import Verdict
 
 __all__ = [
-    "DEFAULT_PACKS",
-    "PACKS_DIR",
     "Cmd",
     "Rules",
-    "RulesError",
-    "UnparsableError",
     "classify",
-    "compose_rules",
     "gate",
-    "load_packs",
-    "load_rules",
     "nested_shell_string",
-    "pack_path",
-    "parse_rules",
     "shell_script_index",
     "split_command",
     "strip_wrappers",
@@ -80,10 +63,6 @@ WRAPPER_VALUE_OPTS: dict[str, list[str]] = {
         "--delimiter", "--eof", "--arg-file", "--max-chars", "--process-slot-var",
     ],
 }
-
-
-class UnparsableError(Exception):
-    pass
 
 
 class Scope:
@@ -657,10 +636,6 @@ def normalize(raw_tokens: list[str], rules: Rules) -> dict[str, Any]:
     raise UnparsableError("wrapper nesting too deep")
 
 
-def ask(rule_id: str, detail: str) -> dict[str, Any]:
-    return {"decision": "ask", "reason": f"{rule_id}: {detail}"}
-
-
 def is_subsequence(lst: list[str], seq: list[str]) -> bool:
     """True when `seq` occurs in `lst` in order, possibly with other words between (flag values sit
     between subcommand words: `tool --dir x db push`)."""
@@ -699,7 +674,7 @@ def allowlist_decision(rule: dict, rest: list[str], later: bool) -> dict | None:
         return w["tok"] in rule["writeVerbs"]
 
     def write_ask(w: dict) -> dict:
-        return ask(rule["id"], f'write verb "{w["tok"]}"')
+        return Verdict.ask(rule["id"], f'write verb "{w["tok"]}"')
 
     firm = [{**w, "i": i} for i, w in enumerate(words) if w["firm"]]
     s = 0
@@ -729,7 +704,7 @@ def allowlist_decision(rule: dict, rest: list[str], later: bool) -> dict | None:
         return None
     if any(w["tok"] in rule["readVerbs"] for w in firm):
         return None
-    return ask(rule["id"], "unknown subcommand")
+    return Verdict.ask(rule["id"], "unknown subcommand")
 
 
 def apply_cli_rule(rule: dict, tokens: list[str], *, later: bool = False, args_from_input: bool = False) -> dict | None:
@@ -745,7 +720,7 @@ def apply_cli_rule(rule: dict, tokens: list[str], *, later: bool = False, args_f
         if is_help_call(rule, rest):
             return None
         if dynamic:
-            return ask(rule["id"], "dynamic argument")
+            return Verdict.ask(rule["id"], "dynamic argument")
         return allowlist_decision(rule, rest, later)
     if kind == "cli-gated":
         if program not in rule["programs"]:
@@ -753,7 +728,7 @@ def apply_cli_rule(rule: dict, tokens: list[str], *, later: bool = False, args_f
         if is_help_call(rule, rest):
             return None
         if dynamic and rule["dynamicArgs"] == "ask":
-            return ask(rule["id"], "dynamic argument")
+            return Verdict.ask(rule["id"], "dynamic argument")
         positionals = [t for t in rest if not t.startswith("-")]
         if not any(is_subsequence(positionals, p) for p in rule["gatedPrefixes"]):
             return None
@@ -770,7 +745,7 @@ def apply_cli_rule(rule: dict, tokens: list[str], *, later: bool = False, args_f
             has_flag(rest, f, True) if rule["shortBundles"] else any(t == f or t.startswith(f"{f}=") for t in rest)
             for f in rule["unlessFlags"]
         )
-        return None if exempt else ask(rule["id"], "gated invocation")
+        return None if exempt else Verdict.ask(rule["id"], "gated invocation")
     return None
 
 
@@ -844,10 +819,6 @@ def shell_command_string(tokens: list[str], loose: bool) -> list[str]:
     return [info["command"]]
 
 
-def ask_inert_flag() -> dict:
-    return {"decision": "ask", "reason": "inert program with command flag"}
-
-
 def has_unsafe_flag(program: str, args: list[str], rules: Rules) -> bool:
     """True when `args` contain a flag of `program` listed in inertUnsafeFlags. Matches the flag
     itself, `--flag=value`, a joined short value (`-Pcmd`), a short flag inside a bundle (`-aPcmd`), a
@@ -877,7 +848,7 @@ def later_scan(raw: list[str], tokens: list[str], rules: Rules, depth: int, loos
     run their arguments and are skipped, unless an inertUnsafeFlags flag makes them run one (`rg --pre
     CMD`, `man -P CMD`): then the call is not inert and asks without parsing the value."""
     if basename(tokens[0]) in rules["inertPrograms"]:
-        return ask_inert_flag() if has_unsafe_flag(basename(tokens[0]), tokens[1:], rules) else None
+        return Verdict.inert_flag() if has_unsafe_flag(basename(tokens[0]), tokens[1:], rules) else None
     j = 1
     while j < len(raw):
         t = raw[j]
@@ -892,7 +863,7 @@ def later_scan(raw: list[str], tokens: list[str], rules: Rules, depth: int, loos
             while j + 1 < len(raw) and raw[j + 1] != ";" and not (raw[j + 1] == "+" and raw[j] == "{}"):
                 j += 1
             if has_unsafe_flag(base, raw[start : j + 1], rules):
-                return ask_inert_flag()
+                return Verdict.inert_flag()
             j += 1
             continue
         if any(r["program"] == base for r in rules["runners"]):
@@ -956,11 +927,11 @@ def eval_mcp(rule: dict, tool_input: dict, rules: Rules) -> dict | None:
         suffix = (m.group(1) if m.re.groups >= 1 else None) or ""
         if any(rx.search(suffix) for rx in rule["readTools"]):
             return None
-        return ask(rule["id"], suffix)
+        return Verdict.ask(rule["id"], suffix)
     # mcp-as-cli
     args = _member(tool_input.get("tool_input"), rule["argsField"])
     if not isinstance(args, list) or any(not isinstance(a, str) for a in args):
-        return ask("unparsable", f'{tool_name} is missing a string array "{rule["argsField"]}"')
+        return Verdict.ask("unparsable", f'{tool_name} is missing a string array "{rule["argsField"]}"')
     lst = args[1:] if args and basename(args[0]) == rule["program"] else args
     return eval_tokens(
         [rule["program"], *lst],
@@ -1005,7 +976,7 @@ def eval_mcp_pattern(rule: dict, tool_input: dict) -> dict | None:
         hit = any(rule["inputPattern"].search(t) for t in input_strings(tool_input.get("tool_input")))
         if not hit:
             return None
-    return ask(rule["id"], name[name.rfind("__") + 2 :])
+    return Verdict.ask(rule["id"], name[name.rfind("__") + 2 :])
 
 
 def is_cli_rule(rule: dict) -> bool:
@@ -1024,22 +995,22 @@ def classify(input: Any, rules: Rules, *, strict: bool = True) -> dict | None:
     try:
         return _classify_inner(input, rules, strict)
     except UnparsableError as e:
-        return ask("unparsable", str(e))
+        return Verdict.ask("unparsable", str(e))
     except Exception as e:  # noqa: BLE001 (fail closed on any engine bug)
-        return ask("unparsable", f"internal error: {e}")
+        return Verdict.ask("unparsable", f"internal error: {e}")
 
 
 def _classify_inner(input: Any, rules: Rules, strict: bool) -> dict | None:
     if not isinstance(input, dict):
-        return ask("unparsable", "hook input is not an object")
+        return Verdict.ask("unparsable", "hook input is not an object")
     tool_name = input.get("tool_name")
     if not isinstance(tool_name, str):
-        return ask("unparsable", "hook input has no tool_name")
+        return Verdict.ask("unparsable", "hook input has no tool_name")
 
     if tool_name == "Bash":
         command = _member(input.get("tool_input"), "command")
         if not isinstance(command, str):
-            return ask("unparsable", "Bash call has no command")
+            return Verdict.ask("unparsable", "Bash call has no command")
         loose = not strict
         if loose:
             try:
@@ -1062,7 +1033,7 @@ def _classify_inner(input: Any, rules: Rules, strict: bool) -> dict | None:
         except UnparsableError as e:
             # The command string itself could not be parsed. Marked so the optional Jev layer may
             # judge it; input-level failures stay closed.
-            return {**ask("unparsable", str(e)), "commandUnparsable": True}
+            return {**Verdict.ask("unparsable", str(e)), "commandUnparsable": True}
         return None
 
     for rule in rules["rules"]:
@@ -1102,7 +1073,7 @@ def apply_jev(input: Any, result: dict | None, rules: Rules, collected: dict | N
 
         cfg = gate_jev.read_jev_config(env)
     except Exception as e:  # noqa: BLE001 - any failure here is a config problem: ask
-        return ask("gate-config", str(e))
+        return Verdict.ask("gate-config", str(e))
     if not cfg:
         return result
     tool = _member(input, "tool_name")
@@ -1162,7 +1133,7 @@ def gate(
             if not result:
                 result = gate_scripts.scan_scripts(collected, rules)
         except Exception as e:  # noqa: BLE001
-            return ask("gate-config", f"script scan failed: {e}")
+            return Verdict.ask("gate-config", f"script scan failed: {e}")
     if trace is not None:
         trace["rule"] = result
     return apply_jev(input, result, rules, collected, env)

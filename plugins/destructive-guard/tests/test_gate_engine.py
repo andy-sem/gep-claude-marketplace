@@ -8,9 +8,9 @@ import json
 
 import pytest
 
-from destructive_guard.gate_engine import UnparsableError, classify, split_command
-from destructive_guard.rules import RulesError
-from destructive_guard.rules import load_rules as _load_rules
+from destructive_guard.errors import RulesError, UnparsableError
+from destructive_guard.gate_engine import classify, split_command
+from destructive_guard.rules.rule_loader import RuleLoader
 from testkit import DG, REPO
 from testkit.check_cli import check_call
 from testkit.hook import decision, run_hook
@@ -25,7 +25,7 @@ def reason(impl, command, cwd):
 
 
 def load_rules(path):
-    return _load_rules(path)
+    return RuleLoader.load_rules(path)
 
 
 def raises(name, fn):
@@ -115,13 +115,6 @@ def test_classify_input_level_failures_always_ask(engine_rules):
         assert classify({}, engine_rules, strict=strict)["reason"] == "unparsable: hook input has no tool_name"
         assert classify({"tool_name": "Bash"}, engine_rules, strict=strict)["reason"] == "unparsable: Bash call has no command"
         assert classify({"tool_name": "Bash", "tool_input": []}, engine_rules, strict=strict)["decision"] == "ask"
-
-
-def test_rules_api_is_reexported():
-    from destructive_guard import gate_engine, rules
-
-    for name in ("RulesError", "PACKS_DIR", "DEFAULT_PACKS", "pack_path", "load_rules", "compose_rules", "load_packs", "parse_rules"):
-        assert getattr(gate_engine, name) is getattr(rules, name)
 
 
 # --- splitCommand / loadRules ---

@@ -5,18 +5,19 @@ from pathlib import Path
 
 import pytest
 
+from destructive_guard.errors import RulesError
 from destructive_guard.gate_scripts import (
     collect_scripts,
     find_project_root,
     glob_to_regexp,
     scan_scripts,
 )
-from destructive_guard.rules import RulesError, load_rules
+from destructive_guard.rules.rule_loader import RuleLoader
 from testkit import DG
 from testkit.projects import provision_project, temp_project
 
 SHIPPED = DG / "tests" / "fixtures" / "rules.json"
-RULES = load_rules(SHIPPED)
+RULES = RuleLoader.load_rules(SHIPPED)
 
 
 def collect_many(root: Path, commands: list[str], cwd: Path | None = None) -> list[dict]:
@@ -584,12 +585,12 @@ def test_load_rules_validates_script_patterns_and_script_scan_exempt(tmp_path):
     ]:
         p.write_text(json.dumps(extra))
         with pytest.raises(RulesError):
-            load_rules(p)
+            RuleLoader.load_rules(p)
     ok_path = tmp_path / "ok.json"
     ok_path.write_text(json.dumps({"scriptPatterns": ["a+b"], "scriptScanExempt": ["x/*.js"]}))
     empty_path = tmp_path / "empty.json"
     empty_path.write_text(json.dumps({}))
-    ok, empty, shipped = load_rules(ok_path), load_rules(empty_path), load_rules(SHIPPED)
+    ok, empty, shipped = RuleLoader.load_rules(ok_path), RuleLoader.load_rules(empty_path), RuleLoader.load_rules(SHIPPED)
     assert ok["scriptPatterns"][0].search("aab")
     assert ok["scriptScanExempt"] == ["x/*.js"]
     assert empty["scriptPatterns"] == []

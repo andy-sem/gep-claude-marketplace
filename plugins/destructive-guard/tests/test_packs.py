@@ -5,20 +5,15 @@ import re
 
 import pytest
 
-from destructive_guard.rules import (
-    DEFAULT_PACKS,
-    RulesError,
-    compose_rules,
-    load_packs,
-    pack_path,
-)
+from destructive_guard.errors import RulesError
+from destructive_guard.rules.rule_loader import RuleLoader
 from testkit import DG
 from testkit.hook import bash_input, decision, run_hook
 
 FIXTURE = json.loads((DG / "tests" / "fixtures" / "rules.json").read_text())
 
 
-compose = compose_rules
+compose = RuleLoader.compose_rules
 
 
 def raises_rules_error(fn):
@@ -27,7 +22,7 @@ def raises_rules_error(fn):
 
 
 def test_ported_packs_match_the_test_ruleset():
-    composed = compose([pack_path(n) for n in ("base", "postgres", "terraform")])
+    composed = compose([RuleLoader.pack_path(n) for n in ("base", "postgres", "terraform")])
     for key in ("wrappers", "runners", "inertPrograms", "inertUnsafeFlags"):
         assert composed[key] == FIXTURE[key], key
     for p in composed["scriptPatterns"]:
@@ -40,7 +35,7 @@ def test_ported_packs_match_the_test_ruleset():
 
 @pytest.mark.parametrize("name", ["destructive", "postgres", "terraform"])
 def test_every_pack_loads_after_base(name):
-    load_packs([pack_path("base"), pack_path(name)])
+    RuleLoader.load_packs([RuleLoader.pack_path("base"), RuleLoader.pack_path(name)])
 
 
 def test_compose_rejects_duplicates_and_bad_shapes(tmp_path):
@@ -68,7 +63,7 @@ def test_compose_merges_string_lists_without_duplicates(tmp_path):
 
 
 def test_default_packs_is_base_and_destructive():
-    assert DEFAULT_PACKS == ["base", "destructive"]
+    assert RuleLoader.DEFAULT_PACKS == ["base", "destructive"]
 
 
 def test_without_gate_rules_hook_loads_default_packs(impl, tmp_path):
