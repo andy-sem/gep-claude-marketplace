@@ -38,6 +38,7 @@ stops the run with a message (nothing is guessed).
 | `models` | `spec: sonnet`, `plan: opus`, `dev: sonnet`, `review: sonnet`, `reviewRisk: opus` | Model per stage; keys given here override the defaults one by one. |
 | `orchestratorRules` | none | Repo-relative path to a Markdown file of extra orchestrator steps, one `## <event>` section per event (SKILL.md section 0a). A missing file or an unknown event heading stops the run. A ticket without `ticket.md` may then be started: the `intake` section writes it. |
 | `tracker` | none (the ticket is a file) | Takes the ticket from an issue tracker instead of a hand-written `ticket.md`. Only Jira is supported; see [Tracker: Jira](#tracker-jira). |
+| `flow` | none | Settings of `/ticket-flow`, which runs the subtasks of a Jira parent. Needs a `tracker`; see [Flow](#flow). |
 
 ## Tracker: Jira
 
@@ -73,6 +74,39 @@ tokens, no client of its own); behaviour is described in
 - `keyPattern` defaults to `^[A-Z][A-Z0-9]*-\d+$` (Jira keys such as `PROJ-1`).
 - `orchestratorRules` may not have a `## intake` section when a `tracker` is
   set, because the tracker does the intake. That is a config error.
+
+## Flow
+
+Optional, for `/ticket-flow` (pick rules and state: [flow.md](flow.md)). Setting
+`flow` without a `tracker` is a config error.
+
+```json
+"flow": {
+  "max": 1,
+  "jql": "parent = {parent} ORDER BY Rank ASC",
+  "pickRules": [
+    "prefer the earliest phase or workstream; summaries look like 'P1 WS2: ...'"
+  ],
+  "pollSeconds": 60,
+  "staleHours": 3,
+  "lostWatchMinutes": 10,
+  "remoteControl": false
+}
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `max` | `1` | Runs holding a slot at once. 1 to 10. |
+| `jql` | `parent = {parent} ORDER BY Rank ASC` | Candidate query; must contain `{parent}`. The order is the base priority. |
+| `pickRules` | `[]` | Extra plain-language rules for the judgement step of the pick. |
+| `pollSeconds` | `60` | Poll interval of `flow.py wait`. 15 to 3600. |
+| `staleHours` | `3` | A slot-holding run whose `state.json` has not changed for this long is reported once. |
+| `lostWatchMinutes` | `10` | A `done` run with an open PR and a watch heartbeat older than this has lost its watch; the driver reopens its session. |
+| `remoteControl` | `false` | Launch sessions with `--remote-control`. |
+
+An unknown sub-key or a wrong type stops the run with a message. The flags
+`--max N` and `--once` of `/ticket-flow` override per run; `--max` is stored in
+the flow state, so a continued flow keeps it.
 
 ## The ticket file
 
