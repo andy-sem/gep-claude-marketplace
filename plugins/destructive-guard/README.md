@@ -10,7 +10,7 @@ is tunable through env variables.
   Code's normal permission rules apply to everything else.
 - **Parses, does not grep.** `echo rm -rf /` or a commit message that
   mentions `git push --force` pass; `sudo xargs rm -rf`, `bash -c '…'` and
-  `npx … ` wrappers are seen through.
+  <!-- recognises-js -->`npx … `<!-- /recognises-js --> wrappers are seen through.
 - **Fails closed.** An engine error or invalid configuration asks with a
   `gate-config:` reason instead of letting calls through.
 - **Optional Jev classifier** for what static rules cannot see (off by default).
@@ -22,8 +22,15 @@ is tunable through env variables.
 /plugin install destructive-guard@gep-claude-marketplace
 ```
 
-Install it once at user scope to protect every session. Requires **Node.js**
-on `PATH` (without it, every gated call asks). `jq` is optional.
+Install it once at user scope to protect every session. Requires
+**Python >= 3.14** (standard library only, no packages to install). The hook
+uses `GATE_INFRA_PYTHON` if set, else `python3.14`, else `python3` from `PATH`,
+and starts it in isolated mode (`-I`). With no suitable Python (missing, or
+older than 3.14, as the system `python3` often is), every gated call asks with
+`unparsable: python unavailable`; it never allows. Install 3.14 with Homebrew
+(`brew install python@3.14`), `uv python install 3.14`, pyenv
+(`pyenv install 3.14`) or from python.org, and, if it is not first on `PATH`
+as `python3.14`/`python3`, set `GATE_INFRA_PYTHON` to its path.
 
 ## What it asks on
 
@@ -74,7 +81,7 @@ subdirectory:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `GATE_ENABLED` | `1` | `0` turns both hooks off (no node is started). |
+| `GATE_ENABLED` | `1` | `0` turns both hooks off (no Python is started). |
 | `GATE_CHECKS` | `destructive` | Comma list of built-in packs: `destructive`, `postgres` (any `psql`/`pg_restore`), `terraform` (apply, import, state changes, …). `base` (wrappers, runners, inert programs) is always loaded. `none` loads no pack. |
 | `GATE_RULES_FILE` | unset | Your own rules file(s), `:`-separated, loaded after the packs (see [Writing rules](#writing-rules)). With `GATE_CHECKS=none` they replace the packs. |
 | `GATE_DISABLE_RULES` | unset | Comma list of rule ids to drop. The id is the prefix of the ask reason (`git-push-force: gated invocation`) and the `source` of `/destructive-guard:check`. |
@@ -115,7 +122,7 @@ directly. It dry-runs a call through the effective configuration (same env
 variables, packs and rules files as the hook) and never runs it:
 
 ```text
-$ node lib/check.mjs 'git push --force origin main'
+$ python3 lib/check.py 'git push --force origin main'
 Bash: git push --force origin main
 decision: ask
 source:   git-push-force
@@ -243,13 +250,13 @@ Top-level keys besides `rules`:
 | Key | Meaning |
 | --- | --- |
 | `wrappers` | Programs that run their arguments (`sudo`, `xargs`, …); the wrapped command is checked. |
-| `runners` | Package runners (`npx`, `pnpm exec`, …): `program`, `subcommands`, `valueOptions` (options that take a value), `shellOptions` (`-c`), `bareBin`. |
+| `runners` | <!-- recognises-js -->Package runners (`npx`, `pnpm exec`, …)<!-- /recognises-js -->: `program`, `subcommands`, `valueOptions` (options that take a value), `shellOptions` (`-c`), `bareBin`. |
 | `inertPrograms` | Programs that never change anything; `inertUnsafeFlags` (`{ "rg": ["--pre"] }`) lists the flags that make them unsafe. |
 | `scriptPatterns` | Regexes: a project script the command runs that matches one asks. |
 | `scriptScanExempt` | Globs of project scripts the scanner skips. |
 
 The script scanner reads scripts a Bash command runs inside the project
-(`bash x.sh`, `node x.mjs`, `pnpm run <script>`, …) and asks when one calls a
+(<!-- recognises-js -->`bash x.sh`, `node x.mjs`, `pnpm run <script>`<!-- /recognises-js -->, …) and asks when one calls a
 program named by a CLI rule (unless `scriptScan: false`), matches
 `scriptPatterns`, or cannot be read. The built-in destructive rules opt out
 of it, so it is quiet by default; your own rules take part unless they set
@@ -269,18 +276,22 @@ of it, so it is quiet by default; your own rules take part unless they set
 ## Development
 
 ```bash
-node --test 'plugins/destructive-guard/test/*.test.mjs'
+uv sync                                    # once: dev tools (pytest, ruff); needs uv and Python 3.14
+uv run pytest plugins/destructive-guard    # tests
 ```
 
 | Path | What |
 | --- | --- |
 | `hooks/hooks.json` | `Bash\|mcp__.*` → `gate.sh`; `Read\|Edit\|Write` → `env-guard.sh` |
-| `hooks/gate.sh` | Fail-closed wrapper around the engine (no node or no result → ask) |
+| `hooks/gate.sh` | Fail-closed wrapper around the engine (no suitable Python or no result → ask) |
 | `hooks/env-guard.sh` | Env-file guard |
-| `lib/config.mjs` | Env → effective configuration, pack composition |
-| `lib/gate-engine.mjs` | Shell parser, rule evaluation, hook entry point |
-| `lib/gate-scripts.mjs` | Script collection and scanning |
-| `lib/gate-jev.mjs` | Jev configuration, prompts, redaction, request |
-| `lib/check.mjs` | Dry-run CLI behind the `check` skill |
+| `lib/gate_main.py` | Hook entry point (version-checking stub, then the package) |
+| `lib/check.py` | Dry-run CLI behind the `check` skill (same stub) |
+| `lib/destructive_guard/config.py` | Env → effective configuration, pack composition |
+| `lib/destructive_guard/gate/gate.py` | `Gate`: rules, script scan, optional Jev |
+| `lib/destructive_guard/hook.py` | `GateHook`: stdin JSON → decision on stdout, `GATE_LOG`, done-file |
+| `lib/destructive_guard/scripts/` | Script collection and scanning |
+| `lib/destructive_guard/jev/` | Jev configuration, prompts, redaction, request, client, decision |
+| `lib/destructive_guard/check/cli.py` | The dry-run behind `lib/check.py` |
 | `packs/*.json` | Built-in rule packs |
 | `jev/*.json` | Built-in Jev prompts |

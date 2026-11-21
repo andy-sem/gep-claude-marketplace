@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.superpowers/
+
+.claude/handoff/
+
+# Lean build output
+.lake/

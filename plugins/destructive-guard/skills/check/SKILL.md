@@ -9,7 +9,13 @@ Answers what the gate would do, without running anything. It loads the
 configuration exactly like the hook (same env variables, same packs and rules
 files) and calls the same decision code.
 
-Script: `${CLAUDE_PLUGIN_ROOT}/lib/check.mjs` (needs `node`).
+Script: `${CLAUDE_PLUGIN_ROOT}/lib/check.py` (needs Python >= 3.14).
+
+If `python3` on `PATH` is older, the script exits with
+`needs Python >= 3.14 (found X.Y at ...)`. Run it with a 3.14 interpreter
+instead (for example `python3.14 -I "${CLAUDE_PLUGIN_ROOT}/lib/check.py" ...`)
+and tell the user to point `GATE_INFRA_PYTHON` at that interpreter in the
+`env` block of `~/.claude/settings.json`, so the hook finds it too.
 
 ## Usage
 
@@ -19,13 +25,13 @@ make it ask.
 
 ```bash
 # A Bash command
-node "${CLAUDE_PLUGIN_ROOT}/lib/check.mjs" 'git push --force origin main'
+python3 "${CLAUDE_PLUGIN_ROOT}/lib/check.py" 'git push --force origin main'
 
 # An MCP call: tool name, then its input as one JSON argument
-node "${CLAUDE_PLUGIN_ROOT}/lib/check.mjs" --mcp mcp__db__execute_sql '{"query":"DROP TABLE users"}'
+python3 "${CLAUDE_PLUGIN_ROOT}/lib/check.py" --mcp mcp__db__execute_sql '{"query":"DROP TABLE users"}'
 
 # Effective configuration (also the default with no arguments)
-node "${CLAUDE_PLUGIN_ROOT}/lib/check.mjs" --config
+python3 "${CLAUDE_PLUGIN_ROOT}/lib/check.py" --config
 ```
 
 Options (before the command):

@@ -5,14 +5,16 @@ description: Open one new Claude Code session per ticket, each running /ticket <
 
 # Launch ticket sessions
 
-Script: `${CLAUDE_PLUGIN_ROOT}/scripts/launch.mjs` (needs `node`; opens tabs in
-Orca with the `orca` CLI or in iTerm2 with `osascript`).
+Script: `${CLAUDE_PLUGIN_ROOT}/scripts/launch.py` (needs Python >= 3.14; opens tabs in
+Orca with the `orca` CLI or in iTerm2 with `osascript`). When `python3` is older
+than 3.14, run the script with the interpreter in `$GATE_INFRA_PYTHON` instead
+(`"$GATE_INFRA_PYTHON" -I "..."`); the script says so when it is too old.
 
 1. Run a dry run first and show the user what would open:
 
    ```bash
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/launch.mjs" --dry-run KEY-1 KEY-2
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/launch.mjs" --dry-run --all
+   python3 -I "${CLAUDE_PLUGIN_ROOT}/scripts/launch.py" --dry-run KEY-1 KEY-2
+   python3 -I "${CLAUDE_PLUGIN_ROOT}/scripts/launch.py" --dry-run --all
    ```
 
 2. Ask the user to confirm (each tab starts a new Claude session), then run the

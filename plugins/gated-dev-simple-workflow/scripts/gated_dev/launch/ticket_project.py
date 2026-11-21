@@ -1,0 +1,160 @@
+"""The ticket project: its config, tickets and runs."""
+
+import json
+import os
+import re
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
+
+from gated_dev.errors import LaunchError
+from gated_dev.launch.naming import LaunchNaming
+from gated_dev.process import ProcessRunner
+
+
+class TicketProject:
+    """Config, ticket files and runs of the repository at `root`."""
+
+    DEFAULT_KEY_PATTERN = "^[A-Za-z][A-Za-z0-9._-]*$"
+    CONFIG_KEYS = frozenset(
+        ("ticketsDir", "keyPattern", "baseBranch", "setupCommand", "formatCommand", "riskPaths", "escalationExtra", "models", "orchestratorRules")
+    )
+    _FRONT_MATTER = re.compile(r"---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
+
+    def __init__(self, root: str | Path, run: ProcessRunner.Run = ProcessRunner.default_run) -> None:
+        self.root = root
+        self.run = run
+
+    @staticmethod
+    def find_root(*, cwd: str, run: ProcessRunner.Run = ProcessRunner.default_run) -> str:
+        """The main checkout of the repository `cwd` belongs to."""
+        out = run("git", ["-C", cwd, "worktree", "list", "--porcelain"]).stdout
+        first = re.search(r"^worktree (.+)$", str(out), re.MULTILINE)
+        if not first:
+            raise LaunchError(f"{cwd} is not inside a git repository")
+        return first[1]
+
+    @staticmethod
+    def _outside_repo(path: str) -> bool:
+        return os.path.isabs(path) or ".." in re.split(r"[\\/]", path)
+
+    def read_config(self) -> dict:
+        """`.claude/gated-dev.json` of `root`, with defaults. Raises on invalid content."""
+        file = Path(self.root) / ".claude" / "gated-dev.json"
+        raw: dict = {}
+        if file.exists():
+            try:
+                parsed = json.loads(file.read_text(encoding="utf-8"))
+            except ValueError as error:
+                raise LaunchError(f"{file}: invalid JSON ({error})") from error
+            if not isinstance(parsed, dict):
+                raise LaunchError(f"{file}: must contain a JSON object")
+            for k in parsed:
+                if k not in TicketProject.CONFIG_KEYS:
+                    raise LaunchError(f'{file}: unknown key "{k}"')
+            raw = parsed
+        tickets_dir = LaunchNaming._first(raw.get("ticketsDir"), "docs/tickets")
+        if not isinstance(tickets_dir, str) or not tickets_dir or TicketProject._outside_repo(tickets_dir):
+            raise LaunchError(f"{file}: ticketsDir must be a relative path inside the repo")
+        try:
+            key_pattern = re.compile(LaunchNaming._first(raw.get("keyPattern"), TicketProject.DEFAULT_KEY_PATTERN))
+        except (re.error, TypeError) as error:
+            raise LaunchError(f"{file}: invalid keyPattern ({error})") from error
+        base_branch = raw.get("baseBranch")
+        if base_branch is not None and not LaunchNaming._SAFE_REF.fullmatch(LaunchNaming._js_string(base_branch)):
+            raise LaunchError(f"{file}: invalid baseBranch")
+        rules = raw.get("orchestratorRules")
+        if rules is not None and (not isinstance(rules, str) or not rules or TicketProject._outside_repo(rules)):
+            raise LaunchError(f"{file}: orchestratorRules must be a relative path inside the repo")
+        return {"ticketsDir": tickets_dir, "keyPattern": key_pattern, "baseBranch": base_branch, "orchestratorRules": rules}
+
+
+    @staticmethod
+    def check_key(key: Any, config: Mapping) -> None:
+        """Checks a key against the safe set and the configured pattern."""
+        if not LaunchNaming.is_safe_key(key) or not config["keyPattern"].search(key):
+            raise LaunchError(f"{LaunchNaming._json(key)} is not a valid ticket key (keyPattern {config['keyPattern'].pattern})")
+
+
+    def read_ticket(self, *, key: str, config: Mapping) -> dict:
+        """`{file, title, base}` of `<root>/<ticketsDir>/<KEY>/ticket.md`.
+
+        `base` is the front matter `base:` or None. Raises when the file is missing or has no title.
+        """
+        file = Path(self.root) / config["ticketsDir"] / key / "ticket.md"
+        if not file.exists():
+            raise LaunchError(f"{key}: no ticket file at {os.path.relpath(file, self.root)}")
+        text = file.read_text(encoding="utf-8")
+        body = text
+        base = None
+        front = TicketProject._FRONT_MATTER.match(text)
+        if front:
+            body = text[front.end() :]
+            found = re.search(r"^base:(.*)$", front[1], re.MULTILINE)
+            if found:
+                value = re.sub(r"""^(["'])(.*)\1$""", r"\2", found[1].strip())
+                if not LaunchNaming._SAFE_REF.fullmatch(value):
+                    raise LaunchError(f'{key}: invalid base "{value}"')
+                base = value
+        title = re.search(r"^# +(.+?)\s*$", body, re.MULTILINE)
+        if not title:
+            raise LaunchError(f'{key}: ticket.md has no "# " title')
+        return {"file": str(file), "title": title[1], "base": base}
+
+
+    def list_ticket_keys(self, *, config: Mapping) -> list[str]:
+        """Keys of every `<ticketsDir>/<KEY>/ticket.md` in the main checkout."""
+        directory = Path(self.root) / config["ticketsDir"]
+        if not directory.exists():
+            return []
+        return sorted(
+            d.name
+            for d in directory.iterdir()
+            if d.is_dir() and LaunchNaming.is_safe_key(d.name) and config["keyPattern"].search(d.name) and (d / "ticket.md").exists()
+        )
+
+
+    def find_run(self, *, key: str, config: Mapping) -> dict | None:
+        """The ticket's run: the worktree on a `<KEY>/*` branch, with the `stage` of its `state.json`.
+
+        The stage is None without one. Aborted runs are ignored. Returns None when there is no run;
+        raises when several are left.
+        """
+        out = self.run("git", ["-C", str(self.root), "worktree", "list", "--porcelain"]).stdout
+        runs = []
+        for block in re.split(r"\n\n+", str(out)):
+            wt = re.search(r"^worktree (.+)$", block, re.MULTILINE)
+            branch = re.search(r"^branch refs/heads/(.+)$", block, re.MULTILINE)
+            if not wt or not branch or not branch[1].startswith(f"{key}/"):
+                continue
+            stage = None
+            try:
+                state = Path(wt[1]) / config["ticketsDir"] / key / "state.json"
+                stage = LaunchNaming._get(json.loads(state.read_text(encoding="utf-8")), "stage")
+            except (OSError, ValueError):
+                pass
+            if stage != "aborted":
+                runs.append({"path": wt[1], "branch": branch[1], "stage": stage})
+        if len(runs) > 1:
+            raise LaunchError(f"{key}: several runs ({', '.join(r['branch'] for r in runs)}); open the one you want with /ticket {key} --resume")
+        return runs[0] if runs else None
+
+
+    def resolve_base(self, *, ticket: Mapping, config: Mapping) -> str:
+        """The branch a new ticket starts from.
+
+        Front matter `base:`, config `baseBranch`, the remote default branch, `main` (section 3
+        step 2 of the skill).
+        """
+        if ticket.get("base"):
+            return ticket["base"]
+        if config.get("baseBranch"):
+            return config["baseBranch"]
+        try:
+            out = self.run("git", ["-C", str(self.root), "symbolic-ref", "--short", "refs/remotes/origin/HEAD"]).stdout
+            ref = re.sub(r"^origin/", "", str(out).strip())
+            if LaunchNaming._SAFE_REF.fullmatch(ref):
+                return ref
+        except LaunchError:
+            pass
+        return "main"

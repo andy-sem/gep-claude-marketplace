@@ -1,0 +1,146 @@
+"""Command line of the launcher.
+
+    launch.py [--dry-run] [--remote-control] KEY...
+    launch.py [--dry-run] [--remote-control] --all
+"""
+
+import os
+import sys
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
+
+from gated_dev.errors import LaunchError
+from gated_dev.launch.launcher import TicketLauncher
+from gated_dev.launch.ticket_project import TicketProject
+from gated_dev.process import ProcessRunner
+
+
+class LaunchCli:
+    """Parses the arguments and runs the launcher for each ticket."""
+
+    ALLOWED_ARGS = frozenset(("--resume",))
+
+    USAGE = """Usage: launch.py [--dry-run] [--remote-control] (KEY... | --all)
+
+    Opens one Claude Code session per ticket, running /ticket <KEY>, in a new
+    Orca or iTerm2 tab. A ticket with a run is resumed in its worktree.
+
+      KEY...            tickets to open (<ticketsDir>/<KEY>/ticket.md)
+      --all             every ticket file in the main checkout that has no run yet
+      --dry-run         print what would be opened; run nothing
+      --remote-control  also start each session with --remote-control
+      --cwd DIR         a directory inside the repository (default: current)"""
+
+    @staticmethod
+    def parse_args(argv: Sequence[str]) -> dict:
+        opts: dict = {"keys": [], "all": False, "dryRun": False, "remoteControl": False, "cwd": None, "help": False}
+        i = 0
+        while i < len(argv):
+            a = argv[i]
+            if a == "--all":
+                opts["all"] = True
+            elif a in ("--dry-run", "-n"):
+                opts["dryRun"] = True
+            elif a == "--remote-control":
+                opts["remoteControl"] = True
+            elif a in ("--help", "-h"):
+                opts["help"] = True
+            elif a == "--cwd":
+                i += 1
+                if i >= len(argv) or not argv[i]:
+                    raise LaunchError("--cwd needs a directory")
+                opts["cwd"] = argv[i]
+            elif a.startswith("-"):
+                raise LaunchError(f"unknown option {a}")
+            else:
+                opts["keys"].append(a)
+            i += 1
+        if not opts["help"] and opts["all"] == bool(opts["keys"]):
+            raise LaunchError("give ticket keys or --all (not both)")
+        return opts
+
+
+    @staticmethod
+    def describe(r: Mapping) -> str:
+        lines = [f"{r['key']}: {r['mode']}{' (opened)' if r['launched'] else ''}"]
+        if "host" in r:
+            lines.append(f"  host:    {r['host'] or 'none (dry run only)'}")
+        if r.get("base"):
+            lines.append(f"  base:    {r['base']}")
+        if r.get("cwd"):
+            lines.append(f"  cwd:     {r['cwd']}")
+        if r.get("title"):
+            lines.append(f"  title:   {r['title']}")
+        if r.get("command"):
+            lines.append(f"  command: {r['command']}")
+        if r.get("note"):
+            lines.append(f"  note:    {r['note']}")
+        return "\n".join(lines)
+
+
+    @staticmethod
+    def _write(stream: Any) -> Callable[[str], None]:
+        def write(line: str) -> None:
+            stream.write(f"{line}\n")
+            stream.flush()
+
+        return write
+
+
+    @classmethod
+    def main(
+        cls,
+        argv: Sequence[str] | None = None,
+        *,
+        env: Mapping[str, str] | None = None,
+        run: ProcessRunner.Run = ProcessRunner.default_run,
+        out: Callable[[str], None] | None = None,
+        err: Callable[[str], None] | None = None,
+    ) -> int:
+        """Runs the CLI; returns the exit code."""
+        argv = sys.argv[1:] if argv is None else argv
+        env = os.environ if env is None else env
+        out = out or LaunchCli._write(sys.stdout)
+        err = err or LaunchCli._write(sys.stderr)
+        try:
+            opts = LaunchCli.parse_args(argv)
+        except LaunchError as error:
+            err(f"{error}\n\n{LaunchCli.USAGE}")
+            return 2
+        if opts["help"]:
+            out(LaunchCli.USAGE)
+            return 0
+        try:
+            root = TicketProject.find_root(cwd=opts["cwd"] or os.getcwd(), run=run)
+            config = TicketProject(root, run).read_config()
+        except (LaunchError, OSError) as error:
+            err(str(error))
+            return 1
+        keys = opts["keys"]
+        if opts["all"]:
+            keys = []
+            for key in TicketProject(root, run).list_ticket_keys(config=config):
+                try:
+                    if not TicketProject(root, run).find_run(key=key, config=config):
+                        keys.append(key)
+                except LaunchError:
+                    pass
+            if not keys:
+                out(f"no ticket without a run in {config['ticketsDir']}")
+                return 0
+        failed = 0
+        for key in keys:
+            try:
+                result = TicketLauncher.launch_ticket(
+                    root=root, key=key, config=config, remote_control=opts["remoteControl"], dry_run=opts["dryRun"], env=env, run=run, log=err
+                )
+                out(LaunchCli.describe(result))
+            except (LaunchError, OSError) as error:
+                failed += 1
+                err(f"{key}: {error}")
+        return 1 if failed else 0
+
+
+def main(argv: Sequence[str] | None = None, **kwargs: Any) -> int:
+    """Module-level entry point: runs `LaunchCli.main`."""
+    return LaunchCli.main(argv, **kwargs)
