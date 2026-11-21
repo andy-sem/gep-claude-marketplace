@@ -168,6 +168,7 @@ def test_read_config_defaults_overrides_and_invalid_content(tmp_path):
     assert d["keyPattern"].search("proj-1")
     assert d["baseBranch"] is None
     assert d["orchestratorRules"] is None
+    assert d["tracker"] is None
     assert cfg("r", config={"orchestratorRules": ".claude/rules.md"})["orchestratorRules"] == ".claude/rules.md"
     c = cfg("c", config={"ticketsDir": "t", "keyPattern": "^[A-Z]+-\\d+$", "baseBranch": "develop", "models": {}})
     assert c["ticketsDir"] == "t"
@@ -188,6 +189,100 @@ def test_read_config_defaults_overrides_and_invalid_content(tmp_path):
     for n, (bad, message) in enumerate(bad_cases):
         with pytest.raises(LaunchError, match=message):
             cfg(f"bad{n}", config=bad)
+
+
+TRACKER_DEFAULTS = {
+    "type": "jira",
+    "site": None,
+    "statuses": {"inProgress": "In Progress", "inReview": "In Review", "done": "Done"},
+    "startFrom": None,
+    "assign": True,
+    "comments": True,
+    "baseFromParent": None,
+}
+
+
+def test_read_config_tracker_defaults(tmp_path):
+    config = TicketProject(project(tmp_path, config={"tracker": {"type": "jira"}})).read_config()
+    assert config["tracker"] == TRACKER_DEFAULTS
+    assert config["keyPattern"].pattern == r"^[A-Z][A-Z0-9]*-\d+$"
+
+
+def test_read_config_tracker_overrides(tmp_path):
+    tracker = {
+        "type": "jira",
+        "site": "acme.example.net",
+        "statuses": {"inProgress": "Doing", "inReview": None},
+        "startFrom": ["To Do", "Backlog"],
+        "assign": False,
+        "comments": False,
+        "baseFromParent": "feature/{parent}/*",
+    }
+    config = TicketProject(project(tmp_path / "a", config={"tracker": tracker})).read_config()
+    assert config["tracker"] == {
+        **tracker,
+        "statuses": {"inProgress": "Doing", "inReview": None, "done": "Done"},
+    }
+    explicit = TicketProject(project(tmp_path / "b", config={"tracker": {"type": "jira"}, "keyPattern": "^[A-Z]+-\\d+$"})).read_config()
+    assert explicit["keyPattern"].pattern == "^[A-Z]+-\\d+$"
+
+
+@pytest.mark.parametrize(
+    ("tracker", "message"),
+    [
+        ("jira", "tracker.*object"),
+        ({}, "type"),
+        ({"type": "linear"}, "linear"),
+        ({"type": "jira", "nope": 1}, "nope"),
+        ({"type": "jira", "statuses": {"nope": "X"}}, "nope"),
+        ({"type": "jira", "statuses": {"inProgress": None}}, "inProgress"),
+        ({"type": "jira", "statuses": {"inProgress": ""}}, "inProgress"),
+        ({"type": "jira", "statuses": {"done": None}}, "done"),
+        ({"type": "jira", "statuses": {"done": ""}}, "done"),
+        ({"type": "jira", "startFrom": "To Do"}, "startFrom"),
+        ({"type": "jira", "startFrom": ["To Do", ""]}, "startFrom"),
+        ({"type": "jira", "startFrom": [1]}, "startFrom"),
+        ({"type": "jira", "assign": "yes"}, "assign"),
+        ({"type": "jira", "comments": 1}, "comments"),
+        ({"type": "jira", "site": "https://x"}, "site"),
+        ({"type": "jira", "site": "x/y"}, "site"),
+        ({"type": "jira", "baseFromParent": "feature/*"}, "baseFromParent"),
+        ({"type": "jira", "baseFromParent": "feature/{parent}/a b"}, "baseFromParent"),
+        ({"type": "jira", "baseFromParent": "feature/{parent}/$x"}, "baseFromParent"),
+    ],
+)
+def test_read_config_tracker_invalid(tmp_path, tracker, message):
+    with pytest.raises(LaunchError, match=message):
+        TicketProject(project(tmp_path, config={"tracker": tracker})).read_config()
+
+
+def test_read_config_without_tracker_is_unchanged(tmp_path):
+    config = TicketProject(project(tmp_path, config={"ticketsDir": "t"})).read_config()
+    assert config["tracker"] is None
+    assert config["keyPattern"].pattern == TicketProject.DEFAULT_KEY_PATTERN
+    assert TicketProject(project(tmp_path / "none")).read_config()["tracker"] is None
+
+
+def test_launch_ticket_with_tracker_and_no_ticket_md_starts_in_the_main_checkout(tmp_path):
+    from gated_dev.completed_run import CompletedRun
+    from gated_dev.launch.launcher import TicketLauncher
+
+    def fake_run(file, argv):
+        return CompletedRun("", "")
+
+    env = {"TERM_PROGRAM": "iTerm.app"}
+    config = TicketProject(project(tmp_path / "a", config={"tracker": {"type": "jira"}})).read_config()
+    plan = TicketLauncher.launch_ticket(root=tmp_path / "a", key="PROJ-1", config=config, dry_run=True, env=env, run=fake_run)
+    assert plan["mode"] == "main-checkout"
+    assert plan["summary"] is None
+    assert plan["note"] == "no ticket.md yet; the session fetches it from Jira"
+
+    root = project(tmp_path / "b", config={"tracker": {"type": "jira"}}, tickets={"PROJ-1": "# Fix it\n"})
+    config = TicketProject(root).read_config()
+    plan = TicketLauncher.launch_ticket(root=root, key="PROJ-1", config=config, dry_run=True, env=env, run=fake_run)
+    assert plan["mode"] == "main-checkout"
+    assert plan["summary"] == "Fix it"
+    assert plan["note"] is None
 
 
 def test_check_key_applies_key_pattern_and_the_safe_character_set(tmp_path):

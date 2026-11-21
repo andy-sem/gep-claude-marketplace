@@ -5,7 +5,7 @@ import os
 import re
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from gated_dev.errors import LaunchError
 from gated_dev.launch.naming import LaunchNaming
@@ -17,8 +17,13 @@ class TicketProject:
 
     DEFAULT_KEY_PATTERN = "^[A-Za-z][A-Za-z0-9._-]*$"
     CONFIG_KEYS = frozenset(
-        ("ticketsDir", "keyPattern", "baseBranch", "setupCommand", "formatCommand", "riskPaths", "escalationExtra", "models", "orchestratorRules")
+        ("ticketsDir", "keyPattern", "baseBranch", "setupCommand", "formatCommand", "riskPaths", "escalationExtra", "models", "orchestratorRules", "tracker")
     )
+    TRACKER_KEY_PATTERN = r"^[A-Z][A-Z0-9]*-\d+$"
+    TRACKER_KEYS = frozenset(("type", "site", "statuses", "startFrom", "assign", "comments", "baseFromParent"))
+    TRACKER_TYPES = frozenset(("jira",))
+    DEFAULT_STATUSES: ClassVar[dict[str, str]] = {"inProgress": "In Progress", "inReview": "In Review", "done": "Done"}
+    _SITE = re.compile(r"[A-Za-z0-9.-]+")
     _FRONT_MATTER = re.compile(r"---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
 
     def __init__(self, root: str | Path, run: ProcessRunner.Run = ProcessRunner.default_run) -> None:
@@ -56,8 +61,10 @@ class TicketProject:
         tickets_dir = LaunchNaming._first(raw.get("ticketsDir"), "docs/tickets")
         if not isinstance(tickets_dir, str) or not tickets_dir or TicketProject._outside_repo(tickets_dir):
             raise LaunchError(f"{file}: ticketsDir must be a relative path inside the repo")
+        tracker = TicketProject._read_tracker(raw.get("tracker"), file)
+        default_pattern = TicketProject.TRACKER_KEY_PATTERN if tracker else TicketProject.DEFAULT_KEY_PATTERN
         try:
-            key_pattern = re.compile(LaunchNaming._first(raw.get("keyPattern"), TicketProject.DEFAULT_KEY_PATTERN))
+            key_pattern = re.compile(LaunchNaming._first(raw.get("keyPattern"), default_pattern))
         except (re.error, TypeError) as error:
             raise LaunchError(f"{file}: invalid keyPattern ({error})") from error
         base_branch = raw.get("baseBranch")
@@ -66,8 +73,56 @@ class TicketProject:
         rules = raw.get("orchestratorRules")
         if rules is not None and (not isinstance(rules, str) or not rules or TicketProject._outside_repo(rules)):
             raise LaunchError(f"{file}: orchestratorRules must be a relative path inside the repo")
-        return {"ticketsDir": tickets_dir, "keyPattern": key_pattern, "baseBranch": base_branch, "orchestratorRules": rules}
+        return {"ticketsDir": tickets_dir, "keyPattern": key_pattern, "baseBranch": base_branch, "orchestratorRules": rules, "tracker": tracker}
 
+
+    @staticmethod
+    def _read_tracker(raw: Any, file: Path) -> dict | None:
+        """The checked, normalised `tracker` config, or None when it is not set."""
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            raise LaunchError(f"{file}: tracker must be an object")
+        for k in raw:
+            if k not in TicketProject.TRACKER_KEYS:
+                raise LaunchError(f'{file}: tracker has unknown key "{k}"')
+        if "type" not in raw:
+            raise LaunchError(f"{file}: tracker.type is required")
+        if raw["type"] not in TicketProject.TRACKER_TYPES:
+            raise LaunchError(f"{file}: tracker.type {LaunchNaming._json(raw['type'])} is not supported (only jira)")
+        site = raw.get("site")
+        if site is not None and not (isinstance(site, str) and TicketProject._SITE.fullmatch(site)):
+            raise LaunchError(f"{file}: tracker.site must be a host name without scheme or path")
+        given = raw.get("statuses", {})
+        if not isinstance(given, dict):
+            raise LaunchError(f"{file}: tracker.statuses must be an object")
+        for k in given:
+            if k not in TicketProject.DEFAULT_STATUSES:
+                raise LaunchError(f'{file}: tracker.statuses has unknown key "{k}"')
+        statuses = {**TicketProject.DEFAULT_STATUSES, **given}
+        for k, v in statuses.items():
+            if not (v is None and k == "inReview") and not (isinstance(v, str) and v):
+                raise LaunchError(f"{file}: tracker.statuses.{k} must be a non-empty string")
+        start_from = raw.get("startFrom")
+        if start_from is not None and not (isinstance(start_from, list) and all(isinstance(x, str) and x for x in start_from)):
+            raise LaunchError(f"{file}: tracker.startFrom must be a list of non-empty strings")
+        for flag in ("assign", "comments"):
+            if not isinstance(raw.get(flag, True), bool):
+                raise LaunchError(f"{file}: tracker.{flag} must be true or false")
+        base = raw.get("baseFromParent")
+        if base is not None and not (
+            isinstance(base, str) and "{parent}" in base and LaunchNaming._SAFE_REF.fullmatch(base.replace("{parent}", "PROJ-1").replace("*", "x"))
+        ):
+            raise LaunchError(f"{file}: tracker.baseFromParent must contain {{parent}} and only safe branch characters and *")
+        return {
+            "type": raw["type"],
+            "site": site,
+            "statuses": statuses,
+            "startFrom": start_from,
+            "assign": raw.get("assign", True),
+            "comments": raw.get("comments", True),
+            "baseFromParent": base,
+        }
 
     @staticmethod
     def check_key(key: Any, config: Mapping) -> None:

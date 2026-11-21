@@ -25,7 +25,7 @@ class LaunchCli:
     Opens one Claude Code session per ticket, running /ticket <KEY>, in a new
     Orca or iTerm2 tab. A ticket with a run is resumed in its worktree.
 
-      KEY...            tickets to open (<ticketsDir>/<KEY>/ticket.md)
+      KEY...            tickets to open (<ticketsDir>/<KEY>/ticket.md, or a Jira key when "tracker" is configured)
       --all             every ticket file in the main checkout that has no run yet
       --dry-run         print what would be opened; run nothing
       --remote-control  also start each session with --remote-control
