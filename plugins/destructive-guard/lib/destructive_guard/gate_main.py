@@ -12,7 +12,9 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any, BinaryIO
 
-from .gate_engine import RulesError, ask, gate
+from .errors import RulesError
+from .gate_engine import gate
+from .verdict import Verdict
 
 
 def _reject_constant(name: str) -> Any:
@@ -73,16 +75,17 @@ def main(stdin: BinaryIO | None = None, env: Mapping[str, str] | None = None) ->
     try:
         rules = None
         try:
-            from .config import ConfigError, build_rules, read_config
+            from .config import build_rules, read_config
+            from .errors import ConfigError
 
             try:
                 config = read_config(env)
                 if config["enabled"]:
                     rules = build_rules(config)
             except (RulesError, ConfigError) as e:
-                result = ask("gate-config", str(e))
+                result = Verdict.ask("gate-config", str(e))
         except Exception as e:  # noqa: BLE001
-            result = ask("gate-config", f"internal error: {e}")
+            result = Verdict.ask("gate-config", f"internal error: {e}")
         if not result and config and config["enabled"]:
             try:
                 text = stdin.read().decode("utf-8", errors="replace")
@@ -91,11 +94,11 @@ def main(stdin: BinaryIO | None = None, env: Mapping[str, str] | None = None) ->
             except Exception:  # noqa: BLE001
                 parsed = False
             if not parsed:
-                result = ask("unparsable", "hook input is not valid JSON")
+                result = Verdict.ask("unparsable", "hook input is not valid JSON")
             else:
                 result = gate(input, rules, env=env, strict=config["strict"], trace=trace)
     except Exception as e:  # noqa: BLE001 - fail closed
-        result = ask("gate-config", f"internal error: {e}")
+        result = Verdict.ask("gate-config", f"internal error: {e}")
     if result:
         emit(result)
     if config and config["enabled"] and config["log"]:

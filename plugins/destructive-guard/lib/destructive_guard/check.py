@@ -17,14 +17,11 @@ import sys
 from collections.abc import Mapping
 from typing import Any
 
-from .config import ConfigError, build_rules, read_config
-from .gate_engine import RulesError, gate
+from .config import build_rules, read_config
+from .errors import ConfigError, RulesError, UsageError
+from .gate_engine import gate
 
 JEV_VARS = re.compile(r"^(GATE_JEV|TYPESAFE_API_KEY)")
-
-
-class UsageError(Exception):
-    pass
 
 
 def parse_args(argv: list[str]) -> dict[str, Any]:

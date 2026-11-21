@@ -9,7 +9,7 @@ import re
 import pytest
 
 from destructive_guard import gate_jev
-from destructive_guard.gate_jev import JevConfigError
+from destructive_guard.errors import JevConfigError
 from testkit import DG
 from testkit.check_cli import run_check
 

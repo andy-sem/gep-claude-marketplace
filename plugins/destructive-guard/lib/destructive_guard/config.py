@@ -10,16 +10,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from .errors import ConfigError, RulesError
 from .paths import project_dir, project_path
-from .rules import (
-    DEFAULT_PACKS,
-    PACKS_DIR,
-    Rules,
-    RulesError,
-    compose_rules,
-    pack_path,
-    parse_rules,
-)
+from .rules.rule_loader import RuleLoader, Rules
+from .rules.rule_parser import RuleParser
 
 __all__ = [
     "DEFAULT_CHECKS",
@@ -33,11 +27,7 @@ __all__ = [
 ]
 
 
-class ConfigError(Exception):
-    pass
-
-
-DEFAULT_CHECKS = [p for p in DEFAULT_PACKS if p != "base"]
+DEFAULT_CHECKS = [p for p in RuleLoader.DEFAULT_PACKS if p != "base"]
 
 _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"0", "false", "no", "off"}
@@ -68,7 +58,7 @@ def _list(v: str, sep: str) -> list[str]:
     return [s for s in (part.strip() for part in v.split(sep)) if s]
 
 
-def available_packs(directory: str | Path = PACKS_DIR) -> list[str]:
+def available_packs(directory: str | Path = RuleLoader.PACKS_DIR) -> list[str]:
     """Pack names shipped in packs/ (without .json)."""
     return sorted(f.name[: -len(".json")] for f in Path(directory).iterdir() if f.name.endswith(".json"))
 
@@ -149,7 +139,7 @@ def read_config(
 def build_rules(config: Mapping[str, Any]) -> Rules:
     """Load the packs and extra files of `config`, drop disabled rules and return parsed rules.
     Raises RulesError (bad files) or ConfigError (unknown rule id)."""
-    raw = compose_rules([*(pack_path(p) for p in config["packs"]), *config["rulesFiles"]])
+    raw = RuleLoader.compose_rules([*(RuleLoader.pack_path(p) for p in config["packs"]), *config["rulesFiles"]])
     if config["disableRules"]:
         rules = raw["rules"] if isinstance(raw.get("rules"), list) else []
         ids = {r.get("id") if isinstance(r, dict) else None for r in rules}
@@ -158,4 +148,4 @@ def build_rules(config: Mapping[str, Any]) -> Rules:
             raise ConfigError(f"GATE_DISABLE_RULES: unknown rule id {', '.join(f'"{u}"' for u in unknown)}")
         drop = set(config["disableRules"])
         raw["rules"] = [r for r in rules if not (isinstance(r, dict) and r.get("id") in drop)]
-    return parse_rules(raw)
+    return RuleParser.parse_rules(raw)

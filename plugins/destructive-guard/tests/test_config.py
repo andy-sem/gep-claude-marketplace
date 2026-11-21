@@ -15,11 +15,10 @@ import pytest
 from destructive_guard import config as dg_config
 from destructive_guard.config import (
     DEFAULT_CHECKS,
-    ConfigError,
-    RulesError,
     available_packs,
     build_rules,
 )
+from destructive_guard.errors import ConfigError, RulesError
 from testkit.check_cli import check_call
 from testkit.envs import clean_env
 from testkit.hook import bash_input, decision, run_hook

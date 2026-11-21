@@ -9,26 +9,23 @@ import json
 
 import pytest
 
+from destructive_guard.errors import UnparsableError
 from destructive_guard.gate_engine import (
-    DEFAULT_PACKS,
     DYN,
-    UnparsableError,
-    load_packs,
-    load_rules,
     nested_shell_string,
-    pack_path,
     shell_script_index,
     split_command,
     strip_wrappers,
 )
+from destructive_guard.rules.rule_loader import RuleLoader
 from testkit import DG
 
 FIXTURES = DG / "tests" / "fixtures"
 SPLITS = json.loads((FIXTURES / "split_command.json").read_text())
 NORMALIZE = json.loads((FIXTURES / "normalize.json").read_text())
 RULES = {
-    "default": load_packs([pack_path(p) for p in DEFAULT_PACKS]),
-    "engine": load_rules(FIXTURES / "engine_rules.json"),
+    "default": RuleLoader.load_packs([RuleLoader.pack_path(p) for p in RuleLoader.DEFAULT_PACKS]),
+    "engine": RuleLoader.load_rules(FIXTURES / "engine_rules.json"),
 }
 
 
