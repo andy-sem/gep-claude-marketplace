@@ -1,4 +1,4 @@
-"""Script collection and scanning (port of gate-scripts.test.mjs), in-process on destructive_guard.gate_scripts."""
+"""Script collection and scanning (port of gate-scripts.test.mjs), in-process on destructive_guard.scripts."""
 
 import json
 from pathlib import Path
@@ -6,13 +6,10 @@ from pathlib import Path
 import pytest
 
 from destructive_guard.errors import RulesError
-from destructive_guard.gate_scripts import (
-    collect_scripts,
-    find_project_root,
-    glob_to_regexp,
-    scan_scripts,
-)
 from destructive_guard.rules.rule_loader import RuleLoader
+from destructive_guard.scripts.project_paths import ProjectPaths
+from destructive_guard.scripts.script_collector import ScriptCollector
+from destructive_guard.scripts.script_scanner import ScriptScanner
 from testkit import DG
 from testkit.projects import provision_project, temp_project
 
@@ -21,7 +18,7 @@ RULES = RuleLoader.load_rules(SHIPPED)
 
 
 def collect_many(root: Path, commands: list[str], cwd: Path | None = None) -> list[dict]:
-    return [collect_scripts(c, RULES, cwd=str(cwd or root), root=str(root)) for c in commands]
+    return [ScriptCollector(RULES, str(cwd or root), str(root)).collect(c) for c in commands]
 
 
 def collect(root: Path, command: str) -> dict:
@@ -33,16 +30,16 @@ def paths(c: dict) -> list[str]:
 
 
 def scan_many(root: Path, commands: list[str]) -> list[str | None]:
-    results = [scan_scripts(c, RULES) for c in collect_many(root, commands)]
+    results = [ScriptScanner(RULES).scan_scripts(c) for c in collect_many(root, commands)]
     return [r["reason"] if r else None for r in results]
 
 
 def test_find_project_root_git_ancestor_env_and_cwd_fallback(tmp_path, tmp_path_factory):
     root = temp_project(tmp_path, {"a/b/c.txt": "x"})
     bare = tmp_path_factory.mktemp("gate-noroot-").resolve()
-    found = find_project_root(str(root / "a/b"))
-    env_fallback = find_project_root(str(bare), {"CLAUDE_PROJECT_DIR": str(root)})
-    cwd_fallback = find_project_root(str(bare), {})
+    found = ProjectPaths.find_project_root(str(root / "a/b"))
+    env_fallback = ProjectPaths.find_project_root(str(bare), {"CLAUDE_PROJECT_DIR": str(root)})
+    cwd_fallback = ProjectPaths.find_project_root(str(bare), {})
     assert found == str(root)
     assert env_fallback == str(root), "env fallback"
     assert cwd_fallback == str(bare), "cwd fallback"
@@ -490,8 +487,8 @@ def test_scan_scripts_program_names_patterns_and_reasons(tmp_path):
     assert words is None
     assert cf is None
     assert ssr is None
-    assert scan_scripts({"files": [], "problems": []}, RULES) is None
-    assert scan_scripts(None, RULES) is None
+    assert ScriptScanner(RULES).scan_scripts({"files": [], "problems": []}) is None
+    assert ScriptScanner(RULES).scan_scripts(None) is None
 
 
 def test_scan_scripts_workflow_with_acmecloud_actions_step_asks(tmp_path):
@@ -570,7 +567,7 @@ def test_glob_to_regexp_supports_doublestar_slash_doublestar_star_and_question()
         ("a.b", "axb", False),
     ]
     for glob, text, expected in cases:
-        assert bool(glob_to_regexp(glob).search(text)) is expected, (glob, text)
+        assert bool(ProjectPaths.glob_to_regexp(glob).search(text)) is expected, (glob, text)
 
 
 def test_load_rules_validates_script_patterns_and_script_scan_exempt(tmp_path):

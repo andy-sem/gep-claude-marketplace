@@ -2,9 +2,9 @@
 
 import pytest
 
-from destructive_guard import gate_scripts
 from destructive_guard.gate_engine import gate
 from destructive_guard.rules.rule_loader import RuleLoader
+from destructive_guard.scripts.script_collector import ScriptCollector
 from testkit import DG
 from testkit.projects import provision_project, temp_project
 
@@ -19,7 +19,7 @@ def test_rule_result_skips_the_scan(tmp_path, monkeypatch):
     def boom(*a, **k):
         raise AssertionError("scan must not run")
 
-    monkeypatch.setattr(gate_scripts, "collect_scripts", boom)
+    monkeypatch.setattr(ScriptCollector, "collect", boom)
     trace = {}
     r = gate(bash("terraform apply", tmp_path), RULES, env={}, trace=trace)
     assert r and r["decision"] == "ask"
@@ -34,7 +34,7 @@ def test_closed_results_skip_the_scan(monkeypatch, input):
     def boom(*a, **k):
         raise AssertionError("scan must not run")
 
-    monkeypatch.setattr(gate_scripts, "collect_scripts", boom)
+    monkeypatch.setattr(ScriptCollector, "collect", boom)
     r = gate(input, RULES, env={"GATE_JEV": "1"})
     assert r["reason"].startswith("unparsable:")
 
@@ -51,13 +51,13 @@ def test_bash_without_rule_result_scans_scripts(tmp_path):
 def test_gate_jev_collects_scripts_even_with_a_rule_result(tmp_path, monkeypatch):
     root = temp_project(tmp_path, {"go.sh": "echo hi\n"})
     seen = []
-    real = gate_scripts.collect_scripts
+    real = ScriptCollector.collect
 
     def spy(*a, **k):
-        seen.append(a[0])
+        seen.append(a[1])
         return real(*a, **k)
 
-    monkeypatch.setattr(gate_scripts, "collect_scripts", spy)
+    monkeypatch.setattr(ScriptCollector, "collect", spy)
     gate(bash("terraform apply", root), RULES, env={})
     assert seen == []
     # Jev on (invalid config here, so it asks gate-config), but the scan ran first.
@@ -71,7 +71,7 @@ def test_scan_exception_asks_gate_config(tmp_path, monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("disk on fire")
 
-    monkeypatch.setattr(gate_scripts, "collect_scripts", boom)
+    monkeypatch.setattr(ScriptCollector, "collect", boom)
     r = gate(bash("ls", tmp_path), RULES, env={})
     assert r == {"decision": "ask", "reason": "gate-config: script scan failed: disk on fire"}
 
