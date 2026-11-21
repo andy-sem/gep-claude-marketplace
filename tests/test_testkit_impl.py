@@ -118,3 +118,27 @@ def test_impl_watch_pr_fast_py_not_yet():
     gd = select_impl("gated-dev-simple-workflow", {"GD_IMPL": "py"})
     with pytest.raises(NotImplementedError):
         gd.watch_pr(fast=True)
+
+
+def test_gate_hook_py_direct_uses_python_wrapper(monkeypatch):
+    py = select_impl("destructive-guard", {"GD_IMPL": "py"})
+    monkeypatch.delenv("GATE_HOOK_IMPL", raising=False)
+    assert py.gate_hook()[-1].endswith("hooks/gate.sh")
+    monkeypatch.setenv("GATE_HOOK_IMPL", "py-direct")
+    assert py.gate_hook()[-1].endswith("testkit/_gate_py.sh")
+    js = select_impl("destructive-guard", {"GD_IMPL": "js"})
+    assert js.gate_hook()[-1].endswith("hooks/gate.sh")
+
+
+def test_gate_py_wrapper_asks_without_python(monkeypatch):
+    import subprocess
+
+    from testkit.envs import clean_env
+
+    monkeypatch.setenv("GATE_HOOK_IMPL", "py-direct")
+    py = select_impl("destructive-guard", {"GD_IMPL": "py"})
+    proc = subprocess.run(
+        py.gate_hook(), input=b"{}", capture_output=True, env=clean_env({"GATE_INFRA_PYTHON": "/nope"}), check=False
+    )
+    assert proc.returncode == 0
+    assert b"unparsable: python unavailable" in proc.stdout

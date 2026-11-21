@@ -1,8 +1,13 @@
+import json
+import os
+import subprocess
+
 import pytest
 
 from testkit import DG
+from testkit.envs import clean_env
+from testkit.pythons import require_new_python
 from testkit.stubs import (
-    check_314_imports_package,
     check_old_python_exit_3,
     check_parses_as_37,
     stub_id,
@@ -22,6 +27,18 @@ def test_old_python_gets_exit_3(old_python, stub):
     check_old_python_exit_3(old_python, stub[0])
 
 
-@pytest.mark.parametrize("stub", STUBS, ids=stub_id)
-def test_314_imports_package(tmp_path, stub):
-    check_314_imports_package(tmp_path, *stub)
+@pytest.mark.parametrize(("stub", "args", "stdout"), [("gate_main.py", [], ""), ("check.py", ["--json", "--config"], None)])
+def test_314_imports_real_package(tmp_path, stub, args, stdout):
+    # P8: both stubs hand over to the real package, not to a module planted next to the cwd.
+    (tmp_path / "destructive_guard.py").write_text("raise SystemExit(99)\n")
+    python = require_new_python(os.environ)
+    env = clean_env({"GATE_ENABLED": "0"} if stub == "gate_main.py" else {})
+    proc = subprocess.run(
+        [python, "-I", str(DG / "lib" / stub), *args], capture_output=True, text=True, cwd=tmp_path, env=env, check=False
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stderr == ""
+    if stdout is None:
+        assert "packs" in json.loads(proc.stdout)
+    else:
+        assert proc.stdout == stdout

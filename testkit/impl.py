@@ -44,6 +44,9 @@ class Impl:
         return [self._python(), "-I", str(base / py)]
 
     def gate_hook(self) -> list[str]:
+        if self.name == "py" and os.environ.get("GATE_HOOK_IMPL") == "py-direct":
+            # Test-only: the Python engine behind the same done-file protocol (deleted in P9).
+            return ["bash", str(Path(__file__).resolve().parent / "_gate_py.sh")]
         return ["bash", str(DG / "hooks" / "gate.sh")]
 
     def env_guard(self) -> list[str]:
