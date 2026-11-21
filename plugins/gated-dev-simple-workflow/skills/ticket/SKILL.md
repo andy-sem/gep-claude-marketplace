@@ -25,7 +25,7 @@ Rules that hold everywhere:
 - Keep `state.json` current: after every transition set the new `stage` and `updatedAt` (ISO-8601). Re-read it before every write, write the whole file and keep its `watch` field as it is: only the watcher of section 9c writes `watch`.
 - `state.json` is never committed. Never stage it, and never run a bare `git add -A`: when staging everything, use `git -C <wt> add -A -- . ':(exclude)<ticketsDir>/*/state.json'`.
 - Commit trailer: end every commit message you write with the `Co-Authored-By` attribution line that your session's instructions specify for commits. Do not hard-code a model name; if the session specifies no attribution, add none. "The trailer" below means this line.
-- Scripts and hooks of this plugin live under `${CLAUDE_PLUGIN_ROOT}` (`scripts/watch-pr.mjs`, `hooks/notify.py`).
+- Scripts and hooks of this plugin live under `${CLAUDE_PLUGIN_ROOT}` (`scripts/watch_pr.py`, `hooks/notify.py`). The scripts need Python >= 3.14: start them with `python3 -I`, or with `"$GATE_INFRA_PYTHON" -I` when `python3` is older and that variable is set.
 - Formatting: "format `<files>`" below means: run `<formatCommand> <files>` in the worktree when `formatCommand` is configured; otherwise do nothing.
 - Project rules: "**Event `<name>`**" below means: when `orchestratorRules` is configured and its file has a `## <name>` section, do what that section says now, then continue (see section 0a). Without the key or the section, nothing happens.
 
@@ -243,7 +243,7 @@ Stage `addressing_review`. Runs when the PR of a finished run has new human feed
 Stage `done`, PR `OPEN`. The session stays open and wakes itself when there is something to do.
 
 1. Re-read `state.json` and write `updatedAt` (stage unchanged).
-2. Start the watcher with the Bash tool and `run_in_background: true`: `node "${CLAUDE_PLUGIN_ROOT}/scripts/watch-pr.mjs" --state <TICKET_DIR>/state.json` (absolute path). It polls the PR about once a minute with `gh`, writes `watch.heartbeatAt` into `state.json`, and ends with one JSON line on stdout.
+2. Start the watcher with the Bash tool and `run_in_background: true`: `python3 -I "${CLAUDE_PLUGIN_ROOT}/scripts/watch_pr.py" --state <TICKET_DIR>/state.json` (absolute path). It polls the PR about once a minute with `gh`, writes `watch.heartbeatAt` into `state.json`, and ends with one JSON line on stdout.
 3. Print one line ("Watching <prUrl>; this session wakes on new feedback, merge or close. Closing it stops the watch; `/ticket <KEY> --resume` restarts it.") and end the turn. Do nothing else while it runs.
 4. On wake-up, read the last stdout line of the background command as JSON (`outcome`):
    - `feedback`: section 9b from step 1; it comes back here when done;

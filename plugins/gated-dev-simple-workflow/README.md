@@ -24,7 +24,7 @@ is approved it commits, pushes the ticket branch and opens a PR with `gh`.
 
 ### After the PR is open
 
-The session keeps watching the PR (`scripts/watch-pr.mjs` in the background,
+The session keeps watching the PR (`scripts/watch_pr.py` in the background,
 one `gh` poll a minute):
 
 - **New review feedback** from a person (bots and the pipeline's own replies
@@ -132,9 +132,9 @@ Claude Code session per ticket, each running `/ticket <KEY>`, in a new Orca
 or iTerm2 tab:
 
 ```bash
-node <plugin>/scripts/launch.mjs --dry-run PROJ-1 PROJ-2   # show what would open
-node <plugin>/scripts/launch.mjs PROJ-1 PROJ-2
-node <plugin>/scripts/launch.mjs --all                     # every ticket.md without a run
+python3 -I <plugin>/scripts/launch.py --dry-run PROJ-1 PROJ-2   # show what would open
+python3 -I <plugin>/scripts/launch.py PROJ-1 PROJ-2
+python3 -I <plugin>/scripts/launch.py --all                     # every ticket.md without a run
 ```
 
 | Case | Where the session starts |
@@ -184,7 +184,7 @@ gate the table lists the calls it expects to need approval, with
 
 ## Requirements
 
-`git`, and `gh` (authenticated) for the PR; `orca` when running in Orca; `node` for the launcher and the PR watcher; optional `notify-send` (Linux) for notifications, which also need Python >= 3.14 (silent without it).
+`git`, and `gh` (authenticated) for the PR; `orca` when running in Orca; **Python >= 3.14** (standard library only) for the launcher, the PR watcher and the notification hook (`python3`, or `GATE_INFRA_PYTHON` when `python3` is older; install with `brew install python@3.14`, `uv python install 3.14` or from python.org); optional `notify-send` (Linux) for notifications (silent without Python).
 
 ## Install
 

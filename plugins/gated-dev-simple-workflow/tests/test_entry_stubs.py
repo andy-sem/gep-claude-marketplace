@@ -74,4 +74,4 @@ def test_314_launch_stub_hands_over_to_the_real_package(tmp_path):
         check=False,
     )
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.startswith("Usage: launch.mjs ")
+    assert proc.stdout.startswith("Usage: launch.py ")

@@ -20,13 +20,13 @@ def _fake(dir_path, name):
 
 def test_defaults():
     assert select_impl("destructive-guard", {}).name == "py"
-    assert select_impl("gated-dev-simple-workflow", {}).name == "js"
+    assert select_impl("gated-dev-simple-workflow", {}).name == "py"
 
 
-def test_destructive_guard_rejects_js():
+@pytest.mark.parametrize("plugin", PLUGIN_NAMES)
+def test_js_is_rejected_for_both_plugins(plugin):
     with pytest.raises(ValueError, match="no JS implementation"):
-        select_impl("destructive-guard", {"GD_IMPL": "js"})
-    assert select_impl("gated-dev-simple-workflow", {"GD_IMPL": "js"}).name == "js"
+        select_impl(plugin, {"GD_IMPL": "js"})
 
 
 def test_gd_impl_overrides():
@@ -43,9 +43,9 @@ def test_unknown_plugin_raises():
         select_impl("nope", {})
 
 
-def test_js_entry_points_exist():
+def test_entry_points_exist():
     dg = select_impl("destructive-guard", {})
-    gd = select_impl("gated-dev-simple-workflow", {"GD_IMPL": "js"})
+    gd = select_impl("gated-dev-simple-workflow", {})
     for argv in (dg.gate_hook(), dg.env_guard(), dg.check(), gd.launch(), gd.watch_pr(), gd.notify()):
         assert os.path.isfile(argv[-1]), argv
 
@@ -83,12 +83,6 @@ def test_empty_env_var_is_ignored(tmp_path):
     assert find_python({"GATE_INFRA_PYTHON": "", "PATH": str(tmp_path)}).endswith("python3")
 
 
-def test_js_env_without_node_raises(tmp_path, monkeypatch):
-    monkeypatch.setenv("PATH", str(tmp_path))
-    with pytest.raises(RuntimeError, match="node not found on PATH"):
-        select_impl("gated-dev-simple-workflow", {"GD_IMPL": "js"}).env()
-
-
 def test_impl_interpreter_fields():
     py = select_impl("destructive-guard", {})
     assert py.interpreter_var == "GATE_INFRA_PYTHON"
@@ -106,15 +100,6 @@ def test_require_new_python_rejects_old(tmp_path):
         require_new_python({"PATH": str(tmp_path)})
     with pytest.raises(RuntimeError, match="found nothing"):
         require_new_python({"PATH": str(tmp_path / "none")})
-
-
-def test_impl_watch_pr_fast_js():
-    gd = select_impl("gated-dev-simple-workflow", {"GD_IMPL": "js"})
-    argv = gd.watch_pr(fast=True)
-    assert argv[:2] == ["node", "--import"]
-    assert argv[2].endswith("testkit/_fast_timers.mjs")
-    assert argv[3].endswith("scripts/watch-pr.mjs")
-    assert gd.watch_pr() == [argv[0], argv[3]]
 
 
 def test_impl_watch_pr_fast_py(tmp_path):

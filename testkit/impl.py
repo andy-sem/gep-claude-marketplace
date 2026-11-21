@@ -1,7 +1,6 @@
 """Which implementation (JS or Python) a test runs against."""
 
 import os
-import shutil
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,7 +11,7 @@ from .pythons import require_new_python
 
 DEFAULT_IMPL: dict[str, str] = {
     "destructive-guard": "py",
-    "gated-dev-simple-workflow": "js",
+    "gated-dev-simple-workflow": "py",
 }
 
 
@@ -36,9 +35,7 @@ class Impl:
     def _python(self) -> str:
         return require_new_python(os.environ)
 
-    def _script(self, base: Path, js: str, py: str) -> list[str]:
-        if self.name == "js":
-            return ["node", str(base / js)]
+    def _script(self, base: Path, py: str) -> list[str]:
         return [self._python(), "-I", str(base / py)]
 
     def gate_hook(self) -> list[str]:
@@ -51,14 +48,12 @@ class Impl:
         return [self._python(), "-I", str(DG / "lib" / "check.py")]
 
     def launch(self) -> list[str]:
-        return self._script(GD / "scripts", "launch.mjs", "launch.py")
+        return self._script(GD / "scripts", "launch.py")
 
     def watch_pr(self, fast: bool = False) -> list[str]:
-        """The watcher command line; `fast` makes every poll interval elapse at once (see _fast_timers.mjs, _fast_sleep.py)."""
+        """The watcher command line; `fast` makes every poll interval elapse at once (see _fast_sleep.py)."""
         if not fast:
-            return self._script(GD / "scripts", "watch-pr.mjs", "watch_pr.py")
-        if self.name == "js":
-            return ["node", "--import", str(Path(__file__).resolve().parent / "_fast_timers.mjs"), str(GD / "scripts" / "watch-pr.mjs")]
+            return self._script(GD / "scripts", "watch_pr.py")
         return [self._python(), "-I", str(Path(__file__).resolve().parent / "_fast_sleep.py"), str(GD / "scripts" / "watch_pr.py")]
 
     def notify(self) -> list[str]:
@@ -66,11 +61,6 @@ class Impl:
         return ["bash", str(GD / "hooks" / "run-python.sh"), str(GD / "hooks" / "notify.py")]
 
     def env(self) -> dict[str, str]:
-        if self.name == "js":
-            node = shutil.which("node")
-            if node is None:
-                raise RuntimeError("node not found on PATH")
-            return {"GATE_INFRA_NODE": node, "GATE_INFRA_PYTHON": self._python()}  # the notify hook is Python
         return {"GATE_INFRA_PYTHON": self._python()}
 
 
@@ -80,6 +70,6 @@ def select_impl(plugin: str, env: Mapping[str, str]) -> Impl:
     name = env.get("GD_IMPL") or DEFAULT_IMPL[plugin]
     if name not in ("js", "py"):
         raise ValueError(f"GD_IMPL must be js or py, got {name!r}")
-    if name == "js" and plugin == "destructive-guard":
-        raise ValueError("destructive-guard has no JS implementation any more; GD_IMPL=js is only for gated-dev-simple-workflow")
+    if name == "js":
+        raise ValueError("there is no JS implementation any more; GD_IMPL=py (the default)")
     return Impl(name, plugin)
