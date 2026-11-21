@@ -18,6 +18,7 @@ class EntryStubs:
         (DG / "lib" / "check.py", "check"),
         (GD / "scripts" / "launch.py", "launch"),
         (GD / "scripts" / "watch_pr.py", "watch_pr"),
+        (GD / "scripts" / "flow.py", "flow"),
         (GD / "hooks" / "notify.py", "notify"),
     ]
     TOO_OLD = re.compile(r"^needs Python >= 3\.14 \(found 3\.\d+ at .+\); set GATE_INFRA_PYTHON\n$")

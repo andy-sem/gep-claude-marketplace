@@ -2,7 +2,8 @@
 
 import json
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -156,6 +157,15 @@ class FlowState:
         if self._locked_pid is not None and self._lock_holder() == self._locked_pid:
             self.lock_path.unlink(missing_ok=True)
         self._locked_pid = None
+
+    @contextmanager
+    def transaction(self) -> Iterator[bool]:
+        """Holds the lock while the caller loads, changes and saves; yields whether a file was loaded."""
+        self.acquire()
+        try:
+            yield self.load()
+        finally:
+            self.release()
 
     def _lock_holder(self) -> int | None:
         try:
