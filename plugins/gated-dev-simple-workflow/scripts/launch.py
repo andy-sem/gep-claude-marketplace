@@ -17,6 +17,6 @@ if sys.version_info < (3, 14):
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from gated_dev.launch import main
+from gated_dev.launch.cli import main
 
 sys.exit(main())
