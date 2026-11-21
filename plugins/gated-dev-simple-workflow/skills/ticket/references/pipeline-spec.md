@@ -82,7 +82,7 @@ Every file lives in `<ticketsDir>/<KEY>/` in the ticket worktree.
 | dev | dev agent (all tools) | `plan.md`, `spec.md`, `decisions.md` | one commit per step (`Plan-Step: N`), `dev-report.md` | steps done, verification passes (2 fix attempts, then H6) |
 | review | reviewer (read-only) | diff vs base, `spec.md`, `plan.md`, `dev-report.md` | `review.md`: critical / important / minor findings, `VERDICT: PASS|CHANGES_REQUIRED` | PASS, or H5 after 2 fix rounds |
 | complete | orchestrator | `plan.md`, `review.md`, `state.json` | push, PR | PR open, stage `done` |
-| done | orchestrator + `watch-pr.mjs` (background) | the PR | `watch` heartbeat in `state.json` | feedback → `addressing_review`, merged → `merged`, closed → stop |
+| done | orchestrator + `watch_pr.py` (background) | the PR | `watch` heartbeat in `state.json` | feedback → `addressing_review`, merged → `merged`, closed → stop |
 | addressing_review | orchestrator, dev (`MODE=fix-pr`), reviewer (`REVIEW_SINCE`) | PR reviews and comments | `pr-feedback-<n>.md`, `PR-Fix: <id>` commits, push, replies | back to `done` |
 | merged | orchestrator | the PR | notification | worktree removed (branch kept) |
 
@@ -94,7 +94,7 @@ stronger model when the diff touches `riskPaths`.
 
 ### 5a. PR follow-up
 
-In stage `done` the session starts `scripts/watch-pr.mjs` in the background.
+In stage `done` the session starts `scripts/watch_pr.py` in the background.
 It polls the PR with `gh` once a minute and exits on new human feedback (not
 from a bot, not one of the pipeline's own replies, which carry
 `<!-- gated-dev -->`, newer than `lastAddressedCommentAt`), a merge, a close,

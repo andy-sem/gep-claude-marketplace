@@ -22,27 +22,28 @@ The two plugins are independent and installable on their own:
 
 ### `destructive-guard` (`plugins/destructive-guard/`)
 
-- `hooks/hooks.json`: `Bash|mcp__.*` → `hooks/gate.sh` (fail-closed wrapper around `lib/gate-engine.mjs`); `Read|Edit|Write` → `hooks/env-guard.sh` (blocks `.env*` files except `.env.example`).
-- The gate **asks or has no opinion; it never allows**. It parses shell commands (sees through `sudo`, `xargs`, `bash -c`, `npx`) rather than grepping. Engine or config errors ask with a `gate-config:` reason.
-- `lib/config.mjs` is the single place that turns env vars into config. Main vars: `GATE_ENABLED`, `GATE_CHECKS` (packs: `destructive` default, `postgres`, `terraform`; `base` always loaded), `GATE_RULES_FILE`, `GATE_DISABLE_RULES`, `GATE_STRICT` (default `0`), `GATE_LOG`, `GATE_JEV_*`.
-- Rule packs live in `packs/*.json`; `lib/gate-scripts.mjs` scans scripts a command runs.
-- Optional **Jev** classifier (`lib/gate-jev.mjs`, prompts in `jev/*.json`, off by default). With Jev on, its confident answer wins; rules decide in the uncertain band, on errors and when Jev is off. Fail-closed cases always ask and are never sent to Jev.
-- `skills/check` + `lib/check.mjs`: dry-run a command/MCP call through the gate, or print effective config (`/destructive-guard:check`).
+- `hooks/hooks.json`: `Bash|mcp__.*` → `hooks/gate.sh` (fail-closed wrapper: finds Python via `GATE_INFRA_PYTHON`, `python3.14`, `python3`, runs `lib/gate_main.py` with `-I`); `Read|Edit|Write` → `hooks/env-guard.sh` (blocks `.env*` files except `.env.example`).
+- The gate **asks or has no opinion; it never allows**. It parses shell commands (sees through `sudo`, `xargs`, `bash -c`, package runners) rather than grepping. Engine or config errors ask with a `gate-config:` reason.
+- `lib/destructive_guard/config.py` is the single place that turns env vars into config. Main vars: `GATE_ENABLED`, `GATE_CHECKS` (packs: `destructive` default, `postgres`, `terraform`; `base` always loaded), `GATE_RULES_FILE`, `GATE_DISABLE_RULES`, `GATE_STRICT` (default `0`), `GATE_LOG`, `GATE_JEV_*`.
+- Rule packs live in `packs/*.json`; `lib/destructive_guard/scripts/` scans scripts a command runs.
+- Optional **Jev** classifier (`lib/destructive_guard/jev/`, prompts in `jev/*.json`, off by default). With Jev on, its confident answer wins; rules decide in the uncertain band, on errors and when Jev is off. Fail-closed cases always ask and are never sent to Jev.
+- `skills/check` + `lib/check.py`: dry-run a command/MCP call through the gate, or print effective config (`/destructive-guard:check`).
 - The README is the user-facing reference for rules and configuration; keep it in sync with behaviour.
+- `formal/`: Lean 4 model of the planned lean gate (`SimpleGate.lean`, theses S1–S8; plan in `docs/plans/lean-gate.md`). Dev-only: ships as source but users never build it, and the plugin runs without Lean. Build with `elan` (`~/.elan`, toolchain pinned in `lean-toolchain`): `cd plugins/destructive-guard/formal && PATH="$HOME/.elan/bin:$PATH" lake build`; keep it free of errors and `sorry`. `.lake/` is gitignored.
 
 ### `gated-dev-simple-workflow` (`plugins/gated-dev-simple-workflow/`)
 
 - `skills/ticket/SKILL.md` is the orchestrator: it runs in the main session, never writes product code, and drives one subagent per stage in a worktree per ticket (`git worktree`, Orca or iTerm2).
 - Agents in `agents/`: `ticket-spec` → `spec.md`, `ticket-planner` → `plan.md`, `ticket-dev` → commits + `dev-report.md`, `ticket-reviewer` → `review.md`. Each ends with `RESULT: OK <file>` or a `NEEDS_DECISION` block.
 - File-based: the ticket is `docs/tickets/<KEY>/ticket.md` by default, and stages read/write files next to it. **No issue tracker (no Jira)**: agents have no tracker tools or wording.
-- Plan approval is always a stop point; after it the run commits, pushes and opens a PR with `gh`, then watches the PR (`scripts/watch-pr.mjs`, background): new feedback → follow-up round (`--address-review`, dev `MODE=fix-pr`, replies marked `<!-- gated-dev -->`), merge → notification and worktree removal (branch kept).
+- Plan approval is always a stop point; after it the run commits, pushes and opens a PR with `gh`, then watches the PR (`scripts/watch_pr.py`, background): new feedback → follow-up round (`--address-review`, dev `MODE=fix-pr`, replies marked `<!-- gated-dev -->`), merge → notification and worktree removal (branch kept).
 - With `destructive-guard` enabled the planner dry-runs its calls through `destructive-guard:check` and lists the ones that will ask in the plan's `## Gated operations` table.
-- `hooks/notify.sh` (`Notification` hook): desktop notification for launcher-started sessions (`TICKET_FLOW_KEY`); macOS `osascript`, Linux `notify-send`, silent elsewhere; `GATED_DEV_NOTIFY=0` disables. Tests in `test/notify.test.mjs`.
+- `hooks/notify.py` via `hooks/run-python.sh` (`Notification` hook; Python >= 3.14, silent without it): desktop notification for launcher-started sessions (`TICKET_FLOW_KEY`); macOS `osascript`, Linux `notify-send`, silent elsewhere; `GATED_DEV_NOTIFY=0` disables. Tests in `tests/test_notify.py`, `tests/test_run_python.py`.
 - Per-project settings: `.claude/gated-dev.json` (see `skills/ticket/references/config.md`); pipeline contract in `skills/ticket/references/pipeline-spec.md`.
 
 ## Work in progress
 
-Both plugins are ported; WP-W5 (PR follow-up) is the last package (see the plan for its status). Plan, status, binding decisions and handoff: `docs/plans/gated-dev-simple-workflow.md` (§7 is the entry point for a new session). Read it before changing either plugin.
+Both plugins are ported and run on Python; the repo contains no JavaScript (`tests/test_no_js.py` keeps it that way). The port plan and its outcome: `docs/plans/python-port.md`; plan, binding decisions and handoff of the workflow plugin: `docs/plans/gated-dev-simple-workflow.md` (§7 is the entry point for a new session). Read them before changing either plugin.
 
 ## Public repo hygiene (binding)
 
@@ -55,12 +56,15 @@ Both plugins are ported; WP-W5 (PR follow-up) is the last package (see the plan 
 There is no build step. Before committing:
 
 ```bash
-node --test 'plugins/destructive-guard/test/*.test.mjs'   # quote the glob; Node 25 rejects a bare directory
 claude plugin validate .                                    # marketplace + plugin manifests
 jq . .claude-plugin/marketplace.json
+
+uv sync                                                     # once: dev tools (pytest, ruff); needs uv and Python 3.14
+uv run pytest                                               # Python tests
+uv run ruff check .
 ```
 
-`destructive-guard` needs Node.js; there are no npm dependencies. Keep existing tests green and add tests with every behaviour change. `gated-dev-simple-workflow` tests cover the launcher, the PR watcher and the notification hook: `node --test 'plugins/gated-dev-simple-workflow/test/*.test.mjs'`; its skills and agents (Markdown) have none.
+`destructive-guard` needs Python >= 3.14 (standard library only; tests: `uv run pytest plugins/destructive-guard`). Keep existing tests green and add tests with every behaviour change. `gated-dev-simple-workflow` needs Python >= 3.14 too (launcher, PR watcher, notification hook; tests: `uv run pytest plugins/gated-dev-simple-workflow`); its skills and agents (Markdown) have none.
 
 ## Adding or changing a plugin
 

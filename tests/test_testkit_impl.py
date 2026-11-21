@@ -1,0 +1,111 @@
+import os
+import stat
+import subprocess
+
+import pytest
+
+from testkit import DG
+from testkit.impl import Impl
+from testkit.pythons import Pythons
+
+
+def _fake(dir_path, name):
+    p = dir_path / name
+    p.write_text("#!/bin/sh\n")
+    p.chmod(p.stat().st_mode | stat.S_IXUSR)
+    return p
+
+
+def test_defaults():
+    assert Impl.select("destructive-guard", {}).name == "py"
+    assert Impl.select("gated-dev-simple-workflow", {}).name == "py"
+
+
+def test_unknown_plugin_raises():
+    with pytest.raises(ValueError):
+        Impl.select("nope", {})
+
+
+def test_entry_points_exist():
+    dg = Impl.select("destructive-guard", {})
+    gd = Impl.select("gated-dev-simple-workflow", {})
+    for argv in (dg.gate_hook(), dg.env_guard(), dg.check(), gd.launch(), gd.watch_pr(), gd.notify()):
+        assert os.path.isfile(argv[-1]), argv
+
+
+def test_py_argv_shapes():
+    dg = Impl.select("destructive-guard", {})
+    assert dg.check()[1] == "-I"
+    assert dg.check()[-1].endswith("lib/check.py")
+    gd = Impl.select("gated-dev-simple-workflow", {})
+    assert gd.notify()[1].endswith("run-python.sh")
+    assert gd.watch_pr()[-1].endswith("scripts/watch_pr.py")
+
+
+def test_find_python_prefers_env():
+    assert Pythons.find_python({"GATE_INFRA_PYTHON": "/nope", "PATH": os.environ["PATH"]}) == "/nope"
+
+
+def test_find_python_prefers_314_over_python3(tmp_path):
+    _fake(tmp_path, "python3")
+    _fake(tmp_path, "python3.14")
+    assert Pythons.find_python({"PATH": str(tmp_path)}).endswith("python3.14")
+
+
+def test_find_python_falls_back_to_python3(tmp_path):
+    _fake(tmp_path, "python3")
+    assert Pythons.find_python({"PATH": str(tmp_path)}).endswith("python3")
+
+
+def test_find_python_none(tmp_path):
+    assert Pythons.find_python({"PATH": str(tmp_path)}) is None
+
+
+def test_empty_env_var_is_ignored(tmp_path):
+    _fake(tmp_path, "python3")
+    assert Pythons.find_python({"GATE_INFRA_PYTHON": "", "PATH": str(tmp_path)}).endswith("python3")
+
+
+def test_impl_interpreter_fields():
+    py = Impl.select("destructive-guard", {})
+    assert py.interpreter_var == "GATE_INFRA_PYTHON"
+    assert py.unavailable_reason == "unparsable: python unavailable"
+    assert py.check_invocation("--config") == f'python3 "{DG}/lib/check.py" --config'
+
+
+def test_require_new_python_rejects_old(tmp_path):
+    from testkit.pythons import Pythons
+
+    fake = tmp_path / "python3"
+    fake.write_text('#!/bin/sh\nfor a; do case "$a" in *version_info*) echo "3.9"; exit 0;; esac; done\necho 3.9\n')
+    fake.chmod(0o755)
+    with pytest.raises(RuntimeError, match=r"need Python >= 3\.14, found 3\.9 at .*python3; set GATE_INFRA_PYTHON"):
+        Pythons.require_new_python({"PATH": str(tmp_path)})
+    with pytest.raises(RuntimeError, match="found nothing"):
+        Pythons.require_new_python({"PATH": str(tmp_path / "none")})
+
+
+def test_impl_watch_pr_fast_py(tmp_path):
+    gd = Impl.select("gated-dev-simple-workflow", {})
+    argv = gd.watch_pr(fast=True)
+    assert argv[1] == "-I"
+    assert argv[2].endswith("testkit/_fast_sleep.py")
+    assert argv[3].endswith("scripts/watch_pr.py")
+    # The runner records the delay in ms and returns at once; the target runs as __main__ with its own argv.
+    target = tmp_path / "target.py"
+    target.write_text("import sys, time\ntime.sleep(60)\ntime.sleep(0.5)\nprint(sys.argv[1:])\nsys.exit(4)\n")
+    log = tmp_path / "sleeps.log"
+    proc = subprocess.run(
+        [argv[0], "-I", argv[2], str(target), "a", "b"],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "GD_TEST_SLEEP_LOG": str(log)},
+        timeout=30,
+        check=False,
+    )
+    assert (proc.returncode, proc.stdout) == (4, "['a', 'b']\n")
+    assert log.read_text().split() == ["60000", "500"]
+
+
+def test_gate_hook_is_the_shipped_gate_sh():
+    assert Impl.select("destructive-guard", {}).gate_hook()[-1].endswith("hooks/gate.sh")

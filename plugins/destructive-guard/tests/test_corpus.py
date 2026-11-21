@@ -1,0 +1,183 @@
+"""Rule case corpus (tests/cases/*.json), run through `check --json` (port of destructive / gate-rules / gate-engine cases)."""
+
+import json
+import os
+from concurrent.futures import ThreadPoolExecutor
+from functools import cache
+from pathlib import Path
+
+import pytest
+
+from destructive_guard.config import GateConfig
+from destructive_guard.engine.classifier import Classifier
+from testkit import DG
+from testkit.check_cli import CheckRunner
+from testkit.hook import HookRunner
+from testkit.impl import Impl
+from testkit.projects import TempProject
+
+CASES = DG / "tests" / "cases"
+FIXTURES = DG / "tests" / "fixtures"
+CORPORA = ["destructive", "gate_rules", "gate_engine"]
+# Corpora whose expect is the reason's first segment (as the JS test asserts), not the rule id (source).
+REASON_CORPORA = {"gate_engine"}
+
+
+def load_corpus(name: str) -> tuple[dict, list[dict]]:
+    """(env with @fixture: paths resolved, cases) of tests/cases/<name>.json."""
+    data = json.loads((CASES / f"{name}.json").read_text())
+    env = {
+        k: str(FIXTURES / v.removeprefix("@fixture:")) if v.startswith("@fixture:") else v
+        for k, v in data["env"].items()
+    }
+    return env, data["cases"]
+
+
+def call_of(case: dict) -> dict:
+    return {k: case[k] for k in ("bash", "mcp", "input", "hook") if k in case}
+
+
+def label(case: dict) -> str:
+    if "bash" in case:
+        return case["bash"]
+    if "hook" in case:
+        return json.dumps(case["hook"], separators=(",", ":"))
+    return f"{case['mcp']} {json.dumps(case['input'], separators=(',', ':'))}"
+
+
+def _params(name: str):
+    _, cases = load_corpus(name)
+    return [pytest.param(i, c, id=label(c)) for i, c in enumerate(cases)]
+
+
+@cache
+def _engine(env_items: tuple[tuple[str, str], ...]) -> tuple[dict, bool]:
+    config = GateConfig.read_config(dict(env_items), cwd=Path.cwd())
+    return GateConfig.build_rules(config), bool(config["strict"])
+
+
+def hook_input(case: dict) -> dict:
+    """The hook input a corpus case stands for."""
+    if "hook" in case:
+        return case["hook"]
+    if "bash" in case:
+        return {"tool_name": "Bash", "tool_input": {"command": case["bash"]}}
+    return {"tool_name": case["mcp"], "tool_input": case["input"]}
+
+
+def classify_case(corpus_env: dict, case: dict) -> str | None:
+    """In-process leg: the rule id (the reason's first segment) when the case asks, else None; the same
+    value the contract leg gets from `check --json` (`source`) or the hook reason."""
+    rules, strict = _engine(tuple(sorted(corpus_env.items())))
+    result = Classifier(rules, strict).classify(hook_input(case))
+    if not result or result["decision"] != "ask":
+        return None
+    reason = result["reason"]
+    i = reason.find(":")
+    return reason[:i] if i > 0 else reason
+
+
+@pytest.fixture(scope="module")
+def corpus_results(tmp_path_factory) -> dict[tuple[str, int], str | None]:
+    """Every case of every corpus, run once and concurrently: when it asks, the rule id (source), or the
+    reason's first segment for REASON_CORPORA; else None."""
+    impl = Impl.select("destructive-guard", os.environ)
+    cwd = TempProject.temp_project(tmp_path_factory.mktemp("corpus"), {})
+    jobs = []
+    for name in CORPORA:
+        env, cases = load_corpus(name)
+        jobs += [((name, i), call_of(c), env) for i, c in enumerate(cases)]
+
+    def one(job):
+        key, call, env = job
+        if "hook" in call or not call.get("mcp", "mcp__").startswith("mcp__"):
+            # check --mcp only takes mcp__ tools; other calls go through the hook itself.
+            stdin = (
+                json.dumps({**call["hook"], "cwd": str(cwd)})
+                if "hook" in call
+                else HookRunner.mcp_input(call["mcp"], call["input"], cwd)
+            )
+            out = HookRunner.run(impl, stdin, env, cwd=cwd).stdout
+            return key, HookRunner.decision(out)["permissionDecisionReason"].split(":")[0] if out else None
+        r = CheckRunner.check_call(impl, call, env=env, cwd=cwd)
+        if r["decision"] != "ask":
+            return key, None
+        return key, r["reason"].split(":")[0] if key[0] in REASON_CORPORA else r["source"]
+
+    with ThreadPoolExecutor(max_workers=os.cpu_count()) as pool:
+        return dict(pool.map(one, jobs))
+
+
+def _py_params(name: str):
+    env, cases = load_corpus(name)
+    return [pytest.param(env, c, id=label(c)) for c in cases]
+
+
+@pytest.mark.parametrize(("env", "case"), _py_params("destructive"))
+def test_destructive_case_py(env, case):
+    assert classify_case(env, case) == case["expect"]
+
+
+@pytest.mark.parametrize(("env", "case"), _py_params("gate_rules"))
+def test_gate_rules_case_py(env, case):
+    assert classify_case(env, case) == case["expect"]
+
+
+@pytest.mark.parametrize(("env", "case"), _py_params("gate_engine"))
+def test_gate_engine_case_py(env, case):
+    assert classify_case(env, case) == case["expect"]
+
+
+def test_corpus_sizes():
+    _, destructive = load_corpus("destructive")
+    _, gate_rules = load_corpus("gate_rules")
+    assert len(destructive) == 150
+    assert len([c for c in gate_rules if c.get("group") != "not-gated"]) == 194
+    assert len([c for c in gate_rules if c.get("group") == "not-gated"]) == 4
+    _, gate_engine = load_corpus("gate_engine")
+    assert len(gate_engine) == 189
+
+
+@pytest.mark.parametrize(("index", "case"), _params("destructive"))
+def test_destructive_case(corpus_results, index, case):
+    assert corpus_results[("destructive", index)] == case["expect"]
+
+
+@pytest.mark.parametrize(("index", "case"), _params("gate_rules"))
+def test_gate_rules_case(corpus_results, index, case):
+    assert corpus_results[("gate_rules", index)] == case["expect"]
+
+
+@pytest.mark.parametrize(("index", "case"), _params("gate_engine"))
+def test_gate_engine_case(corpus_results, index, case):
+    assert corpus_results[("gate_engine", index)] == case["expect"]
+
+
+@pytest.mark.parametrize("name", CORPORA)
+def test_corpus_env_builds(name, tmp_path):
+    """The corpus env composes a non-empty rule set."""
+    env, _ = load_corpus(name)
+    ids = [r["id"] for r in GateConfig.build_rules(GateConfig.read_config(env, cwd=tmp_path))["rules"]]
+    assert ids
+
+
+def test_every_destructive_rule_has_an_asking_case():
+    pack = json.loads((DG / "packs" / "destructive.json").read_text())
+    _, cases = load_corpus("destructive")
+    hit = {c["expect"] for c in cases}
+    assert {r["id"] for r in pack["rules"]} <= hit
+
+
+def test_destructive_rules_do_not_make_script_scan_ask(impl, tmp_path):
+    root = TempProject.temp_project(tmp_path, {"build.sh": "rm -rf dist\ngit push\n"})
+    assert CheckRunner.check_call(impl, {"bash": "bash build.sh"}, cwd=root)["decision"] == "none"
+    # a script outside the project does not ask when nothing is scanned for
+    assert CheckRunner.check_call(impl, {"bash": "bash /usr/local/bin/x.sh"}, cwd=root)["decision"] == "none"
+
+
+def test_shipped_rule_file_loads(impl, tmp_path):
+    env, _ = load_corpus("gate_rules")
+    proc = CheckRunner.run_check(impl, "--json", "--config", env=env, cwd=tmp_path)
+    config = json.loads(proc.stdout)
+    assert "error" not in config
+    assert len(config["ruleIds"]) > 0
