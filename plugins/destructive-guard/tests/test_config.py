@@ -12,12 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from destructive_guard import config as dg_config
-from destructive_guard.config import (
-    DEFAULT_CHECKS,
-    available_packs,
-    build_rules,
-)
+from destructive_guard.config import GateConfig
 from destructive_guard.errors import ConfigError, RulesError
 from testkit.check_cli import check_call
 from testkit.envs import clean_env
@@ -44,7 +39,7 @@ def extra_rules(tmp_path_factory) -> Path:
 
 
 def read_config(env, opts=None):
-    return dg_config.read_config(env, **(opts or {}))
+    return GateConfig.read_config(env, **(opts or {}))
 
 
 def read_configs(*envs):
@@ -92,7 +87,7 @@ def test_read_config_defaults():
         "strict": False,
         "log": None,
     }
-    assert DEFAULT_CHECKS == ["destructive"]
+    assert GateConfig.DEFAULT_CHECKS == ["destructive"]
     # empty values mean "unset"
     assert clean == defaults
 
@@ -178,7 +173,7 @@ def test_relative_paths_resolve_against_git_root_else_cwd(tmp_path, extra_rules)
 
 
 def test_available_packs_lists_shipped_packs():
-    packs = available_packs()
+    packs = GateConfig.available_packs()
     for p in ["base", "destructive", "postgres", "terraform"]:
         assert p in packs, p
 
@@ -240,7 +235,7 @@ def test_build_rules_missing_or_broken_file(impl, tmp_path):
 
 
 def rule_ids(env):
-    return [r["id"] for r in build_rules(read_config(env))["rules"]]
+    return [r["id"] for r in GateConfig.build_rules(read_config(env))["rules"]]
 
 
 def test_build_rules_direct_default_packs_and_extra_file(extra_rules):
@@ -255,7 +250,7 @@ def test_build_rules_direct_default_packs_and_extra_file(extra_rules):
 
 def test_build_rules_direct_checks_none_loads_only_file(extra_rules):
     config = read_config({"GATE_CHECKS": "none", "GATE_RULES_FILE": str(extra_rules)})
-    assert [r["id"] for r in build_rules(config)["rules"]] == ["deployctl"]
+    assert [r["id"] for r in GateConfig.build_rules(config)["rules"]] == ["deployctl"]
 
 
 def test_build_rules_direct_disable_rules():
@@ -263,18 +258,18 @@ def test_build_rules_direct_disable_rules():
     assert "git-push-force" not in ids
     assert "git-reset-hard" in ids
     with pytest.raises(ConfigError, match=r'GATE_DISABLE_RULES: unknown rule id "git-push-forse", "nope"'):
-        build_rules(read_config({"GATE_DISABLE_RULES": "git-push-forse,git-reset-hard,nope"}))
+        GateConfig.build_rules(read_config({"GATE_DISABLE_RULES": "git-push-forse,git-reset-hard,nope"}))
 
 
 def test_build_rules_direct_missing_or_broken_file(tmp_path):
     with pytest.raises(RulesError, match="cannot read rules file"):
-        build_rules(read_config({"GATE_RULES_FILE": str(tmp_path / "missing.json")}))
+        GateConfig.build_rules(read_config({"GATE_RULES_FILE": str(tmp_path / "missing.json")}))
     dup = tmp_path / "dup.json"
     dup.write_text(
         json.dumps({"rules": [{"id": "git-push-force", "kind": "cli-gated", "programs": ["x"], "gatedPrefixes": [[]]}]})
     )
     with pytest.raises(RulesError, match="duplicate rule id"):
-        build_rules(read_config({"GATE_RULES_FILE": str(dup)}))
+        GateConfig.build_rules(read_config({"GATE_RULES_FILE": str(dup)}))
 
 
 # ---------------------------------------------------------------------------

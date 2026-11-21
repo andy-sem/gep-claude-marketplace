@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import JevConfigError
-from ..paths import project_path
+from ..paths import ProjectDir
 from .config import JevConfig
 
 
@@ -83,7 +83,7 @@ class JevPrompt:
         cwd = cwd if cwd is not None else os.getcwd()
         ref = JevConfig._optional(env, "GATE_JEV_PROMPT") or cls.DEFAULT_PROMPT
         if "/" in ref or ref.endswith(".json"):
-            base = cls._read_prompt_file(project_path(ref, env, cwd), "GATE_JEV_PROMPT")
+            base = cls._read_prompt_file(ProjectDir.project_path(ref, env, cwd), "GATE_JEV_PROMPT")
         else:
             base = cls.builtin_prompt(ref)
         prompt = {**base, "context": dict(base["context"])}

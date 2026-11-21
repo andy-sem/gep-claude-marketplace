@@ -8,7 +8,7 @@ from typing import Any, ClassVar
 from urllib.parse import urlsplit
 
 from ..errors import JevConfigError
-from ..paths import project_path
+from ..paths import ProjectDir
 
 
 class JevConfig:
@@ -126,7 +126,7 @@ class JevConfig:
             "allowThreshold": cls._probability(env, "GATE_JEV_ALLOW_THRESHOLD", cls.DEFAULTS["allowThreshold"]),
             "escalateThreshold": cls._probability(env, "GATE_JEV_ESCALATE_THRESHOLD", cls.DEFAULTS["escalateThreshold"]),
             "timeoutMs": timeout_ms,
-            "logPath": None if log is None else project_path(log, env, cwd),
+            "logPath": None if log is None else ProjectDir.project_path(log, env, cwd),
             "scope": cls._scope(env),
             "canLift": cls._can_lift(env),
             "prompt": JevPrompt.prompt_from_env(env, cwd=cwd),

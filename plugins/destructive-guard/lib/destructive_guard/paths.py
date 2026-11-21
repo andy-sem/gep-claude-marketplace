@@ -12,23 +12,25 @@ from collections.abc import Mapping
 from pathlib import Path
 
 
-def project_dir(env: Mapping[str, str], cwd: str | Path) -> str:
-    from_env = env.get("CLAUDE_PROJECT_DIR")
-    from_env = from_env.strip() if isinstance(from_env, str) else ""
-    if from_env:
-        return os.path.abspath(from_env)
-    start = os.path.abspath(cwd)
-    directory = start
-    while True:
-        if os.path.exists(os.path.join(directory, ".git")):
-            return directory
-        parent = os.path.dirname(directory)
-        if parent == directory:
-            return start
-        directory = parent
+class ProjectDir:
+    @staticmethod
+    def project_dir(env: Mapping[str, str], cwd: str | Path) -> str:
+        from_env = env.get("CLAUDE_PROJECT_DIR")
+        from_env = from_env.strip() if isinstance(from_env, str) else ""
+        if from_env:
+            return os.path.abspath(from_env)
+        start = os.path.abspath(cwd)
+        directory = start
+        while True:
+            if os.path.exists(os.path.join(directory, ".git")):
+                return directory
+            parent = os.path.dirname(directory)
+            if parent == directory:
+                return start
+            directory = parent
 
-
-def project_path(path: str, env: Mapping[str, str], cwd: str | Path) -> str:
-    if os.path.isabs(path):
-        return path
-    return os.path.abspath(os.path.join(project_dir(env, cwd), path))
+    @classmethod
+    def project_path(cls, path: str, env: Mapping[str, str], cwd: str | Path) -> str:
+        if os.path.isabs(path):
+            return path
+        return os.path.abspath(os.path.join(cls.project_dir(env, cwd), path))
