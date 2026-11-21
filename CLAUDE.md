@@ -43,8 +43,7 @@ The two plugins are independent and installable on their own:
 
 ## Work in progress
 
-Both plugins run on Python; the repo contains no JavaScript (`tests/test_no_js.py` keeps it that way). Design decisions and history of each plugin (origin, binding decisions, Python port, class refactor) are in the "Design decisions and history" section of its README; read it before changing a plugin. Open plan: `docs/plans/lean-gate.md` (proposal to simplify `destructive-guard` to Jev only; decisions pending). Jira tracker plan: `docs/plans/jira-tracker/README.md`.
-
+Both plugins run on Python; the repo contains no JavaScript (`tests/test_no_js.py` keeps it that way). Design decisions and history of each plugin (origin, binding decisions, Python port, class refactor) are in the "Design decisions and history" section of its README; read it before changing a plugin. Open plan: `docs/plans/lean-gate.md` (proposal to simplify `destructive-guard` to Jev only; decisions pending).
 ## Public repo hygiene (binding)
 
 - Never write the source project's app name, ticket keys, cloud/database project ids or branch names here. Use neutral placeholders (`my-app-dev`, `apps/web`, `PROJ-1`).

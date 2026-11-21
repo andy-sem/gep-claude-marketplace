@@ -342,8 +342,12 @@ launcher, J3 docs and release). Binding decisions:
   its own plan), other trackers (`tracker.type` leaves room), and moving the
   issue back during PR feedback rounds.
 
-The step-by-step plan is `docs/plans/jira-tracker/`. It stays until the
-manual acceptance run in a sandbox Jira project is done.
+Still to do: a manual acceptance run in a demo repo with a sandbox Jira
+project (never a real team project). It covers the kickoff, the move to In
+Review at PR open, a PR feedback round, merge and `--resume` (no second
+merged comment), a missing target status (warning only) and a session
+without Jira tools (kickoff stops). The step-by-step plan, with the full
+acceptance list, is in git history (`docs/plans/jira-tracker/`).
 
 ### Planned change in the gate
 
