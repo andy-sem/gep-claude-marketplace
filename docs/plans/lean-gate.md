@@ -69,8 +69,8 @@ A removed variable that is still set triggers a one-time SessionStart warning (s
 - [x] `lean-toolchain` pinned to `leanprover/lean4:v4.36.0`; `lake-manifest.json` added.
 - [ ] Apply D2, D3 and D7 to `SimpleGate.lean`: remove `Setting.off`; misconfigured gives `⟨none, none⟩` at the tool hook; add `sessionStart : Setting → Option Down` and S9; update S3/S4; add `Down.pythonMissing` and `Down.internalError` (used by `gate.sh` and the hook's exception path).
 - [ ] Rebuild; the examples at the bottom become the conformance table for L1 (see below).
-- [ ] Delete `docs/plans/lean-gate-model.md` (it models the old rule gate with `.mjs` line refs).
-- [ ] Add a "Formal model" line to the README Development section and to `CLAUDE.md`: dev-only, needs `elan` (`PATH="$HOME/.elan/bin:$PATH" lake build` in `plugins/destructive-guard/formal`), not needed to use the plugin.
+- [x] Delete `docs/plans/lean-gate-model.md` (it modelled the old rule gate; deleted with the other finished plans, summaries now in the plugin READMEs).
+- [x] Add a "Formal model" line to the README Development section and to `CLAUDE.md`: dev-only, needs `elan` (`PATH="$HOME/.elan/bin:$PATH" lake build` in `plugins/destructive-guard/formal`), not needed to use the plugin.
 - [ ] Commit: `Lean gate: formal model in destructive-guard/formal`.
 
 ### L1: New hook path (old code still present, unused by the hook)
@@ -110,7 +110,7 @@ A removed variable that is still set triggers a one-time SessionStart warning (s
 - [ ] `CLAUDE.md`: the `destructive-guard` section (no rules/parser/packs, fail-open with a warning, the formal model location).
 - [ ] `test_readme.py` matches the new README.
 - [ ] Version `0.8.1` → `1.0.0` (breaking: config removed, fail-closed dropped) in `plugin.json` and the catalog with a new description; bump `metadata.version`.
-- [ ] Delete the untracked `docs/plans/class-refactor/` task files (they describe classes L2 deletes), or commit them first if they're wanted as history.
+- [x] `docs/plans/class-refactor/` deleted (summary in the plugin READMEs).
 - [ ] `claude plugin validate .`, `jq . .claude-plugin/marketplace.json`, `uv run pytest`, `uv run ruff check .`.
 - [ ] Commit: `destructive-guard 1.0.0: lean gate`.
 

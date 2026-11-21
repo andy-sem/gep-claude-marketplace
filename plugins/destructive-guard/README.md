@@ -273,11 +273,103 @@ of it, so it is quiet by default; your own rules take part unless they set
 - **Turn it off for one project:** `"GATE_ENABLED": "0"` in that project's
   `.claude/settings.json` `env`.
 
+## Design decisions and history
+
+This section replaces the finished plan files that used to sit in
+`docs/plans/`. Git history keeps the full text.
+
+### Origin and binding decisions
+
+The gate started as an in-repo hook of a private project. It was ported
+into this marketplace as a plugin of its own, separate from the ticket
+workflow, so it protects every session, whether a person or an agent runs it.
+Decisions made with the user while porting it:
+
+- **Zero config is the product.** The default `destructive` pack must be
+  useful on its own. A call is destructive when it deletes, overwrites or
+  irreversibly changes data or resources, locally or in a remote service.
+  Creating or deploying is not destructive by itself: the optional packs and
+  the `cloud-change` Jev prompt cover that. Packs, opt-outs and Jev are
+  added on top of the default.
+- **Configured only through env variables.** Files are referenced *by* env
+  variables (`GATE_RULES_FILE`, `GATE_JEV_PROMPT`), never required.
+  Relative paths resolve against `CLAUDE_PROJECT_DIR`, else the git root,
+  so a project-committed rules file still works after a `cd`.
+- **Fails closed, never allows.** Any config or engine error asks with a
+  `gate-config:` reason. An invalid value is reported, never guessed.
+- **`GATE_STRICT` defaults to `0`.** This keeps a global gate quiet: when
+  the parser can't read a command it has no opinion, and the readable parts
+  are still checked.
+- **Jev decides and the rules are the fallback.** A confident Jev answer
+  wins: it adds an ask, or it lifts a rule ask (`GATE_JEV_CAN_LIFT=1`).
+  The rules decide in the uncertain band, on errors and when Jev is off.
+  Fail-closed cases are never sent to Jev. The Jev question is a default that
+  env variables can replace.
+- **The `.env` guard lives here,** on by default.
+- **Public repo hygiene.** No source-project names, no provider-specific
+  packs or prompts, and no named MCP servers. Tests use fictional tools
+  (`cloudctl`, `mcp__db__execute_sql`).
+- The rule id `git-push-force` also covers `--delete`, `--prune` and
+  `--mirror`. It keeps that name so existing `GATE_DISABLE_RULES` values stay
+  valid.
+
+### Python port (0.8, November 2026)
+
+The engine was rewritten from JavaScript to Python, and the repo now contains
+no JavaScript at all (`tests/test_no_js.py`). Behaviour didn't change. How:
+
+- **Runtime:** Python >= 3.14, standard library only, no venv for users.
+  3.11 was considered and rejected; the cost is that most machines must
+  install 3.14 first. Jev uses `urllib.request`.
+- **Interpreter lookup:** `GATE_INFRA_PYTHON`, else `python3.14`, else
+  `python3`, always run with `-I` so a planted `json.py` in the project
+  can't hijack the gate. The entry stubs (`lib/gate_main.py`,
+  `lib/check.py`) parse on Python 3.7, check the version and exit `3` when
+  it's too old. `gate.sh` turns that into an ask (`python unavailable`).
+  The bash wrappers stay because "no interpreter → ask" has to live outside
+  the interpreter.
+- **Regexes:** pack and user regexes run on Python `re`. A regex that doesn't
+  compile asks with `gate-config:`.
+- **Tests first:** a contract suite and a 537-case corpus were made green
+  against the old implementation, then each module was ported under them.
+  `tests/PORTING.md` maps every old test to its Python replacement.
+- **Latency** (full hook call, p50/p95): about 79/84 ms on Python against
+  118/127 ms on the old runtime.
+
+### Class refactor (November 2026)
+
+Every function moved into a class, one class per file, with no change in
+behaviour: `rules/` (loader, parser, regex dialect), `shell/` (tokenizer),
+`engine/` (normalizer, rule matcher, evaluators, `Classifier`), `scripts/`
+(run targets, source following, collector, scanner), `jev/` (config,
+prompt, redactor, request, client, decider), `gate/gate.py`, `config.py`,
+`check/` (dry run, report, CLI) and `hook.py`. The shared exceptions are in
+`errors.py`.
+
+### Formal model and the planned lean gate
+
+`formal/SimpleGate.lean` is a Lean 4 model of a proposed simpler gate:
+Jev alone decides (risky → ask, otherwise no decision). When Jev is
+unavailable, the gate shows a warning and leaves the call to Claude Code's
+own permissions. That removes the rule packs, the shell parser and the
+fail-closed asks. Its theses S1–S8 are machine-checked, and CI builds the
+model with `lake build --wfail`. The plan to change the code is
+`docs/plans/lean-gate.md`. It is a proposal, and nothing described above
+has changed yet. An earlier plan modelled the current rule gate in Lean; it
+was dropped unbuilt.
+
+### Known gaps
+
+- Statically not caught: destructive commands inside scripts the rules
+  don't scan, `psql -f file.sql`, SQL piped into a client. Jev covers these
+  when it's on.
+
 ## Development
 
 ```bash
 uv sync                                    # once: dev tools (pytest, ruff); needs uv and Python 3.14
 uv run pytest plugins/destructive-guard    # tests
+cd plugins/destructive-guard/formal && PATH="$HOME/.elan/bin:$PATH" lake build   # Lean model (needs elan)
 ```
 
 | Path | What |
@@ -295,3 +387,4 @@ uv run pytest plugins/destructive-guard    # tests
 | `lib/destructive_guard/check/cli.py` | The dry-run behind `lib/check.py` |
 | `packs/*.json` | Built-in rule packs |
 | `jev/*.json` | Built-in Jev prompts |
+| `formal/` | Lean 4 model of the planned lean gate (dev-only; users never build it) |
