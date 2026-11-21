@@ -230,7 +230,7 @@ The Python package is built next to the JS; hooks keep calling JS until P9.
 
 ### Phase 3: port `gated-dev-simple-workflow`
 
-- **P10** (plan: `docs/plans/python-port-p10.md`) `notify.py` + `run-python.sh` (D4a); `hooks.json` switches to it,
+- **P10** (plan: `docs/plans/python-port-p10.md`) **done**. `notify.py` + `run-python.sh` (D4a); `hooks.json` switches to it,
   `notify.sh` is deleted. The P3 notify contract tests stay unchanged
   except the `jq`-missing case, which becomes "no Python → silent".
 - **P11** (plan: `docs/plans/python-port-p11.md`) `watch_pr.py` (PR polling, heartbeat, follow-up rounds, marker).

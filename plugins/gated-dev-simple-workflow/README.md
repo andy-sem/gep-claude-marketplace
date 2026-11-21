@@ -155,10 +155,12 @@ titled `<KEY> needs you` whenever Claude Code raises a `Notification` event:
 a permission or gate prompt, a stop point such as plan approval, or an idle
 wait for input. macOS uses `osascript` (with a sound), Linux uses
 `notify-send` when it is installed; other systems stay silent. The message
-comes from the event (needs `jq`, otherwise a generic text). Sessions started
+comes from the event (a generic text when it has none). Sessions started
 by hand are never notified by the hook. While a session only watches its PR,
 Claude Code's idle notice fires once too. A merge sends `<KEY> merged` from
-any session. Set `GATED_DEV_NOTIFY=0` to turn all of it off.
+any session. Set `GATED_DEV_NOTIFY=0` to turn all of it off. The hook needs Python >= 3.14
+(`GATE_INFRA_PYTHON`, else `python3.14`, else `python3`); without it the hook
+stays silent.
 
 ## Agents
 
@@ -182,7 +184,7 @@ gate the table lists the calls it expects to need approval, with
 
 ## Requirements
 
-`git`, and `gh` (authenticated) for the PR; `orca` when running in Orca; `node` for the launcher and the PR watcher; optional `jq` and `notify-send` (Linux) for notifications.
+`git`, and `gh` (authenticated) for the PR; `orca` when running in Orca; `node` for the launcher and the PR watcher; optional `notify-send` (Linux) for notifications, which also need Python >= 3.14 (silent without it).
 
 ## Install
 

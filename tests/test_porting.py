@@ -8,6 +8,16 @@ PLUGIN_DIRS = [DG, GD]
 # JS tests deleted before their plugin's JS: the row stays as the record of the Python twin.
 REMOVED_JS_TESTS = {
     ("watch-pr.test.mjs", "the watcher command passes destructive-guard with its defaults"),  # P9: imported check.mjs
+    ("notify.test.mjs", "hooks.json registers notify.sh for Notification"),
+    ("notify.test.mjs", "silent without TICKET_FLOW_KEY"),
+    ("notify.test.mjs", "GATED_DEV_NOTIFY=0 turns it off"),
+    ("notify.test.mjs", "macOS: osascript with key title and the event message"),
+    ("notify.test.mjs", "Linux: notify-send with key title and the event message"),
+    ("notify.test.mjs", "Linux without notify-send: silent, exit 0"),
+    ("notify.test.mjs", "other OS: silent, exit 0"),
+    ("notify.test.mjs", "default message without jq or with bad input"),
+    ("notify.test.mjs", "a failing notifier does not fail the hook"),
+    ("notify.test.mjs", "direct mode: title and message from arguments, no TICKET_FLOW_KEY needed"),
 }
 
 
@@ -56,4 +66,4 @@ def test_js_tests_found():
     # destructive-guard's JS tests are gone (P9); its PORTING.md stays as the record.
     assert not (DG / "test").exists()
     tests = js_tests(GD)
-    assert len(tests) >= 60
+    assert len(tests) >= 50  # launch + watch-pr; notify.test.mjs went in P10

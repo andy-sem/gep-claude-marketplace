@@ -52,7 +52,7 @@ test has a row and that every target exists.
 | notify.test.mjs | Linux: notify-send with key title and the event message | tests/test_notify.py::test_linux_notify_send_with_key_title_and_event_message |
 | notify.test.mjs | Linux without notify-send: silent, exit 0 | tests/test_notify.py::test_linux_without_notify_send_is_silent |
 | notify.test.mjs | other OS: silent, exit 0 | tests/test_notify.py::test_other_os_is_silent |
-| notify.test.mjs | default message without jq or with bad input | tests/test_notify.py::test_default_message_without_jq_or_bad_input |
+| notify.test.mjs | default message without jq or with bad input | tests/test_notify.py::test_default_message_on_bad_input |
 | notify.test.mjs | a failing notifier does not fail the hook | tests/test_notify.py::test_a_failing_notifier_does_not_fail_the_hook |
 | notify.test.mjs | direct mode: title and message from arguments, no TICKET_FLOW_KEY needed | tests/test_notify.py::test_direct_mode_title_and_message_from_arguments |
 | watch-pr.test.mjs | a human issue comment newer than the PR creation exits with feedback | tests/test_watch_pr.py::test_human_issue_comment_newer_than_pr_creation_is_feedback |
