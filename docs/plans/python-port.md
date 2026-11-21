@@ -215,7 +215,10 @@ The Python package is built next to the JS; hooks keep calling JS until P9.
 - **P6** (plan: `docs/plans/python-port-p6.md`) **done**. `gate_scripts`: project root, run targets (shell, node, python,
   package scripts, workflows, `terraform test`), source/import following within limits, scan; `test_gate_scripts.py` has
   no bridge left.
-- **P7** (plan: `docs/plans/python-port-p7.md`) `gate_jev` (prompts, redaction, request, uncertain band).
+- **P7** (plan: `docs/plans/python-port-p7.md`) **done**. `gate_jev`: configuration, prompts, redaction, request
+  (`urllib.request`, injectable opener, one time budget, `retry-after`), decision and audit log;
+  `test_jev_units.py` and `test_jev_prompt.py` have no bridge left, `test_jev_request_py.py` mirrors every
+  `test_jev_http.py` row in-process.
 - **P8** (plan: `docs/plans/python-port-p8.md`) `check` CLI + hook entry point (`GATE_RUN`, done-file protocol).
 - **P9** (plan: `docs/plans/python-port-p9.md`) Cutover: `gate.sh` → D1a interpreter lookup, `GATE_INFRA_PYTHON`, skill and
   README updates, flip `impl` default to `py` for this plugin, delete

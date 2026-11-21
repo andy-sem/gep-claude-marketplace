@@ -1,7 +1,6 @@
 """Jev prompts (port of jev-prompt.test.mjs).
 
-# retarget to destructive_guard in P7
-The pure prompt helpers go through the JS bridge; askJev goes through the check CLI.
+The prompt helpers run in-process; askJev goes through the check CLI (contract test).
 """
 
 import json
@@ -9,16 +8,13 @@ import re
 
 import pytest
 
+from destructive_guard import gate_jev
+from destructive_guard.gate_jev import JevConfigError
 from testkit import DG
-from testkit.bridge import BridgeError, bridge
 from testkit.check_cli import run_check
 
 BASE_ENV = {"GATE_JEV": "1", "TYPESAFE_API_KEY": "key-123"}
 JEV_DIR = DG / "jev"
-
-
-def js_jev(export, *args):
-    return bridge("gate-jev", export, *args)
 
 
 def cfg_with(prompt):
@@ -51,8 +47,8 @@ CUSTOM = {
 
 
 def test_default_prompt_is_destructive_and_covers_local_and_remote():
-    assert js_jev("DEFAULT_PROMPT") == "destructive"
-    p = js_jev("readJevConfig", BASE_ENV)["prompt"]
+    assert gate_jev.DEFAULT_PROMPT == "destructive"
+    p = gate_jev.read_jev_config(BASE_ENV)["prompt"]
     assert p["question"] == "destructive"
     assert list(p["criteria"]) == ["read_only", "reversible_change", "destructive"]
     assert p["ask"] == ["destructive"]
@@ -77,19 +73,19 @@ def test_default_prompt_is_destructive_and_covers_local_and_remote():
 @pytest.mark.parametrize("path", sorted(JEV_DIR.glob("*.json")), ids=lambda p: p.name)
 def test_builtin_prompts_valid_and_generic(path):
     text = path.read_text()
-    js_jev("validatePrompt", json.loads(text), path.name)
+    gate_jev.validate_prompt(json.loads(text), path.name)
     assert not re.search(r"mcp__\w", text)
     assert not re.search(r"jira|atlassian|chrome|cloudflare|wrangler|supabase|gcloud|google", text, re.IGNORECASE)
 
 
 def test_jev_decision_with_destructive_prompt():
-    cfg = cfg_with(js_jev("builtinPrompt", "destructive"))
-    assert js_jev("jevDecision", d(0.1, 0.2, 0.7), cfg) == {"decision": "ask", "reason": "jev: destructive p=0.70 risk=0.70"}
-    assert js_jev("jevDecision", d(0.02, 0.96, 0.02), cfg) == {
+    cfg = cfg_with(gate_jev.builtin_prompt("destructive"))
+    assert gate_jev.jev_decision(d(0.1, 0.2, 0.7), cfg) == {"decision": "ask", "reason": "jev: destructive p=0.70 risk=0.70"}
+    assert gate_jev.jev_decision(d(0.02, 0.96, 0.02), cfg) == {
         "decision": "pass",
         "reason": "jev: reversible_change p=0.96 safe=0.98",
     }
-    assert js_jev("jevDecision", d(0.3, 0.3, 0.4), cfg) is None
+    assert gate_jev.jev_decision(d(0.3, 0.3, 0.4), cfg) is None
 
 
 def test_ask_jev_sends_destructive_question(impl, jev, tmp_path):
@@ -99,16 +95,16 @@ def test_ask_jev_sends_destructive_question(impl, jev, tmp_path):
     assert proc.returncode == 0, proc.stdout + proc.stderr
     [body] = jev.bodies
     assert list(body["questions"]) == ["destructive"]
-    assert body["state"]["context"]["policy"] == js_jev("builtinPrompt", "destructive")["context"]["policy"]
+    assert body["state"]["context"]["policy"] == gate_jev.builtin_prompt("destructive")["context"]["policy"]
     assert json.loads(proc.stdout)["source"] == "jev"
 
 
 def test_prompt_env_selects_builtin_or_file(tmp_path):
-    assert js_jev("promptFromEnv", {"GATE_JEV_PROMPT": "cloud-change"})["question"] == "cloud_change"
-    assert js_jev("promptFromEnv", {"GATE_JEV_PROMPT": " "})["question"] == "destructive"
+    assert gate_jev.prompt_from_env({"GATE_JEV_PROMPT": "cloud-change"})["question"] == "cloud_change"
+    assert gate_jev.prompt_from_env({"GATE_JEV_PROMPT": " "})["question"] == "destructive"
     path = tmp_path / "p.json"
     path.write_text(json.dumps(CUSTOM))
-    assert js_jev("promptFromEnv", {"GATE_JEV_PROMPT": str(path)}) == CUSTOM
+    assert gate_jev.prompt_from_env({"GATE_JEV_PROMPT": str(path)}) == CUSTOM
 
 
 def test_relative_prompt_and_log_resolve_against_project_dir(tmp_path):
@@ -119,22 +115,21 @@ def test_relative_prompt_and_log_resolve_against_project_dir(tmp_path):
         "GATE_JEV_PROMPT": "./prompt.json",
         "GATE_JEV_LOG": "jev.jsonl",
     }
-    cfg = js_jev("readJevConfig", env)
+    cfg = gate_jev.read_jev_config(env)
     assert cfg["prompt"] == CUSTOM
     assert cfg["logPath"] == str(tmp_path / "jev.jsonl")
-    assert js_jev("readJevConfig", {**BASE_ENV, "GATE_JEV_LOG": "/abs/j.jsonl"})["logPath"] == "/abs/j.jsonl"
+    assert gate_jev.read_jev_config({**BASE_ENV, "GATE_JEV_LOG": "/abs/j.jsonl"})["logPath"] == "/abs/j.jsonl"
 
 
 def test_instructions_context_policy_override_prompt():
-    p = js_jev(
-        "promptFromEnv",
+    p = gate_jev.prompt_from_env(
         {
             "GATE_JEV_INSTRUCTIONS": "Could this lose data?",
             "GATE_JEV_CONTEXT": "A monorepo; data/ holds fixtures that cannot be regenerated.",
             "GATE_JEV_POLICY": "Ask before anything that deletes files in data/.",
         },
     )
-    builtin = js_jev("builtinPrompt", "destructive")
+    builtin = gate_jev.builtin_prompt("destructive")
     assert p["instructions"] == "Could this lose data?"
     assert p["context"]["project"] == "A monorepo; data/ holds fixtures that cannot be regenerated."
     assert p["context"]["policy"] == "Ask before anything that deletes files in data/."
@@ -144,7 +139,7 @@ def test_instructions_context_policy_override_prompt():
 
 
 def _bad_prompt_values(tmp_path):
-    good = js_jev("builtinPrompt", "destructive")
+    good = gate_jev.builtin_prompt("destructive")
 
     def write(name, obj):
         p = tmp_path / name
@@ -167,6 +162,5 @@ def _bad_prompt_values(tmp_path):
 
 def test_bad_prompt_settings_raise_jev_config_error(tmp_path):
     for value in _bad_prompt_values(tmp_path):
-        with pytest.raises(BridgeError) as e:
-            js_jev("readJevConfig", {**BASE_ENV, "GATE_JEV_PROMPT": value})
-        assert e.value.name == "JevConfigError", value
+        with pytest.raises(JevConfigError):
+            gate_jev.read_jev_config({**BASE_ENV, "GATE_JEV_PROMPT": value})
