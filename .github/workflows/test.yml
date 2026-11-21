@@ -40,3 +40,18 @@ jobs:
       - run: uv run python -V
       - run: uv run ruff check .
       - run: uv run pytest
+
+  # Lean model of the lean gate (dev-only, see CLAUDE.md). --wfail also fails
+  # on `sorry`, which Lean reports as a warning.
+  lean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install elan
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --no-modify-path --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Build the model
+        working-directory: plugins/destructive-guard/formal
+        run: lake build --wfail
