@@ -1,17 +1,15 @@
 """Jev pure helpers (port of gate-jev.test.mjs, pure part).
 
-# retarget to destructive_guard in P7
-redact, readJevConfig, jevDecision, parseAnswer, buildState, redactScript and redactMcpInput
-have no CLI surface, so they go through the JS bridge for now. Each test batches its calls into
-one node process (a call that must throw runs on its own). askJev / runJev rows are in
-test_jev_http.py.
+Runs in-process against destructive_guard.gate_jev. askJev / runJev rows are in test_jev_http.py
+(through the hook) and test_jev_request_py.py (in-process).
 """
 
 import json
 
 import pytest
 
-from testkit.bridge import BridgeError, bridge, bridge_many, call
+from destructive_guard import gate_jev
+from destructive_guard.gate_jev import JevConfigError
 from testkit.jev_mock import probs
 
 BASE_ENV = {"GATE_JEV": "1", "TYPESAFE_API_KEY": "key-123"}
@@ -24,12 +22,12 @@ CFG = {
     "timeoutMs": 500,
     "allowThreshold": 0.95,
     "escalateThreshold": 0.5,
-    "prompt": call("gate-jev", "builtinPrompt", "cloud-change"),
+    "prompt": gate_jev.builtin_prompt("cloud-change"),
 }
 
 
-def jev_many(export, *arg_lists):
-    return bridge_many([("gate-jev", export, list(args)) for args in arg_lists])
+def jev_many(fn, *arg_lists):
+    return [getattr(gate_jev, fn)(*args) for args in arg_lists]
 
 
 def answer(p):
@@ -41,9 +39,8 @@ def bash_call(command, scripts=None):
 
 
 def jev_config_error(env):
-    with pytest.raises(BridgeError) as e:
-        bridge("gate-jev", "readJevConfig", env)
-    assert e.value.name == "JevConfigError", (env, e.value)
+    with pytest.raises(JevConfigError):
+        gate_jev.read_jev_config(env)
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +109,7 @@ def test_redact_leaves_ordinary_commands_unchanged():
 
 
 def read_jev_configs(*envs):
-    return jev_many("readJevConfig", *([e] for e in envs))
+    return jev_many("read_jev_config", *([e] for e in envs))
 
 
 def test_read_jev_config_null_when_off():
@@ -120,9 +117,7 @@ def test_read_jev_config_null_when_off():
 
 
 def test_read_jev_config_defaults():
-    config, prompt = bridge_many(
-        [("gate-jev", "readJevConfig", [BASE_ENV]), ("gate-jev", "builtinPrompt", ["destructive"])]
-    )
+    config, prompt = gate_jev.read_jev_config(BASE_ENV), gate_jev.builtin_prompt("destructive")
     assert config == {
         "apiKey": "key-123",
         "url": JEV_URL,
@@ -232,7 +227,7 @@ def test_read_jev_config_accepts_loopback_http_urls():
 
 
 def decide_many(*ps):
-    return jev_many("jevDecision", *([p, CFG] for p in ps))
+    return jev_many("jev_decision", *([p, CFG] for p in ps))
 
 
 def test_jev_decision_passes_confident_read_only_and_unrelated():
@@ -274,7 +269,7 @@ def test_jev_decision_names_cloud_or_data_change_when_larger():
 
 
 def parse_many(*bodies):
-    return jev_many("parseAnswer", *([b, CFG["prompt"]] for b in bodies))
+    return jev_many("parse_answer", *([b, CFG["prompt"]] for b in bodies))
 
 
 def test_parse_answer_accepts_well_formed_answer():
@@ -305,7 +300,7 @@ def test_parse_answer_null_for_malformed_shapes():
 
 
 def build_states(*calls):
-    return jev_many("buildState", *([c] for c in calls))
+    return jev_many("build_state", *([c] for c in calls))
 
 
 def test_build_state_bash_payload_with_scripts_and_notes():
@@ -388,7 +383,7 @@ SCRIPT_OUT = [
 
 
 def test_redact_script_removes_env_lines_and_redacts_secrets():
-    out, process_env = jev_many("redactScript", ["\n".join(SCRIPT_IN)], ["const a = process.env.FOO"])
+    out, process_env = jev_many("redact_script", ["\n".join(SCRIPT_IN)], ["const a = process.env.FOO"])
     assert out == "\n".join(SCRIPT_OUT)
     assert "sekret" not in out
     # JS: process.env is not an .env file
@@ -397,7 +392,7 @@ def test_redact_script_removes_env_lines_and_redacts_secrets():
 
 def test_redact_mcp_input_redacts_sql_literals_keeps_statement_and_ids():
     [raw] = jev_many(
-        "redactMcpInput",
+        "redact_mcp_input",
         [
             {
                 "project_id": "abcdefghijklmnopqrst",
@@ -412,7 +407,7 @@ def test_redact_mcp_input_redacts_sql_literals_keeps_statement_and_ids():
 
 def test_redact_mcp_input_replaces_dollar_quoted_bodies():
     [raw] = jev_many(
-        "redactMcpInput",
+        "redact_mcp_input",
         [{"sql": "CREATE FUNCTION f() RETURNS text AS $body$ select 'hunter2' $body$; SELECT $$x$$"}],
     )
     assert json.loads(raw)["sql"] == (
@@ -422,7 +417,7 @@ def test_redact_mcp_input_replaces_dollar_quoted_bodies():
 
 def test_redact_mcp_input_redacts_nested_secrets_bearer_and_env_mentions():
     [raw] = jev_many(
-        "redactMcpInput",
+        "redact_mcp_input",
         [
             {
                 "access_token": "tok-123",
@@ -446,5 +441,5 @@ def test_redact_mcp_input_redacts_nested_secrets_bearer_and_env_mentions():
 
 
 def test_redact_mcp_input_handles_empty_input():
-    # JS `redactMcpInput(undefined)`: called with no argument.
-    assert jev_many("redactMcpInput", [], [{}]) == ["{}", "{}"]
+    # JS `redactMcpInput(undefined)`: called with no argument (None here).
+    assert jev_many("redact_mcp_input", [None], [{}]) == ["{}", "{}"]
