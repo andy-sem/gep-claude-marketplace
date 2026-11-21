@@ -233,7 +233,7 @@ The Python package is built next to the JS; hooks keep calling JS until P9.
 - **P10** (plan: `docs/plans/python-port-p10.md`) **done**. `notify.py` + `run-python.sh` (D4a); `hooks.json` switches to it,
   `notify.sh` is deleted. The P3 notify contract tests stay unchanged
   except the `jq`-missing case, which becomes "no Python → silent".
-- **P11** (plan: `docs/plans/python-port-p11.md`) `watch_pr.py` (PR polling, heartbeat, follow-up rounds, marker).
+- **P11** (plan: `docs/plans/python-port-p11.md`) **done**. `watch_pr.py` (PR polling, heartbeat, follow-up rounds, marker).
 - **P12** (plan: `docs/plans/python-port-p12.md`) `launch.py` (worktrees, Orca/iTerm2, `--dry-run`, `--all`).
 - **P13** (plan: `docs/plans/python-port-p13.md`) Cutover: `ticket`/`launch` skills, `SKILL.md` gate dry-run step
   (`lib/check.py`), README requirements (Python ≥ 3.14 instead of `node`
