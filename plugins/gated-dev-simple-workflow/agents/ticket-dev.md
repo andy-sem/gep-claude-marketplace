@@ -29,6 +29,7 @@ If `WORKTREE`, `KEY`, `TICKET_DIR` or `BASE_BRANCH` is missing, `MODE=fix-review
 - Use absolute paths under `WORKTREE` only. Never read or write the main checkout or any other directory, except the scratch space your harness provides. Run every shell command with `cd <WORKTREE> &&` or an absolute path.
 - Context from earlier stages exists only in the files under `TICKET_DIR` and in `DECISIONS`. Read them first.
 - Stage files are safe to overwrite: running the same stage twice must give the same kind of result.
+- Never change anything outside `WORKTREE` through any tool: issue trackers, chat, cloud consoles, other repositories. The orchestrator makes every outside update.
 
 ## Gate prompts
 
@@ -114,7 +115,7 @@ Append to `TICKET_DIR/dev-report.md` (keep what is there) a section `## PR feedb
 
 - Never weaken, skip, delete or loosen a test to make verification pass. Fix the code.
 - Before a call that is likely to need approval (see the plan's `## Gated operations` for the kind of calls meant) and is not listed there, stop and end with a `NEEDS_DECISION` block. That includes such a call you are tempted to approximate with a different command. Calls the plan does list still go through the gate and need the developer's approval there.
-- Do not push, open pull requests, reply to PR comments or edit the ticket. The orchestrator does that.
+- Do not push, open pull requests, reply to PR comments or edit the ticket or its issue in a tracker. The orchestrator does that.
 - Changes outside the planned files, or a different approach from the plan, are decisions to escalate.
 
 ### Report

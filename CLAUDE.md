@@ -18,7 +18,7 @@ The two plugins are independent and installable on their own:
 | Plugin | What it is | Ships |
 | --- | --- | --- |
 | `destructive-guard` | Deterministic `PreToolUse` approval gate. Installed once, globally; protects every session (human or agent). Configured **only through env variables**; useful with zero config. | hooks, gate engine, rule packs, Jev prompts, `check` skill |
-| `gated-dev-simple-workflow` | File-based ticket → spec → plan → dev → review → PR pipeline (`/ticket`). Knows nothing about gate internals; works with or without the gate and treats any gate prompt or denial as a checkpoint, never something to work around. | `ticket` skill, four stage agents, launcher, PR watcher, `Notification` hook |
+| `gated-dev-simple-workflow` | Ticket (file or Jira issue) → spec → plan → dev → review → PR pipeline (`/ticket`). Knows nothing about gate internals; works with or without the gate and treats any gate prompt or denial as a checkpoint, never something to work around. | `ticket` skill, four stage agents, launcher, PR watcher, `Notification` hook |
 
 ### `destructive-guard` (`plugins/destructive-guard/`)
 
@@ -35,7 +35,7 @@ The two plugins are independent and installable on their own:
 
 - `skills/ticket/SKILL.md` is the orchestrator: it runs in the main session, never writes product code, and drives one subagent per stage in a worktree per ticket (`git worktree`, Orca or iTerm2).
 - Agents in `agents/`: `ticket-spec` → `spec.md`, `ticket-planner` → `plan.md`, `ticket-dev` → commits + `dev-report.md`, `ticket-reviewer` → `review.md`. Each ends with `RESULT: OK <file>` or a `NEEDS_DECISION` block.
-- File-based: the ticket is `docs/tickets/<KEY>/ticket.md` by default, and stages read/write files next to it. **No issue tracker (no Jira)**: agents have no tracker tools or wording.
+- File-based: the ticket is `docs/tickets/<KEY>/ticket.md` by default, and stages read/write files next to it. Optional Jira tracker (`tracker` in `.claude/gated-dev.json`, behaviour in `skills/ticket/references/jira.md`): the orchestrator fetches the issue into `ticket.md` and moves it To Do → In Progress → In Review → Done using the session's own Jira tools. The stage agents stay tracker-free. Never name an MCP server or its tools in shipped files (`tests/test_no_named_mcp.py`).
 - Plan approval is always a stop point; after it the run commits, pushes and opens a PR with `gh`, then watches the PR (`scripts/watch_pr.py`, background): new feedback → follow-up round (`--address-review`, dev `MODE=fix-pr`, replies marked `<!-- gated-dev -->`), merge → notification and worktree removal (branch kept).
 - With `destructive-guard` enabled the planner dry-runs its calls through `destructive-guard:check` and lists the ones that will ask in the plan's `## Gated operations` table.
 - `hooks/notify.py` via `hooks/run-python.sh` (`Notification` hook; Python >= 3.14, silent without it): desktop notification for launcher-started sessions (`TICKET_FLOW_KEY`); macOS `osascript`, Linux `notify-send`, silent elsewhere; `GATED_DEV_NOTIFY=0` disables. Tests in `tests/test_notify.py`, `tests/test_run_python.py`.
@@ -43,13 +43,12 @@ The two plugins are independent and installable on their own:
 
 ## Work in progress
 
-Both plugins are ported and run on Python; the repo contains no JavaScript (`tests/test_no_js.py` keeps it that way). The port plan and its outcome: `docs/plans/python-port.md`; plan, binding decisions and handoff of the workflow plugin: `docs/plans/gated-dev-simple-workflow.md` (§7 is the entry point for a new session). Read them before changing either plugin.
-
+Both plugins run on Python; the repo contains no JavaScript (`tests/test_no_js.py` keeps it that way). Design decisions and history of each plugin (origin, binding decisions, Python port, class refactor) are in the "Design decisions and history" section of its README; read it before changing a plugin. Open plan: `docs/plans/lean-gate.md` (proposal to simplify `destructive-guard` to Jev only; decisions pending).
 ## Public repo hygiene (binding)
 
 - Never write the source project's app name, ticket keys, cloud/database project ids or branch names here. Use neutral placeholders (`my-app-dev`, `apps/web`, `PROJ-1`).
 - No provider-specific packs, rules, prompt text or tests for Supabase or GCP/gcloud. Tests use fictional tools (`cloudctl`, `blobctl`, `dwh`, `dbhost`, `acmecloud`).
-- Keep MCP generic: no named MCP servers in prompts, packs or tests; use made-up tool names (`mcp__tracker__editIssue`, `mcp__db__execute_sql`). A test enforces this for `jev/*.json`.
+- Keep MCP generic: no named MCP servers in prompts, packs or tests (the workflow's Jira support included); use made-up tool names (`mcp__tracker__editIssue`, `mcp__db__execute_sql`). A test enforces this for `jev/*.json`.
 
 ## Test and validate
 
