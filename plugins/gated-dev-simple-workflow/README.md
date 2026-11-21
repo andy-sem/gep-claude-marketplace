@@ -309,6 +309,45 @@ One class per file, with no change in behaviour:
 - `gated_dev/watch/`: PR client, feedback detector, watcher, CLI;
 - `notify.py`, `process.py` and `errors.py`.
 
+### Jira tracker (0.10, November 2026)
+
+Opt-in Jira support, built in three work packages (J1 skill contract, J2
+launcher, J3 docs and release). Binding decisions:
+
+- **Off unless `tracker` is set.** Without it the pipeline behaves as before
+  and makes no Jira call. Every Jira step in the skill is guarded by "when
+  `tracker` is configured", and tests pin both modes.
+- **The session's own Jira tools,** described by capability (read an issue,
+  list and apply transitions, comment, assign, current user). No Python Jira
+  client, no API tokens, and shipped files never name an MCP server or its
+  tools (`tests/test_no_named_mcp.py` guards this).
+- **One reference, `skills/ticket/references/jira.md`,** holds the behaviour;
+  `SKILL.md` calls it at fixed events (`started`, `resumed`, `spec-done`,
+  `plan-approved`, `dev-done`, `review-done`, `pr-body`, `pr-opened`,
+  `pr-feedback-addressed`, `merged`, `aborted`), tracker step first, then the
+  project's rules. With a tracker the rules may not define `intake`.
+- **Stage agents stay tracker-free.** They get one generic rule: never change
+  anything outside the worktree through any tool, because they inherit the
+  session's Jira tools.
+- **Forward-only statuses:** kickoff → In Progress, PR opened or reused → In
+  Review (new; the source never had it), merge → Done. Abort, restarts and PR
+  feedback rounds change nothing. A transition is found by target status
+  name, then by transition name.
+- **Failures are warnings** in `state.warnings` (stage `tracker`) and never
+  stop the run, except an unreadable issue or missing Jira tools at kickoff,
+  which stop before anything is created. Failed comments queue in
+  `state.tracker.pending`. A merged PR removes its worktree even when Jira
+  lags.
+- **Launcher:** `TicketProject.read_config` validates `tracker`, and a Jira
+  key with no `ticket.md` opens in the main checkout titled with the plain
+  key. `--all` never queries Jira.
+- **Not built:** the parent-based picker (a long-running driver that needs
+  its own plan), other trackers (`tracker.type` leaves room), and moving the
+  issue back during PR feedback rounds.
+
+The step-by-step plan is `docs/plans/jira-tracker/`. It stays until the
+manual acceptance run in a sandbox Jira project is done.
+
 ### Planned change in the gate
 
 If `destructive-guard` moves to the Jev-only design in
