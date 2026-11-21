@@ -10,12 +10,10 @@ from testkit import GD
 from testkit.envs import clean_env
 from testkit.fakebin import FakeBin, absolute
 
-JQ = shutil.which("jq")
 EVENT = json.dumps({"hook_event_name": "Notification", "message": "Claude needs your permission to use Bash"})
-needs_jq = pytest.mark.skipif(JQ is None, reason="jq not installed")
 
 
-def run_notify(impl, tmp_path, *, os_name="Darwin", env=None, stdin="", with_jq=True, notifiers=("osascript", "notify-send"), args=()):
+def run_notify(impl, tmp_path, *, os_name="Darwin", env=None, stdin="", notifiers=("osascript", "notify-send"), args=()):
     """Run the hook with a PATH that holds only stubs. Returns (status, stderr, call).
 
     `call` is [notifier, *its arguments] of the one notifier that ran, or None.
@@ -25,8 +23,6 @@ def run_notify(impl, tmp_path, *, os_name="Darwin", env=None, stdin="", with_jq=
     fb.link("cat")
     for name in notifiers:
         fb.add(name)
-    if with_jq and JQ:
-        fb.link("jq")
     proc = subprocess.run(
         [*absolute(impl.notify()), *args],
         input=stdin,
@@ -45,11 +41,7 @@ def run_notify(impl, tmp_path, *, os_name="Darwin", env=None, stdin="", with_jq=
 def test_hooks_json_registers_notification_hook(impl):
     cfg = json.loads((GD / "hooks" / "hooks.json").read_text())
     command = cfg["hooks"]["Notification"][0]["hooks"][0]["command"]
-    if impl.name == "js":
-        assert command == 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/notify.sh"'
-    else:
-        assert "${CLAUDE_PLUGIN_ROOT}/hooks/run-python.sh" in command
-        assert "notify.py" in command
+    assert command == 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/run-python.sh" "${CLAUDE_PLUGIN_ROOT}/hooks/notify.py"'
 
 
 def test_silent_without_ticket_flow_key(impl, tmp_path):
@@ -64,7 +56,6 @@ def test_notify_off_switch(impl, tmp_path):
     assert call is None
 
 
-@needs_jq
 def test_macos_osascript_with_key_title_and_event_message(impl, tmp_path):
     status, _, call = run_notify(impl, tmp_path, stdin=EVENT, env={"TICKET_FLOW_KEY": "PROJ-1"})
     assert status == 0
@@ -73,7 +64,6 @@ def test_macos_osascript_with_key_title_and_event_message(impl, tmp_path):
     assert "--" in call
 
 
-@needs_jq
 def test_linux_notify_send_with_key_title_and_event_message(impl, tmp_path):
     status, _, call = run_notify(impl, tmp_path, os_name="Linux", stdin=EVENT, env={"TICKET_FLOW_KEY": "PROJ-1"})
     assert status == 0
@@ -92,13 +82,9 @@ def test_other_os_is_silent(impl, tmp_path):
     assert call is None
 
 
-@pytest.mark.parametrize(
-    "opts",
-    [{"with_jq": False, "stdin": EVENT}, {"stdin": "not json"}, {"stdin": ""}],
-    ids=["no-jq", "bad-json", "empty"],
-)
-def test_default_message_without_jq_or_bad_input(impl, tmp_path, opts):
-    status, _, call = run_notify(impl, tmp_path, os_name="Linux", env={"TICKET_FLOW_KEY": "PROJ-1"}, **opts)
+@pytest.mark.parametrize("stdin", ["not json", "", "[1]", '{"message": 5}'], ids=["bad-json", "empty", "not-an-object", "not-a-string"])
+def test_default_message_on_bad_input(impl, tmp_path, stdin):
+    status, _, call = run_notify(impl, tmp_path, os_name="Linux", env={"TICKET_FLOW_KEY": "PROJ-1"}, stdin=stdin)
     assert status == 0
     assert call[-1] == "Claude needs your attention"
 
@@ -128,3 +114,45 @@ def test_direct_mode_title_and_message_from_arguments(impl, tmp_path):
     assert call == ["notify-send", "--", "PROJ-1 merged", "PR #7 merged"]
     _, _, off = run_notify(impl, tmp_path / "b", os_name="Linux", args=["PROJ-1 merged", "x"], env={"GATED_DEV_NOTIFY": "0"})
     assert off is None
+
+
+def test_title_fallback_and_non_utf8_stdin(impl, tmp_path):
+    _, _, call = run_notify(impl, tmp_path / "a", os_name="Linux", stdin='{"title": "T"}', env={"TICKET_FLOW_KEY": "PROJ-1"})
+    assert call[-1] == "T"
+    fb = FakeBin(tmp_path / "b")
+    fb.add("uname", stdout="Linux\n")
+    fb.add("notify-send")
+    proc = subprocess.run(
+        absolute(impl.notify()),
+        input=b"\xff\xfe",
+        capture_output=True,
+        env=clean_env(impl.env(), {"PATH": str(fb.path), "TICKET_FLOW_KEY": "PROJ-1"}),
+        timeout=30,
+        check=False,
+    )
+    assert proc.returncode == 0
+    assert fb.calls("notify-send")[0]["argv"][-1] == "Claude needs your attention"
+
+
+def test_arguments_are_passed_as_argv_not_interpolated(impl, tmp_path):
+    title, message = 'a "q" $(touch x)', "line1\nline2 `id`"
+    _, _, call = run_notify(impl, tmp_path, args=[title, message])
+    assert call[-2:] == [title, message]
+    assert not any(part.startswith("-e") for part in call[-2:])
+
+
+def test_no_python_is_silent(impl, tmp_path):
+    fb = FakeBin(tmp_path)
+    fb.add("uname", stdout="Linux\n")
+    fb.add("notify-send")
+    proc = subprocess.run(
+        [shutil.which("bash"), str(GD / "hooks" / "run-python.sh"), str(GD / "hooks" / "notify.py")],
+        input=EVENT,
+        capture_output=True,
+        text=True,
+        env=clean_env({"PATH": str(fb.path), "TICKET_FLOW_KEY": "PROJ-1", "GATE_INFRA_PYTHON": "/nope"}),
+        timeout=30,
+        check=False,
+    )
+    assert (proc.returncode, proc.stdout, proc.stderr) == (0, "", "")
+    assert fb.calls() == []

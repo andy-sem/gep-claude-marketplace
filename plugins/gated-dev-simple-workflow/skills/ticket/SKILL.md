@@ -25,7 +25,7 @@ Rules that hold everywhere:
 - Keep `state.json` current: after every transition set the new `stage` and `updatedAt` (ISO-8601). Re-read it before every write, write the whole file and keep its `watch` field as it is: only the watcher of section 9c writes `watch`.
 - `state.json` is never committed. Never stage it, and never run a bare `git add -A`: when staging everything, use `git -C <wt> add -A -- . ':(exclude)<ticketsDir>/*/state.json'`.
 - Commit trailer: end every commit message you write with the `Co-Authored-By` attribution line that your session's instructions specify for commits. Do not hard-code a model name; if the session specifies no attribution, add none. "The trailer" below means this line.
-- Scripts and hooks of this plugin live under `${CLAUDE_PLUGIN_ROOT}` (`scripts/watch-pr.mjs`, `hooks/notify.sh`).
+- Scripts and hooks of this plugin live under `${CLAUDE_PLUGIN_ROOT}` (`scripts/watch-pr.mjs`, `hooks/notify.py`).
 - Formatting: "format `<files>`" below means: run `<formatCommand> <files>` in the worktree when `formatCommand` is configured; otherwise do nothing.
 - Project rules: "**Event `<name>`**" below means: when `orchestratorRules` is configured and its file has a `## <name>` section, do what that section says now, then continue (see section 0a). Without the key or the section, nothing happens.
 
@@ -257,7 +257,7 @@ Stage `merged`. Runs when the watcher reports `merged`, when section 9b finds th
 
 1. Confirm with `gh pr view <prUrl> --json state,mergedAt` that the PR is `MERGED`, then set `stage: "merged"`. Take the PR's head commit from `gh api repos/{owner}/{repo}/pulls/{n} --jq .head.sha` (`gh pr view` has no head-commit field in every `gh` version).
 2. Print the final report: PR URL, merge time, worktree path, branch (it is kept), and whether the worktree will be removed (step 4). Then **Event `merged`** (a re-run of this section runs it again, so the rules file should say how to skip work already done).
-3. Notify: `bash "${CLAUDE_PLUGIN_ROOT}/hooks/notify.sh" "<KEY> merged" "<one line>"`. A failure is ignored; the report is already printed.
+3. Notify: `bash "${CLAUDE_PLUGIN_ROOT}/hooks/run-python.sh" "${CLAUDE_PLUGIN_ROOT}/hooks/notify.py" "<KEY> merged" "<one line>"`. A failure is ignored; the report is already printed.
 4. Remove the worktree, as the very last action, and only when `git -C <wt> status --porcelain` prints nothing (the ignored `state.json` does not count) and `git -C <wt> rev-parse HEAD` equals that head commit; otherwise keep it and say why. If `orca` is on `PATH` and `orca worktree list --repo path:<root> --json --limit 500` has an entry whose `path` equals `<wt>` and whose `isMainWorktree` is false (do not use `ORCA_WORKTREE_ID`): `orca worktree rm --worktree path:<wt> --json`; exit 143 with no output is expected when this session runs inside that worktree. Otherwise: `git -C <root> worktree remove <wt>`. Never pass `--force` or `--delete-branch`, and never delete a branch.
 
 ## 10. Abort

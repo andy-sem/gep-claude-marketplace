@@ -1,6 +1,11 @@
+import os
+import subprocess
+
 import pytest
 
 from testkit import GD
+from testkit.envs import clean_env
+from testkit.pythons import require_new_python
 from testkit.stubs import (
     check_314_imports_package,
     check_old_python_exit_3,
@@ -22,6 +27,20 @@ def test_old_python_gets_exit_3(old_python, stub):
     check_old_python_exit_3(old_python, stub[0])
 
 
-@pytest.mark.parametrize("stub", STUBS, ids=stub_id)
+@pytest.mark.parametrize("stub", [s for s in STUBS if s[1] != "notify"], ids=stub_id)
 def test_314_imports_package(tmp_path, stub):
     check_314_imports_package(tmp_path, *stub)
+
+
+def test_314_notify_stub_hands_over_to_the_real_package(tmp_path):
+    # P10: not the planted module next to the cwd; GATED_DEV_NOTIFY=0 makes the hook exit 0 at once.
+    (tmp_path / "gated_dev.py").write_text("raise SystemExit(99)\n")
+    proc = subprocess.run(
+        [require_new_python(os.environ), "-I", str(GD / "hooks" / "notify.py")],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env=clean_env({"GATED_DEV_NOTIFY": "0"}),
+        check=False,
+    )
+    assert (proc.returncode, proc.stdout, proc.stderr) == (0, "", "")

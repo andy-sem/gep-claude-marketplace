@@ -62,8 +62,7 @@ class Impl:
         raise NotImplementedError("the fast watcher runner for the Python port lands in P11")
 
     def notify(self) -> list[str]:
-        if self.name == "js":
-            return ["bash", str(GD / "hooks" / "notify.sh")]
+        """The hook command line; the hook is Python-only (P10), whatever GD_IMPL says."""
         return ["bash", str(GD / "hooks" / "run-python.sh"), str(GD / "hooks" / "notify.py")]
 
     def env(self) -> dict[str, str]:
@@ -71,7 +70,7 @@ class Impl:
             node = shutil.which("node")
             if node is None:
                 raise RuntimeError("node not found on PATH")
-            return {"GATE_INFRA_NODE": node}
+            return {"GATE_INFRA_NODE": node, "GATE_INFRA_PYTHON": self._python()}  # the notify hook is Python
         return {"GATE_INFRA_PYTHON": self._python()}
 
 
