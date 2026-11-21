@@ -16,15 +16,15 @@ from destructive_guard.jev.config import JevConfig
 from destructive_guard.jev.decider import JevDecider
 from destructive_guard.jev.prompt import JevPrompt
 from destructive_guard.jev.request import JevRequest
-from testkit.jev_mock import probs
+from testkit.jev_mock import JevMock
 
 DOWN = "http://127.0.0.1:1/v1/systemone"
 DBHOST_SQL = "mcp__plugin_dbhost_dbhost__execute_sql"
 ISSUE_EDIT = "mcp__tracker__editIssue"
 
-SAFE = probs(0, 1, 0, 0)
-RISKY = probs(0, 0, 0, 1)
-READ_ONLY = probs(0.01, 0.97, 0.01, 0.01)
+SAFE = JevMock.probs(0, 1, 0, 0)
+RISKY = JevMock.probs(0, 0, 0, 1)
+READ_ONLY = JevMock.probs(0.01, 0.97, 0.01, 0.01)
 
 TF_RULE = {"decision": "ask", "reason": "terraform: apply"}
 DB_RULE = {"decision": "ask", "reason": "dbhost-mcp: execute_sql"}
@@ -120,7 +120,7 @@ def test_non_retryable_http_error(jev, go):
 
 
 def test_retries_429_then_succeeds(jev, go):
-    p = probs(0.97, 0.01, 0.01, 0.01)
+    p = JevMock.probs(0.97, 0.01, 0.01, 0.01)
     jev.sequence({"status": 429, "retry_after": "0"}, {"probs": p})
     final, [record] = go(bash("terraform apply"), TF_RULE)
     assert jev.hits == 2
@@ -261,14 +261,14 @@ def test_env_reference_never_sent(jev, go):
 
 
 def test_no_rule_opinion_asks_for_bash_and_mcp(jev, go):
-    jev.answer(probs(0, 0.05, 0.05, 0.9))
+    jev.answer(JevMock.probs(0, 0.05, 0.05, 0.9))
     for call in [bash("rm -rf x"), mcp("mcp__x__y")]:
         final, _ = go(call, None)
         assert final == {"decision": "ask", "reason": "jev: destructive p=0.90 risk=0.95"}
 
 
 def test_undecided_keeps_rule_result(jev, go):
-    jev.answer(probs(0.04, 0.9, 0.04, 0.02))
+    jev.answer(JevMock.probs(0.04, 0.9, 0.04, 0.02))
     final, [record] = go(bash("terraform apply"), TF_RULE)
     assert jev.hits == 1
     assert final == TF_RULE
@@ -311,7 +311,7 @@ def test_mcp_payload_input_and_cut_note(jev, go):
 def test_audit_log_redacted_records(jev, jev_env, tmp_path):
     log = tmp_path / "audit.jsonl"
     cfg = JevConfig.read(jev_env, cwd=tmp_path)
-    jev.answer(probs(0.01, 0.98, 0.005, 0.005), usage={"input_tokens": 1000})
+    jev.answer(JevMock.probs(0.01, 0.98, 0.005, 0.005), usage={"input_tokens": 1000})
     JevDecider.run_jev(bash("TOPSECRET_X=supersecret123 node a.mjs", [{"path": "a.mjs", "content": "x"}]), None, cfg)
     JevDecider.run_jev(bash("cat .env"), None, cfg)
     JevDecider.run_jev(mcp(DBHOST_SQL, {"password": "supersecret123", "q": 1}), DB_RULE, cfg)

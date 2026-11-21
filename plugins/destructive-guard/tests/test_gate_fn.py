@@ -6,7 +6,7 @@ from destructive_guard.gate.gate import Gate
 from destructive_guard.rules.rule_loader import RuleLoader
 from destructive_guard.scripts.script_collector import ScriptCollector
 from testkit import DG
-from testkit.projects import provision_project, temp_project
+from testkit.projects import TempProject
 
 RULES = RuleLoader.load_rules(DG / "tests" / "fixtures" / "rules.json")
 
@@ -38,7 +38,7 @@ def test_closed_results_skip_the_scan(input):
 
 
 def test_bash_without_rule_result_scans_scripts(tmp_path):
-    root = provision_project(tmp_path)
+    root = TempProject.provision_project(tmp_path)
     trace = {}
     r = Gate(RULES, {}).gate(bash("node scripts/provision-cloud-app-dev.mjs", root), trace=trace)
     assert r and r["reason"].startswith("script:")
@@ -47,7 +47,7 @@ def test_bash_without_rule_result_scans_scripts(tmp_path):
 
 
 def test_gate_jev_collects_scripts_even_with_a_rule_result(tmp_path):
-    root = temp_project(tmp_path, {"go.sh": "echo hi\n"})
+    root = TempProject.temp_project(tmp_path, {"go.sh": "echo hi\n"})
     seen = []
 
     def spy(command, where, project_root):

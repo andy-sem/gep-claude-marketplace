@@ -15,10 +15,10 @@ from pathlib import Path
 import pytest
 
 from testkit import GD
-from testkit.check_cli import check_call
-from testkit.envs import clean_env
-from testkit.fakebin import FakeBin, absolute
-from testkit.impl import select_impl
+from testkit.check_cli import CheckRunner
+from testkit.envs import IsolatedEnv
+from testkit.fakebin import FakeBin
+from testkit.impl import Impl
 
 PR_URL = "https://github.com/o/r/pull/7"
 T0 = "2026-10-22T08:00:00Z"
@@ -97,10 +97,10 @@ class Scenario:
 
 def run_watcher(impl, scenario: Scenario, *args: str):
     proc = subprocess.run(
-        [*absolute(impl.watch_pr(fast=True)), *args],
+        [*FakeBin.absolute(impl.watch_pr(fast=True)), *args],
         capture_output=True,
         text=True,
-        env=clean_env(impl.env(), {"PATH": str(scenario.fb.path), "GD_TEST_SLEEP_LOG": str(scenario.sleep_log)}),
+        env=IsolatedEnv.clean(impl.env(), {"PATH": str(scenario.fb.path), "GD_TEST_SLEEP_LOG": str(scenario.sleep_log)}),
         timeout=60,
         check=False,
     )
@@ -333,6 +333,6 @@ def test_watcher_command_passes_the_gate(tmp_path):
     state = "/abs/repo/.claude/worktrees/proj-1-x/docs/tickets/PROJ-1/state.json"
     command = documented.group(1).replace("${CLAUDE_PLUGIN_ROOT}", str(GD)).replace("<TICKET_DIR>/state.json", state)
     assert "<" not in command
-    gate = select_impl("destructive-guard", {})
+    gate = Impl.select("destructive-guard", {})
     for line in (command, f"cd /abs/repo && {command}"):
-        assert check_call(gate, {"bash": line}, cwd=tmp_path)["decision"] == "none", line
+        assert CheckRunner.check_call(gate, {"bash": line}, cwd=tmp_path)["decision"] == "none", line

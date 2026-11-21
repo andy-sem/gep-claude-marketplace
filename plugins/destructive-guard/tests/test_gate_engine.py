@@ -13,8 +13,8 @@ from destructive_guard.errors import RulesError, UnparsableError
 from destructive_guard.rules.rule_loader import RuleLoader
 from destructive_guard.shell.tokenizer import ShellTokenizer
 from testkit import DG, REPO
-from testkit.check_cli import check_call
-from testkit.hook import decision, run_hook
+from testkit.check_cli import CheckRunner
+from testkit.hook import HookRunner
 
 ENGINE_RULES = DG / "tests" / "fixtures" / "engine_rules.json"
 CORPUS_ENV = {"GATE_CHECKS": "none", "GATE_RULES_FILE": str(ENGINE_RULES), "GATE_STRICT": "1"}
@@ -22,7 +22,7 @@ CLI_ENV = {"GATE_RULES": str(ENGINE_RULES), "CLAUDE_PROJECT_DIR": str(REPO)}
 
 
 def reason(impl, command, cwd):
-    return check_call(impl, {"bash": command}, env=CORPUS_ENV, cwd=cwd)["reason"]
+    return CheckRunner.check_call(impl, {"bash": command}, env=CORPUS_ENV, cwd=cwd)["reason"]
 
 
 def load_rules(path):
@@ -60,8 +60,8 @@ def test_shell_reading_stdin_reason(impl, tmp_path):
 
 @pytest.mark.parametrize("stdin", ["null", '"x"'])
 def test_non_object_input_fails_closed(impl, stdin):
-    out = run_hook(impl, stdin, CLI_ENV).stdout
-    assert decision(out)["permissionDecisionReason"].startswith("unparsable:")
+    out = HookRunner.run(impl, stdin, CLI_ENV).stdout
+    assert HookRunner.decision(out)["permissionDecisionReason"].startswith("unparsable:")
 
 
 # --- classify (in-process) ---
@@ -173,37 +173,37 @@ def hook_stdin(tool_name, tool_input, **extra):
 
 
 def test_cli_gated_command_asks(impl):
-    r = run_hook(impl, hook_stdin("Bash", {"command": "dbtool push"}), CLI_ENV)
+    r = HookRunner.run(impl, hook_stdin("Bash", {"command": "dbtool push"}), CLI_ENV)
     assert r.status == 0
-    d = decision(r.stdout)
+    d = HookRunner.decision(r.stdout)
     assert d["hookEventName"] == "PreToolUse"
     assert d["permissionDecision"] == "ask"
     assert d["permissionDecisionReason"].startswith("dbtool:")
 
 
 def test_cli_non_gated_prints_nothing(impl):
-    r = run_hook(impl, hook_stdin("Bash", {"command": "ls"}), CLI_ENV)
+    r = HookRunner.run(impl, hook_stdin("Bash", {"command": "ls"}), CLI_ENV)
     assert r.status == 0
     assert r.stdout.strip() == ""
 
 
 def test_cli_subagent_call_still_asks(impl):
-    r = run_hook(impl, hook_stdin("Bash", {"command": "dbtool push"}, agent_id="agent-123"), CLI_ENV)
+    r = HookRunner.run(impl, hook_stdin("Bash", {"command": "dbtool push"}, agent_id="agent-123"), CLI_ENV)
     assert r.status == 0
-    assert decision(r.stdout)["permissionDecision"] == "ask"
+    assert HookRunner.decision(r.stdout)["permissionDecision"] == "ask"
 
 
 def test_cli_broken_rules_asks_gate_config(impl, bad_rules):
-    r = run_hook(impl, hook_stdin("Read", {"file_path": "/x"}), CLI_ENV, {"GATE_RULES": str(bad_rules)})
+    r = HookRunner.run(impl, hook_stdin("Read", {"file_path": "/x"}), CLI_ENV, {"GATE_RULES": str(bad_rules)})
     assert r.status == 0
-    d = decision(r.stdout)
+    d = HookRunner.decision(r.stdout)
     assert d["permissionDecision"] == "ask"
     assert d["permissionDecisionReason"].startswith("gate-config:")
 
 
 def test_cli_unparsable_stdin_asks(impl):
-    r = run_hook(impl, "not json", CLI_ENV)
+    r = HookRunner.run(impl, "not json", CLI_ENV)
     assert r.status == 0
-    d = decision(r.stdout)
+    d = HookRunner.decision(r.stdout)
     assert d["permissionDecision"] == "ask"
     assert d["permissionDecisionReason"].startswith("unparsable:")

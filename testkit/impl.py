@@ -4,19 +4,19 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
 from . import DG, GD
-from .pythons import require_new_python
-
-DEFAULT_IMPL: dict[str, str] = {
-    "destructive-guard": "py",
-    "gated-dev-simple-workflow": "py",
-}
+from .pythons import Pythons
 
 
 @dataclass(frozen=True)
 class Impl:
+    DEFAULT: ClassVar[dict[str, str]] = {
+        "destructive-guard": "py",
+        "gated-dev-simple-workflow": "py",
+    }
+
     name: Literal["py"]
     plugin: str
 
@@ -33,7 +33,7 @@ class Impl:
         return f'python3 "{DG}/lib/check.py" {args}'
 
     def _python(self) -> str:
-        return require_new_python(os.environ)
+        return Pythons.require_new_python(os.environ)
 
     def _script(self, base: Path, py: str) -> list[str]:
         return [self._python(), "-I", str(base / py)]
@@ -64,7 +64,8 @@ class Impl:
         return {"GATE_INFRA_PYTHON": self._python()}
 
 
-def select_impl(plugin: str, env: Mapping[str, str]) -> Impl:
-    if plugin not in DEFAULT_IMPL:
-        raise ValueError(f"unknown plugin {plugin!r}")
-    return Impl("py", plugin)
+    @classmethod
+    def select(cls, plugin: str, env: Mapping[str, str]) -> Impl:
+        if plugin not in cls.DEFAULT:
+            raise ValueError(f"unknown plugin {plugin!r}")
+        return cls("py", plugin)

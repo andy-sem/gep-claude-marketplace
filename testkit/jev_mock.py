@@ -5,20 +5,20 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Self
 
-HANG_MAX_SECONDS = 10
-
-
-def probs(unrelated: float, read_only: float, cloud_or_data_change: float, destructive: float) -> dict:
-    return {
-        "unrelated": unrelated,
-        "read_only": read_only,
-        "cloud_or_data_change": cloud_or_data_change,
-        "destructive": destructive,
-    }
-
 
 class JevMock:
     """Context manager: `.url`, `.answer(...)`, and the recorded `.bodies` / `.hits`."""
+
+    HANG_MAX_SECONDS = 10
+
+    @staticmethod
+    def probs(unrelated: float, read_only: float, cloud_or_data_change: float, destructive: float) -> dict:
+        return {
+            "unrelated": unrelated,
+            "read_only": read_only,
+            "cloud_or_data_change": cloud_or_data_change,
+            "destructive": destructive,
+        }
 
     def __init__(self) -> None:
         self.bodies: list[dict | None] = []
@@ -43,7 +43,7 @@ class JevMock:
                     mock.headers.append({k.lower(): v for k, v in self.headers.items()})
                     a = dict(mock._answers[min(len(mock.bodies), len(mock._answers)) - 1])
                 if a["kind"] == "hang":
-                    mock._release.wait(HANG_MAX_SECONDS)
+                    mock._release.wait(JevMock.HANG_MAX_SECONDS)
                     self.close_connection = True
                     return
                 if a["kind"] == "status":

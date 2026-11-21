@@ -5,9 +5,9 @@ import os
 import pytest
 
 from testkit import PLUGINS
-from testkit.impl import Impl, select_impl
+from testkit.impl import Impl
 from testkit.jev_mock import JevMock
-from testkit.pythons import find_old_python
+from testkit.pythons import Pythons
 
 
 @pytest.fixture
@@ -17,12 +17,12 @@ def impl(request) -> Impl:
         plugin = request.path.resolve().relative_to(PLUGINS).parts[0]
     except ValueError:
         raise pytest.UsageError("the impl fixture is only available to tests under plugins/") from None
-    return select_impl(plugin, os.environ)
+    return Impl.select(plugin, os.environ)
 
 
 @pytest.fixture
 def old_python() -> str:
-    python = find_old_python()
+    python = Pythons.find_old_python()
     if python is None:
         pytest.skip("no Python < 3.14 available")
     return python

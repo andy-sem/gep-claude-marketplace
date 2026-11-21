@@ -12,26 +12,26 @@ from dataclasses import dataclass
 import pytest
 
 from testkit import DG, REPO
-from testkit.hook import bash_input, decision, mcp_input, run_hook
-from testkit.jev_mock import probs
-from testkit.projects import temp_project
+from testkit.hook import HookRunner
+from testkit.jev_mock import JevMock
+from testkit.projects import TempProject
 
 HERE = DG / "tests"
 DOWN = "http://127.0.0.1:1/v1/systemone"
 DBHOST_SQL = "mcp__plugin_dbhost_dbhost__execute_sql"
 ISSUE_EDIT = "mcp__tracker__editIssue"
 
-SAFE = probs(0, 1, 0, 0)
-RISKY = probs(0, 0, 0, 1)
-READ_ONLY = probs(0.01, 0.97, 0.01, 0.01)
+SAFE = JevMock.probs(0, 1, 0, 0)
+RISKY = JevMock.probs(0, 0, 0, 1)
+READ_ONLY = JevMock.probs(0.01, 0.97, 0.01, 0.01)
 
 
 def bash(command, cwd=HERE):
-    return bash_input(command, cwd)
+    return HookRunner.bash_input(command, cwd)
 
 
 def mcp(tool, tool_input=None, cwd=REPO):
-    return mcp_input(tool, tool_input or {}, cwd)
+    return HookRunner.mcp_input(tool, tool_input or {}, cwd)
 
 
 @dataclass
@@ -75,7 +75,7 @@ def shipped(shipped_rules):
 @pytest.fixture
 def run(impl, base_env):
     """Rules only (Jev off)."""
-    return lambda stdin, env=None: run_hook(impl, stdin, base_env, env or {})
+    return lambda stdin, env=None: HookRunner.run(impl, stdin, base_env, env or {})
 
 
 @pytest.fixture
@@ -95,7 +95,7 @@ def run_jev(impl, jev, base_env, tmp_path):
         }
         before = jev.hits
         started = time.monotonic()
-        r = run_hook(impl, stdin, base_env, jev_env, env or {}, cwd=cwd)
+        r = HookRunner.run(impl, stdin, base_env, jev_env, env or {}, cwd=cwd)
         seconds = time.monotonic() - started
         log = [json.loads(line) for line in log_path.read_text().splitlines()] if log_path.exists() else []
         return JevRun(
@@ -112,7 +112,7 @@ def run_jev(impl, jev, base_env, tmp_path):
 
 
 def reason(stdout):
-    return decision(stdout)["permissionDecisionReason"]
+    return HookRunner.decision(stdout)["permissionDecisionReason"]
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +191,7 @@ def test_non_retryable_http_error(jev, run_jev):
 
 
 def test_retries_429_then_succeeds(jev, run_jev):
-    p = probs(0.97, 0.01, 0.01, 0.01)
+    p = JevMock.probs(0.97, 0.01, 0.01, 0.01)
     jev.sequence({"status": 429, "retry_after": "0"}, {"probs": p})
     r = run_jev(bash("terraform apply"))
     assert r.hits == 2
@@ -263,7 +263,7 @@ def test_can_lift_0_mcp(jev, run_jev, shipped):
     assert run_jev(no_rule_call, no_lift).stdout == ""
     assert run_jev(rule_call, shipped).stdout == ""
     jev.answer(RISKY)
-    added = decision(run_jev(no_rule_call, no_lift).stdout)
+    added = HookRunner.decision(run_jev(no_rule_call, no_lift).stdout)
     assert added["permissionDecision"] == "ask"
     assert added["permissionDecisionReason"].startswith("jev: ")
 
@@ -279,16 +279,16 @@ def test_env_reference_never_sent(jev, run, run_jev, env_rules):
 
 
 def test_no_rule_opinion_asks_for_bash_and_mcp(jev, run, run_jev):
-    jev.answer(probs(0, 0.05, 0.05, 0.9))
+    jev.answer(JevMock.probs(0, 0.05, 0.05, 0.9))
     for stdin in [bash("rm -rf x"), mcp("mcp__x__y")]:
         assert run(stdin).stdout == "", stdin  # the rules have no opinion
-        o = decision(run_jev(stdin).stdout)
+        o = HookRunner.decision(run_jev(stdin).stdout)
         assert o["permissionDecision"] == "ask"
         assert o["permissionDecisionReason"] == "jev: destructive p=0.90 risk=0.95"
 
 
 def test_undecided_keeps_rule_result(jev, run, run_jev):
-    jev.answer(probs(0.04, 0.9, 0.04, 0.02))
+    jev.answer(JevMock.probs(0.04, 0.9, 0.04, 0.02))
     alone = run(bash("terraform apply"))
     assert reason(alone.stdout).startswith("tf:")
     r = run_jev(bash("terraform apply"))
@@ -298,7 +298,7 @@ def test_undecided_keeps_rule_result(jev, run, run_jev):
 
 def test_bash_payload_exact_scripts_and_no_notes(jev, run_jev, shipped, tmp_path):
     """Adds the exact `scripts` and empty `notes` that test_script_request_carries_redacted_script leaves out."""
-    root = temp_project(tmp_path, {"infra/cloud/apply.sh": "terraform apply\nTOKEN=abcdef\n"})
+    root = TempProject.temp_project(tmp_path, {"infra/cloud/apply.sh": "terraform apply\nTOKEN=abcdef\n"})
     jev.answer(READ_ONLY)
     state = run_jev(bash("bash infra/cloud/apply.sh --apply", root), shipped).bodies[0]["state"]
     assert state["tool"] == "Bash"
@@ -330,7 +330,7 @@ def test_mcp_payload_input_and_cut_note(jev, run_jev):
 def test_audit_log_redacted_records(jev, impl, base_env, shipped, tmp_path):
     """Bash pass with a script, skipped .env, MCP pass over a rule, and a fallback, in one log."""
     log = tmp_path / "audit.jsonl"
-    root = temp_project(tmp_path, {"a.mjs": "x"})
+    root = TempProject.temp_project(tmp_path, {"a.mjs": "x"})
     env = {
         **shipped,
         "GATE_JEV": "1",
@@ -341,9 +341,9 @@ def test_audit_log_redacted_records(jev, impl, base_env, shipped, tmp_path):
     }
 
     def go(stdin):
-        return run_hook(impl, stdin, base_env, env)
+        return HookRunner.run(impl, stdin, base_env, env)
 
-    jev.answer(probs(0.01, 0.98, 0.005, 0.005), usage={"input_tokens": 1000})
+    jev.answer(JevMock.probs(0.01, 0.98, 0.005, 0.005), usage={"input_tokens": 1000})
     go(bash("TOPSECRET_X=supersecret123 node a.mjs", root))
     go(bash("cat .env"))
     go(mcp(DBHOST_SQL, {"password": "supersecret123", "q": 1}))

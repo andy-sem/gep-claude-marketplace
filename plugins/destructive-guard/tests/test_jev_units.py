@@ -14,7 +14,7 @@ from destructive_guard.jev.decider import JevDecider
 from destructive_guard.jev.prompt import JevPrompt
 from destructive_guard.jev.redactor import Redactor
 from destructive_guard.jev.request import JevRequest
-from testkit.jev_mock import probs
+from testkit.jev_mock import JevMock
 
 BASE_ENV = {"GATE_JEV": "1", "TYPESAFE_API_KEY": "key-123"}
 JEV_URL = "https://api.typesafe.ai/v1/systemone"
@@ -236,34 +236,34 @@ def decide_many(*ps):
 
 
 def test_jev_decision_passes_confident_read_only_and_unrelated():
-    assert decide_many(probs(0.01, 0.97, 0.01, 0.01), probs(0.97, 0.01, 0.01, 0.01)) == [
+    assert decide_many(JevMock.probs(0.01, 0.97, 0.01, 0.01), JevMock.probs(0.97, 0.01, 0.01, 0.01)) == [
         {"decision": "pass", "reason": "jev: read_only p=0.97 safe=0.98"},
         {"decision": "pass", "reason": "jev: unrelated p=0.97 safe=0.98"},
     ]
 
 
 def test_jev_decision_sums_unrelated_and_read_only():
-    assert decide_many(probs(0.6, 0.36, 0.02, 0.02)) == [
+    assert decide_many(JevMock.probs(0.6, 0.36, 0.02, 0.02)) == [
         {"decision": "pass", "reason": "jev: unrelated p=0.60 safe=0.96"}
     ]
 
 
 def test_jev_decision_null_below_allow_threshold():
-    assert decide_many(probs(0.04, 0.9, 0.04, 0.02), probs(0.4, 0.5, 0.05, 0.05)) == [None, None]
+    assert decide_many(JevMock.probs(0.04, 0.9, 0.04, 0.02), JevMock.probs(0.4, 0.5, 0.05, 0.05)) == [None, None]
 
 
 def test_jev_decision_asks_above_escalate_threshold():
-    [d] = decide_many(probs(0.1, 0.35, 0.25, 0.3))
+    [d] = decide_many(JevMock.probs(0.1, 0.35, 0.25, 0.3))
     assert d["decision"] == "ask"
     assert d["reason"] == "jev: destructive p=0.30 risk=0.55"
 
 
 def test_jev_decision_no_ask_at_exactly_escalate_threshold():
-    assert decide_many(probs(0.25, 0.25, 0.25, 0.25)) == [None]
+    assert decide_many(JevMock.probs(0.25, 0.25, 0.25, 0.25)) == [None]
 
 
 def test_jev_decision_names_cloud_or_data_change_when_larger():
-    [d] = decide_many(probs(0.05, 0.05, 0.6, 0.3))
+    [d] = decide_many(JevMock.probs(0.05, 0.05, 0.6, 0.3))
     assert d["decision"] == "ask"
     assert d["reason"] == "jev: cloud_or_data_change p=0.60 risk=0.90"
 
@@ -278,12 +278,12 @@ def parse_many(*bodies):
 
 
 def test_parse_answer_accepts_well_formed_answer():
-    p = probs(0.7, 0.1, 0.1, 0.1)
+    p = JevMock.probs(0.7, 0.1, 0.1, 0.1)
     assert parse_many(answer(p)) == [p]
 
 
 def test_parse_answer_null_for_malformed_shapes():
-    good = probs(0.7, 0.1, 0.1, 0.1)
+    good = JevMock.probs(0.7, 0.1, 0.1, 0.1)
     # JS `{ ...good, destructive: undefined }`: the key is dropped by JSON.
     without_destructive = {k: v for k, v in good.items() if k != "destructive"}
     bodies = [
@@ -293,8 +293,8 @@ def test_parse_answer_null_for_malformed_shapes():
         {"answers": {"cloud_change": {"type": "choice", "probabilities": "x"}}},
         answer(without_destructive),
         answer({**good, "destructive": "0.1"}),
-        answer(probs(1.2, -0.1, 0, -0.1)),
-        answer(probs(0.5, 0.1, 0.1, 0.1)),
+        answer(JevMock.probs(1.2, -0.1, 0, -0.1)),
+        answer(JevMock.probs(0.5, 0.1, 0.1, 0.1)),
     ]
     assert parse_many(*bodies) == [None] * len(bodies)
 

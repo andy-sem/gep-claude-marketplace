@@ -14,10 +14,10 @@ import pytest
 
 from destructive_guard.config import GateConfig
 from destructive_guard.errors import ConfigError, RulesError
-from testkit.check_cli import check_call
-from testkit.envs import clean_env
-from testkit.hook import bash_input, decision, run_hook
-from testkit.projects import temp_project
+from testkit.check_cli import CheckRunner
+from testkit.envs import IsolatedEnv
+from testkit.hook import HookRunner
+from testkit.projects import TempProject
 
 EXTRA_RULES = {
     "rules": [
@@ -53,7 +53,7 @@ def config_error(env, match=None):
 
 def make_project(base: Path, extra_rules: Path) -> Path:
     """A project with a rules file in .claude/, a .git directory and a subdirectory."""
-    root = temp_project(base, {".claude/rules.json": extra_rules.read_text()})
+    root = TempProject.temp_project(base, {".claude/rules.json": extra_rules.read_text()})
     (root / "apps" / "web").mkdir(parents=True)
     return root
 
@@ -184,7 +184,7 @@ def test_available_packs_lists_shipped_packs():
 
 
 def result(impl, command, env, cwd, strict=True):
-    return check_call(impl, {"bash": command}, env={"GATE_STRICT": "1" if strict else "0", **env}, cwd=cwd)
+    return CheckRunner.check_call(impl, {"bash": command}, env={"GATE_STRICT": "1" if strict else "0", **env}, cwd=cwd)
 
 
 def rule(impl, command, cwd, env=None, strict=True):
@@ -288,9 +288,9 @@ def test_strict_asks_loose_still_checks_other_parts(impl, tmp_path):
     assert rule(impl, 'bash -c "rm -rf $DIR"', tmp_path, strict=False) == "rm-recursive-force"
     assert rule(impl, 'sh -c "cd $D && git reset --hard"', tmp_path, strict=False) == "git-reset-hard"
     # input-level problems always ask
-    r = run_hook(impl, json.dumps({"tool_name": "Bash", "tool_input": {}}), {"GATE_STRICT": "0"}, cwd=tmp_path)
+    r = HookRunner.run(impl, json.dumps({"tool_name": "Bash", "tool_input": {}}), {"GATE_STRICT": "0"}, cwd=tmp_path)
     assert r.status == 0
-    assert decision(r.stdout)["permissionDecisionReason"].startswith("unparsable:")
+    assert HookRunner.decision(r.stdout)["permissionDecisionReason"].startswith("unparsable:")
 
 
 # ---------------------------------------------------------------------------
@@ -301,10 +301,10 @@ def test_strict_asks_loose_still_checks_other_parts(impl, tmp_path):
 @pytest.fixture
 def hook(impl, tmp_path):
     def go(command, env=None):
-        stdin = command if isinstance(command, bytes) else bash_input(command, tmp_path)
-        r = run_hook(impl, stdin, env or {}, cwd=tmp_path)
+        stdin = command if isinstance(command, bytes) else HookRunner.bash_input(command, tmp_path)
+        r = HookRunner.run(impl, stdin, env or {}, cwd=tmp_path)
         assert r.status == 0
-        return decision(r.stdout)["permissionDecisionReason"] if r.stdout else None
+        return HookRunner.decision(r.stdout)["permissionDecisionReason"] if r.stdout else None
 
     return go
 
@@ -347,11 +347,11 @@ def test_hook_relative_rules_file_from_subdirectory(impl, tmp_path, extra_rules)
     sub = root / "apps" / "web"
 
     def run(env):
-        r = run_hook(
-            impl, bash_input("deployctl release v1", sub), {"GATE_RULES_FILE": ".claude/rules.json"}, env, cwd=sub
+        r = HookRunner.run(
+            impl, HookRunner.bash_input("deployctl release v1", sub), {"GATE_RULES_FILE": ".claude/rules.json"}, env, cwd=sub
         )
         assert r.status == 0
-        return decision(r.stdout)["permissionDecisionReason"]
+        return HookRunner.decision(r.stdout)["permissionDecisionReason"]
 
     assert run({"CLAUDE_PROJECT_DIR": str(root)}).startswith("deployctl:")
     assert run({}).startswith("deployctl:")  # git root of the hook's cwd
@@ -397,7 +397,7 @@ def guard(impl, file_path, env=None):
         input=json.dumps({"tool_name": "Read", "tool_input": {"file_path": file_path}}),
         capture_output=True,
         text=True,
-        env=clean_env(env or {}),
+        env=IsolatedEnv.clean(env or {}),
         check=False,
     ).returncode
 

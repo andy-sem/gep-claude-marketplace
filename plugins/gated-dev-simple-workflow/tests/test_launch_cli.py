@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from testkit.envs import clean_env
-from testkit.fakebin import FakeBin, absolute
-from testkit.gitrepo import add_worktree, git, git_env, init_repo
+from testkit.envs import IsolatedEnv
+from testkit.fakebin import FakeBin
+from testkit.gitrepo import GitRepo
 
 ORCA = {"TERM_PROGRAM": "Orca"}
 ITERM = {"TERM_PROGRAM": "iTerm.app", "ITERM_SESSION_ID": "w0t1p0:ABC-123"}
@@ -35,7 +35,7 @@ class Project:
     def __init__(self, tmp: Path, *, config=None, tickets=None, origin=True, branch="main"):
         self.tmp = tmp
         self.home = tmp / "home"
-        self.root = init_repo(tmp / "repo", origin=tmp / "origin.git" if origin else None, branch=branch)
+        self.root = GitRepo.init_repo(tmp / "repo", origin=tmp / "origin.git" if origin else None, branch=branch)
         if config is not None:
             (self.root / ".claude").mkdir(exist_ok=True)
             (self.root / ".claude" / "gated-dev.json").write_text(config if isinstance(config, str) else json.dumps(config))
@@ -69,7 +69,7 @@ class Project:
 
     def run_dir(self, name: str, branch: str, stage: str | None = None, ticket: str | None = None, key="K-1") -> Path:
         """A worktree of the repo on `branch` (a run), with its state.json stage and ticket.md."""
-        wt = add_worktree(self.root, self.tmp / "wts" / name, branch)
+        wt = GitRepo.add_worktree(self.root, self.tmp / "wts" / name, branch)
         (wt / "docs" / "tickets" / key).mkdir(parents=True, exist_ok=True)
         if stage:
             (wt / "docs" / "tickets" / key / "state.json").write_text(json.dumps({"stage": stage}))
@@ -78,7 +78,7 @@ class Project:
         return wt
 
     def worktrees(self) -> int:
-        return git(self.root, "worktree", "list", "--porcelain").count("worktree ")
+        return GitRepo.git(self.root, "worktree", "list", "--porcelain").count("worktree ")
 
     @property
     def fetched(self) -> bool:
@@ -87,10 +87,10 @@ class Project:
     # runs --------------------------------------------------------------------
 
     def launch(self, impl, *args: str, host: dict | None = None, cwd=True) -> Result:
-        env = {k: v for k, v in clean_env(impl.env()).items() if k not in HOST_VARS and not k.startswith("ORCA_")}
-        env.update(git_env(self.home))
+        env = {k: v for k, v in IsolatedEnv.clean(impl.env()).items() if k not in HOST_VARS and not k.startswith("ORCA_")}
+        env.update(GitRepo.git_env(self.home))
         env.update({"PATH": str(self.fb.path), **(host or {})})
-        cmd = [*absolute(impl.launch()), *(["--cwd", str(self.root)] if cwd else []), *args]
+        cmd = [*FakeBin.absolute(impl.launch()), *(["--cwd", str(self.root)] if cwd else []), *args]
         proc = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=60, check=False)
         return Result(proc.returncode, proc.stdout, proc.stderr)
 
@@ -284,7 +284,7 @@ def test_launch_ticket_in_orca_fetch_orca_worktree_tab_in_that_worktree(impl, de
 
 def test_launch_ticket_in_orca_uses_front_matter_base_before_config_and_origin_head(impl, demo):
     p = demo(tickets={"K-1": "---\nbase: rel\n---\n# T\n"}, config={"baseBranch": "dev"})
-    git(p.root, "push", "-q", "origin", "main:rel")  # the fetch needs the branch
+    GitRepo.git(p.root, "push", "-q", "origin", "main:rel")  # the fetch needs the branch
     r = p.launch(impl, "K-1", host=ORCA)
     assert r.status == 0, r.stderr
     assert re.search(r"^  base:    rel$", r.stdout, re.MULTILINE)

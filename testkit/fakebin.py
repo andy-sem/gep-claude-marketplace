@@ -6,9 +6,13 @@ import shutil
 import stat
 from pathlib import Path
 
-from .pythons import require_new_python
+from .pythons import Pythons
 
-_STUB = """#!{python} -I
+
+class FakeBin:
+    """A directory of recording stubs. Use `.path` as the whole PATH of the process under test."""
+
+    _STUB = """#!{python} -I
 import json, os, sys
 tmp = {tmp!r}
 name = {name!r}
@@ -50,10 +54,6 @@ sys.stdout.flush()
 sys.exit(entry.get("status") or 0)
 """
 
-
-class FakeBin:
-    """A directory of recording stubs. Use `.path` as the whole PATH of the process under test."""
-
     def __init__(self, tmp: Path):
         self._tmp = Path(tmp)
         self.path = self._tmp / "bin"
@@ -93,7 +93,13 @@ class FakeBin:
         }
         (self._tmp / f"{name}.json").write_text(json.dumps(config))
         stub = self.path / name
-        stub.write_text(_STUB.format(python=require_new_python(os.environ), tmp=str(self._tmp), name=name))
+        stub.write_text(
+            FakeBin._STUB.format(
+                python=Pythons.require_new_python(os.environ),
+                tmp=str(self._tmp),
+                name=name,
+            )
+        )
         stub.chmod(stub.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
         return stub
 
@@ -109,13 +115,15 @@ class FakeBin:
     def calls(self, name: str | None = None) -> list[dict]:
         if not self._calls.exists():
             return []
-        rows = [json.loads(line) for line in self._calls.read_text().splitlines() if line]
+        rows = [
+            json.loads(line) for line in self._calls.read_text().splitlines() if line
+        ]
         return [r for r in rows if name is None or r["name"] == name]
 
-
-def absolute(cmd: list[str]) -> list[str]:
-    """`cmd` with its program resolved on the developer's PATH, for a child whose PATH is only the fake dir."""
-    program = shutil.which(cmd[0])
-    if program is None:
-        raise FileNotFoundError(f"{cmd[0]} not found on PATH")
-    return [program, *cmd[1:]]
+    @staticmethod
+    def absolute(cmd: list[str]) -> list[str]:
+        """`cmd` with its program resolved on the developer's PATH, for a child whose PATH is only the fake dir."""
+        program = shutil.which(cmd[0])
+        if program is None:
+            raise FileNotFoundError(f"{cmd[0]} not found on PATH")
+        return [program, *cmd[1:]]
