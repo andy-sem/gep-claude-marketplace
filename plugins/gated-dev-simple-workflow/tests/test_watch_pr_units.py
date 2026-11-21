@@ -1,9 +1,12 @@
-"""Units of the PR watcher (gated_dev.watch_pr) with injected fakes."""
+"""Units of the PR watcher (gated_dev.watch) with injected fakes."""
 
 import json
 from datetime import UTC, datetime, timedelta
 
-from gated_dev import watch_pr as wp
+from gated_dev.watch.cli import WatchPrCli
+from gated_dev.watch.feedback import FeedbackDetector
+from gated_dev.watch.pr_client import PrClient
+from gated_dev.watch.watcher import PrWatcher
 
 PR_URL = "https://github.com/o/r/pull/7"
 T0 = "2026-10-22T08:00:00Z"
@@ -13,16 +16,16 @@ CLOCK = datetime(2026, 10, 22, 12, 0, 0, tzinfo=UTC)
 
 
 def test_constants():
-    assert wp.POLL_MS == 60000
-    assert wp.MAX_GH_FAILURES == 5
-    assert wp.MARKER == "<!-- gated-dev -->"
-    assert wp.EXIT == {"feedback": 0, "merged": 0, "closed": 0, "error": 1, "usage": 2}
+    assert PrWatcher.POLL_MS == 60000
+    assert PrWatcher.MAX_GH_FAILURES == 5
+    assert PrWatcher.MARKER == "<!-- gated-dev -->"
+    assert WatchPrCli.EXIT == {"feedback": 0, "merged": 0, "closed": 0, "error": 1, "usage": 2}
 
 
 def test_parse_pr_url_and_normalize_pr():
-    assert wp.parse_pr_url(PR_URL) == {"owner": "o", "repo": "r", "number": 7}
-    assert wp.parse_pr_url("not a url") is None
-    assert wp.parse_pr_url(None) is None
+    assert PrClient.parse_pr_url(PR_URL) == {"owner": "o", "repo": "r", "number": 7}
+    assert PrClient.parse_pr_url("not a url") is None
+    assert PrClient.parse_pr_url(None) is None
     view = {
         "state": "OPEN",
         "mergedAt": None,
@@ -30,7 +33,7 @@ def test_parse_pr_url_and_normalize_pr():
         "reviews": [{"author": {"login": "b"}, "body": "x", "state": "COMMENTED", "createdAt": T1}],
         "comments": [],
     }
-    pr = wp.normalize_pr(view, [{"login": "c", "body": "y", "createdAt": T2}])
+    pr = PrClient.normalize_pr(view, [{"login": "c", "body": "y", "createdAt": T2}])
     assert [f["login"] for f in pr["feedback"]] == ["b", "c"]
     assert pr["feedback"][0]["createdAt"] == T1
 
@@ -41,11 +44,11 @@ def test_newest_feedback_compares_instants_and_unparsable_cutoff_counts_everythi
         {"login": "a", "body": "y", "createdAt": T2},
         {"login": "a", "body": "z", "createdAt": "garbage"},
     ]
-    assert wp.newest_feedback_at(items, T1) == T2
-    assert wp.newest_feedback_at(items[:1], T1) is None
-    assert wp.newest_feedback_at(items[:1], "garbage") == "2026-10-22T10:00:00+02:00"
-    assert wp.new_feedback_at({"createdAt": T1, "feedback": items}, None) == T2
-    assert wp.new_feedback_at({"createdAt": T2, "feedback": items}, None) is None
+    assert FeedbackDetector.newest_feedback_at(items, T1) == T2
+    assert FeedbackDetector.newest_feedback_at(items[:1], T1) is None
+    assert FeedbackDetector.newest_feedback_at(items[:1], "garbage") == "2026-10-22T10:00:00+02:00"
+    assert FeedbackDetector.new_feedback_at({"createdAt": T1, "feedback": items}, None) == T2
+    assert FeedbackDetector.new_feedback_at({"createdAt": T2, "feedback": items}, None) is None
 
 
 def _state(tmp_path):
@@ -62,7 +65,7 @@ def test_failed_heartbeat_write_is_logged(tmp_path):
     path = _state(tmp_path)
     (tmp_path / "state.json.4242.tmp").mkdir()  # a directory where the temporary file would go
     logs: list[str] = []
-    res = wp.watch(state_path=str(path), run=_merged_run, now=lambda: CLOCK, sleep=lambda ms: None, log=logs.append, pid=4242)
+    res = PrWatcher(run=_merged_run, now=lambda: CLOCK, sleep=lambda ms: None, log=logs.append).watch(state_path=str(path), pid=4242)
     assert res["outcome"] == "merged"
     assert any("heartbeat" in line for line in logs)
 
@@ -81,7 +84,7 @@ def test_heartbeat_and_clock_order(tmp_path):
         return next(polls)
 
     sleeps: list[int] = []
-    res = wp.watch(state_path=str(path), run=run, now=lambda: next(ticks), sleep=sleeps.append, log=lambda _: None, pid=4242)
+    res = PrWatcher(run=run, now=lambda: next(ticks), sleep=sleeps.append, log=lambda _: None).watch(state_path=str(path), pid=4242)
     assert res == {"outcome": "merged", "prUrl": PR_URL, "at": "2026-10-22T12:03:00.000Z"}
     assert sleeps == [60000]
     # started 12:00, first heartbeat 12:01, second poll sees it; final heartbeat 12:02, result 12:03
