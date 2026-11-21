@@ -13,8 +13,8 @@ its own and stops for the developer only at the points in §3.
 
 | Principle | Meaning |
 | --- | --- |
-| Files, not trackers | The ticket is `ticket.md`; context passes between stages only through files in the ticket directory and the recorded decisions. |
-| Project steps are additions | A project can add its own steps at fixed events (`orchestratorRules`, for example to sync an issue tracker). They run in the orchestrator, never in a stage agent, and cannot skip an interaction point or widen what the plan authorises. |
+| Files between stages | The ticket is `ticket.md`; context passes between stages only through files in the ticket directory and the recorded decisions. An issue tracker (Jira, `tracker` config) is read once at kickoff into `ticket.md` and updated by the orchestrator at fixed events; stage agents never use it. |
+| Project steps are additions | A project can add its own steps at fixed events (`orchestratorRules`). Tracker steps run before the project's rules at the same event. They run in the orchestrator, never in a stage agent, and cannot skip an interaction point or widen what the plan authorises. |
 | Plan approval always required | No product code is written and no gated action is attempted before the developer approves the plan (H2). |
 | Important decisions always escalated | At any stage, including after the plan is approved (§4). |
 | Gates are separate | Approval gates are enforced by a `PreToolUse` hook (for example the `destructive-guard` plugin), not by prompt text. The pipeline treats a gate prompt or denial as a checkpoint and never works around it. It runs the same with or without a gate. |
@@ -39,6 +39,11 @@ Approving the plan also authorises the run's normal actions afterwards: local
 commits, pushing the ticket branch and opening the PR. Force pushes and pushes
 to other branches are never done. Rejecting the plan sends the feedback to the
 planner and H2 is asked again, without a round limit.
+
+With a `tracker`, `/ticket <KEY>` itself authorises reading the issue,
+assigning it, the three forward transitions of `jira.md` §4 and the
+`Pipeline:` comments. Reading and assigning happen before H2. Nothing else in
+the tracker is ever changed.
 
 ## 4. Important decisions and `NEEDS_DECISION`
 
@@ -92,6 +97,23 @@ the dev agent with `MODE=fix-review` (critical and important only, commits
 with `Review-Fix: <n>`). Minor findings go into the PR. The reviewer runs on a
 stronger model when the diff touches `riskPaths`.
 
+With a `tracker` (details in `jira.md`), the orchestrator runs these steps at
+the stage boundaries. Each posts a `Pipeline:` comment; a failed call is a
+warning and never stops the run.
+
+| Event | Where | Comment | Transition |
+| --- | --- | --- | --- |
+| intake | kickoff, before the worktree | none | none; `ticket.md` is generated, the issue is assigned |
+| `started` | end of kickoff | yes | to In Progress |
+| `spec-done` | spec exit | yes | none |
+| `plan-approved` | after H2 | yes | none |
+| `dev-done` | dev exit | yes | none |
+| `review-done` | review exit | yes | none |
+| `pr-opened` | PR opened or reused | yes, with the PR link | to In Review |
+| `pr-feedback-addressed` | end of a round (§5a) | yes | none |
+| `merged` | merge cleanup | yes, once | to Done |
+| `aborted` | abort | yes | none |
+
 ### 5a. PR follow-up
 
 In stage `done` the session starts `scripts/watch_pr.py` in the background.
@@ -106,7 +128,9 @@ fixes the change items, the reviewer checks the new commits, then the branch is
 pushed (never forced) and every item gets a marked reply. Threads are not
 resolved and reviews not re-requested. A merge notifies the developer and
 removes the worktree when it is clean and at the merged commit; the branch is
-kept. Closing the session stops the watch; `--resume` restarts it.
+kept. Closing the session stops the watch; `--resume` restarts it. With a
+`tracker` the issue stays In Review during feedback rounds; each round only
+posts its comment.
 
 ## 6. Hosts
 
@@ -144,9 +168,13 @@ hint; launched sessions carry `TICKET_FLOW_KEY` and are already named.
   "prUrl": null,
   "lastAddressedCommentAt": "ISO-8601 (newest PR feedback handled)",
   "watch": { "pid": 123, "startedAt": "ISO-8601", "heartbeatAt": "ISO-8601" },
+  "tracker": { "type": "jira", "site": "...", "url": "...", "status": "In Review", "statusAt": "ISO-8601", "pending": [] },
   "updatedAt": "ISO-8601"
 }
 ```
+
+`tracker` exists only when a tracker is configured; every writer of
+`state.json` keeps it, as it keeps `watch`.
 
 `--resume` re-enters the recorded stage from its start. Stages are safe to run
 again: they overwrite their own file, and dev skips steps whose `Plan-Step: N`
@@ -157,3 +185,5 @@ watcher writes `watch`. Abort keeps the worktree and branch.
 ## 8. Not in this version
 
 - Running without a developer present, or in CI.
+- Picking the next ticket from a tracker (parent-based picker).
+- Trackers other than Jira.
