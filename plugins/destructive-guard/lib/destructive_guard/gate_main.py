@@ -50,9 +50,9 @@ def log_decision(path: str, input: Any, rule: dict | None, result: dict | None) 
         tool_input = input.get("tool_input") if isinstance(input, dict) else None
         command = tool_input.get("command") if isinstance(tool_input, dict) else None
         if tool == "Bash" and isinstance(command, str):
-            from .gate_jev import redact
+            from .jev.redactor import Redactor
 
-            record["command"] = redact(command)
+            record["command"] = Redactor.redact(command)
         record["rule"] = rule["reason"] if rule else None
         record["decision"] = result["decision"] if result else "none"
         record["reason"] = result["reason"] if result else None
