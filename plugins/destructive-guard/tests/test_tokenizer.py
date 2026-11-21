@@ -9,12 +9,8 @@ import json
 
 import pytest
 
+from destructive_guard.engine.normalizer import CommandNormalizer
 from destructive_guard.errors import UnparsableError
-from destructive_guard.gate_engine import (
-    nested_shell_string,
-    shell_script_index,
-    strip_wrappers,
-)
 from destructive_guard.rules.rule_loader import RuleLoader
 from destructive_guard.shell.tokenizer import ShellTokenizer
 from testkit import DG
@@ -61,11 +57,11 @@ def test_normalize_cases(rules_name, tokens, expected):
     sw = expected["stripWrappers"]
     if "error" in sw:
         with pytest.raises(UnparsableError):
-            strip_wrappers(tokens, rules)
+            CommandNormalizer(rules).strip_wrappers(tokens)
     else:
-        assert strip_wrappers(tokens, rules) == sw
-    assert nested_shell_string(tokens, rules) == expected["nestedShellString"]
-    assert shell_script_index(tokens) == expected["shellScriptIndex"]
+        assert CommandNormalizer(rules).strip_wrappers(tokens) == sw
+    assert CommandNormalizer(rules).nested_shell_string(tokens) == expected["nestedShellString"]
+    assert CommandNormalizer.shell_script_index(tokens) == expected["shellScriptIndex"]
 
 
 # --- edge cases the review asked for -------------------------------------------

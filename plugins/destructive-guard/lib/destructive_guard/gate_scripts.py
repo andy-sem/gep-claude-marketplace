@@ -17,11 +17,7 @@ import stat
 from collections.abc import Mapping
 from typing import Any
 
-from .gate_engine import (
-    nested_shell_string,
-    shell_script_index,
-    strip_wrappers,
-)
+from .engine.normalizer import CommandNormalizer
 from .rules.rule_loader import Rules
 from .shell.cmd import Cmd as _Cmd
 from .shell.tokenizer import ShellTokenizer
@@ -353,7 +349,7 @@ def run_targets(raw_tokens: list[str], rules: Rules, *, cwd: str | None, root: s
     if depth > 4:
         return []
     try:
-        stripped = strip_wrappers(raw_tokens, rules)["tokens"]
+        stripped = CommandNormalizer(rules).strip_wrappers(raw_tokens)["tokens"]
     except Exception:  # noqa: BLE001 (any parse failure: no targets)
         return []
     if not stripped:
@@ -366,7 +362,7 @@ def run_targets(raw_tokens: list[str], rules: Rules, *, cwd: str | None, root: s
     # a plain `bash -c '…'` is already split out by split_command.
     first = next((t for t in raw_tokens if not ShellTokenizer.ASSIGNMENT_RE.match(t)), None)
     if first is not None and _basename(first) not in SHELLS:
-        nested = nested_shell_string(raw_tokens, rules)
+        nested = CommandNormalizer(rules).nested_shell_string(raw_tokens)
         if nested is not None:
             out.extend(command_targets(nested, rules, cwd, root, depth + 1))
 
@@ -385,7 +381,7 @@ def run_targets(raw_tokens: list[str], rules: Rules, *, cwd: str | None, root: s
         return out
     bare_or_abs = "/" not in word or os.path.isabs(word)
     if base in SHELLS and bare_or_abs:
-        idx = shell_script_index(stripped)
+        idx = CommandNormalizer.shell_script_index(stripped)
         if idx > 0:
             file(stripped[idx])
         return out
@@ -532,7 +528,7 @@ def command_targets(command: str, rules: Rules, cwd: str | None, root: str, dept
             continue
         stripped: list[str] = tokens
         with contextlib.suppress(Exception):
-            stripped = strip_wrappers(tokens, rules)["tokens"]
+            stripped = CommandNormalizer(rules).strip_wrappers(tokens)["tokens"]
         word = stripped[0] if stripped else None
         if word in ("cd", "pushd"):
             target = next((t for t in stripped[1:] if not t.startswith("-")), None)

@@ -360,12 +360,10 @@ class ShellTokenizer:
                 found = [e["body"] for e in (getattr(raw_tokens, "stdin", None) or [])]
                 if not found:
                     raise UnparsableError("shell reads stdin")
-        from ..gate_engine import (
-            _DOLLAR_EXPANSION,  # until Task 7 moves it into CommandNormalizer
-        )
+        from ..engine.normalizer import CommandNormalizer
 
         for s in found:
-            if not loose and _DOLLAR_EXPANSION.search(s):
+            if not loose and CommandNormalizer._DOLLAR_EXPANSION.search(s):
                 raise UnparsableError("dynamic shell command")
         return found
 
