@@ -74,11 +74,15 @@ class TicketLauncher:
         config: Mapping,
         remote_control: bool = False,
         dry_run: bool = False,
+        summary: str | None = None,
         env: Mapping[str, str] | None = None,
         run: ProcessRunner.Run = ProcessRunner.default_run,
         log: Callable[[str], None] = lambda line: None,
     ) -> dict:
         """Plans and (unless `dry_run`) opens the session for one ticket.
+
+        `summary` titles the session when there is no `ticket.md` yet (a tracker ticket the session
+        will fetch); with a `ticket.md` its title wins.
 
         Returns `{key, mode, host, cwd, command, title, base, worktree, note, launched}` where
         `mode` is `resume`, `orca-worktree` or `main-checkout`. A dry run calls only read-only
@@ -144,7 +148,7 @@ class TicketLauncher:
             else:
                 note = None
             if note:
-                return open_session({"mode": "main-checkout", "cwd": root, "args": [], "summary": None, "note": note})
+                return open_session({"mode": "main-checkout", "cwd": root, "args": [], "summary": summary, "note": note})
         ticket = TicketProject(root).read_ticket(key=key, config=config)
         summary = ticket["title"]
 
