@@ -672,7 +672,7 @@ def launch_ticket(
 # CLI
 # ---------------------------------------------------------------------------
 
-USAGE = """Usage: launch.mjs [--dry-run] [--remote-control] (KEY... | --all)
+USAGE = """Usage: launch.py [--dry-run] [--remote-control] (KEY... | --all)
 
 Opens one Claude Code session per ticket, running /ticket <KEY>, in a new
 Orca or iTerm2 tab. A ticket with a run is resumed in its worktree.

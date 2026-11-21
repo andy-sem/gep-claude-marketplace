@@ -1,7 +1,7 @@
 {
   "name": "gated-dev-simple-workflow",
-  "version": "0.8.0",
-  "description": "File-based ticket-to-PR pipeline: /ticket runs spec, plan, dev and review subagents in a worktree per ticket (git, Orca or iTerm2), with a plan-approval checkpoint and PR creation, then watches the PR: addresses review feedback (--address-review) and cleans up after the merge. Projects can add their own steps at fixed events (for example to sync an issue tracker). Includes a launcher that opens one session per ticket and notifies you when a launched session needs you. Treats approval-gate prompts as checkpoints; no gate required.",
+  "version": "0.9.0",
+  "description": "File-based ticket-to-PR pipeline: /ticket runs spec, plan, dev and review subagents in a worktree per ticket (git, Orca or iTerm2), with a plan-approval checkpoint and PR creation, then watches the PR: addresses review feedback (--address-review) and cleans up after the merge. Projects can add their own steps at fixed events (for example to sync an issue tracker). Includes a launcher that opens one session per ticket and notifies you when a launched session needs you. Treats approval-gate prompts as checkpoints; no gate required. Needs Python >= 3.14.",
   "author": {
     "name": "Gep"
   },

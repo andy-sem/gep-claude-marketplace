@@ -235,7 +235,7 @@ The Python package is built next to the JS; hooks keep calling JS until P9.
   except the `jq`-missing case, which becomes "no Python → silent".
 - **P11** (plan: `docs/plans/python-port-p11.md`) **done**. `watch_pr.py` (PR polling, heartbeat, follow-up rounds, marker).
 - **P12** (plan: `docs/plans/python-port-p12.md`) **done**. `launch.py` (worktrees, Orca/iTerm2, `--dry-run`, `--all`).
-- **P13** (plan: `docs/plans/python-port-p13.md`) Cutover: `ticket`/`launch` skills, `SKILL.md` gate dry-run step
+- **P13** (plan: `docs/plans/python-port-p13.md`) **done**. Cutover: `ticket`/`launch` skills, `SKILL.md` gate dry-run step
   (`lib/check.py`), README requirements (Python ≥ 3.14 instead of `node`
   and `jq`), delete JS + node tests, version bump.
 

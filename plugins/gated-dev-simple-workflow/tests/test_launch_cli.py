@@ -422,3 +422,21 @@ def test_main_reports_a_config_error_and_a_usage_error(impl, tmp_path):
     usage = p.launch(impl)
     assert usage.status == 2
     assert re.search(r"Usage", usage.stderr)
+
+
+def test_documented_invocations_run(impl, tmp_path):
+    """Every `launch` command line in the skill and the README names the shipped script and runs as a dry run."""
+    gd = Path(__file__).resolve().parents[1]
+    pattern = re.compile(r'^\s*python3 -I "?(?:\$\{CLAUDE_PLUGIN_ROOT\}|<plugin>)/(scripts/launch\.py)"? ([^#\n]*?)\s*(?:#.*)?$', re.MULTILINE)
+    found = []
+    for doc in (gd / "skills" / "launch" / "SKILL.md", gd / "README.md"):
+        found += [(doc.name, m.group(1), m.group(2).split()) for m in pattern.finditer(doc.read_text())]
+    assert len(found) >= 5, found
+    keys = {a for _, _, args in found for a in args if not a.startswith("-")}
+    p = Project(tmp_path, tickets={k: f"# Ticket {k}\n" for k in keys})
+    p.orca()
+    p.osascript()
+    for name, script, args in found:
+        assert (gd / script).is_file()
+        r = p.launch(impl, "--dry-run", *[a for a in args if a != "--dry-run"], host=ORCA)
+        assert r.status == 0, (name, args, r.stderr)

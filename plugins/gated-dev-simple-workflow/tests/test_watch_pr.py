@@ -328,7 +328,7 @@ def test_pr_url_that_cannot_be_parsed_counts_as_a_failed_poll(impl, tmp_path):
 def test_watcher_command_passes_the_gate(tmp_path):
     """The command the ticket skill documents passes destructive-guard with its defaults (no import of gate code)."""
     skill = (GD / "skills" / "ticket" / "SKILL.md").read_text()
-    documented = re.search(r"`(node \"\$\{CLAUDE_PLUGIN_ROOT\}/scripts/watch-pr\.mjs\" --state [^`]+)`", skill)
+    documented = re.search(r"`(python3 -I \"\$\{CLAUDE_PLUGIN_ROOT\}/scripts/watch_pr\.py\" --state [^`]+)`", skill)
     assert documented, "watcher command not found in skills/ticket/SKILL.md"
     state = "/abs/repo/.claude/worktrees/proj-1-x/docs/tickets/PROJ-1/state.json"
     command = documented.group(1).replace("${CLAUDE_PLUGIN_ROOT}", str(GD)).replace("<TICKET_DIR>/state.json", state)

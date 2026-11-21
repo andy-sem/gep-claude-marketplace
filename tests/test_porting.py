@@ -34,7 +34,7 @@ def test_every_js_test_is_mapped(plugin_dir):
 
 @pytest.mark.parametrize("plugin_dir", PLUGIN_DIRS, ids=_ids)
 def test_no_stale_rows(plugin_dir):
-    # a plugin whose JS tests are gone (destructive-guard since P9) keeps its rows as the record
+    # a plugin whose JS tests are gone (P9, P13) keeps its rows as the record
     if not (plugin_dir / "test").is_dir():
         pytest.skip("JS tests are gone")
     existing = set(js_tests(plugin_dir))
@@ -63,7 +63,7 @@ def test_no_todo_rows(plugin_dir):
 
 
 def test_js_tests_found():
-    # destructive-guard's JS tests are gone (P9); its PORTING.md stays as the record.
+    # the JS tests of both plugins are gone (P9, P13); the PORTING.md files stay as the record.
     assert not (DG / "test").exists()
-    tests = js_tests(GD)
-    assert len(tests) >= 50  # launch + watch-pr; notify.test.mjs went in P10
+    assert not (GD / "test").exists()
+    assert js_tests(GD) == []
