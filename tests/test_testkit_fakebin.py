@@ -1,7 +1,5 @@
-import os
 import subprocess
 
-from testkit import REPO
 from testkit.fakebin import FakeBin
 from testkit.gitrepo import add_worktree, init_repo
 
@@ -57,22 +55,6 @@ def test_fakebin_path_has_no_real_tools(tmp_path):
     fb.link("cat")
     assert (fb.path / "cat").is_symlink()
     assert subprocess.run(["/bin/sh", "-c", "echo hi | cat"], env=env, capture_output=True, check=False).returncode == 0
-
-
-def test_fast_timers_records_delay(tmp_path):
-    log = tmp_path / "sleeps"
-    script = "setTimeout(() => console.log('fired'), 60000)"
-    proc = subprocess.run(
-        ["node", "--import", str(REPO / "testkit" / "_fast_timers.mjs"), "-e", script],
-        env={**os.environ, "GD_TEST_SLEEP_LOG": str(log)},
-        capture_output=True,
-        text=True,
-        timeout=2,
-        check=False,
-    )
-    assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.strip() == "fired"
-    assert log.read_text().split() == ["60000"]
 
 
 def test_git_helpers_isolated(tmp_path):

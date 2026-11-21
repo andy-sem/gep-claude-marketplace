@@ -8,8 +8,6 @@ from testkit import DG
 from testkit.impl import select_impl
 from testkit.pythons import find_python
 
-PLUGIN_NAMES = ["destructive-guard", "gated-dev-simple-workflow"]
-
 
 def _fake(dir_path, name):
     p = dir_path / name
@@ -21,21 +19,6 @@ def _fake(dir_path, name):
 def test_defaults():
     assert select_impl("destructive-guard", {}).name == "py"
     assert select_impl("gated-dev-simple-workflow", {}).name == "py"
-
-
-@pytest.mark.parametrize("plugin", PLUGIN_NAMES)
-def test_js_is_rejected_for_both_plugins(plugin):
-    with pytest.raises(ValueError, match="no JS implementation"):
-        select_impl(plugin, {"GD_IMPL": "js"})
-
-
-def test_gd_impl_overrides():
-    assert select_impl("destructive-guard", {"GD_IMPL": "py"}).name == "py"
-
-
-def test_gd_impl_typo_raises():
-    with pytest.raises(ValueError, match="GD_IMPL"):
-        select_impl("destructive-guard", {"GD_IMPL": "pyhton"})
 
 
 def test_unknown_plugin_raises():
@@ -51,10 +34,10 @@ def test_entry_points_exist():
 
 
 def test_py_argv_shapes():
-    dg = select_impl("destructive-guard", {"GD_IMPL": "py"})
+    dg = select_impl("destructive-guard", {})
     assert dg.check()[1] == "-I"
     assert dg.check()[-1].endswith("lib/check.py")
-    gd = select_impl("gated-dev-simple-workflow", {"GD_IMPL": "py"})
+    gd = select_impl("gated-dev-simple-workflow", {})
     assert gd.notify()[1].endswith("run-python.sh")
     assert gd.watch_pr()[-1].endswith("scripts/watch_pr.py")
 
@@ -103,7 +86,7 @@ def test_require_new_python_rejects_old(tmp_path):
 
 
 def test_impl_watch_pr_fast_py(tmp_path):
-    gd = select_impl("gated-dev-simple-workflow", {"GD_IMPL": "py"})
+    gd = select_impl("gated-dev-simple-workflow", {})
     argv = gd.watch_pr(fast=True)
     assert argv[1] == "-I"
     assert argv[2].endswith("testkit/_fast_sleep.py")

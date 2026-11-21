@@ -22,9 +22,6 @@ jobs:
         python: ["3.14", "3.x"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
       # setup-python puts the tested interpreter on PATH as python3 / python3.X,
       # so the tests' interpreter lookup (find_python) sees it on both legs.
       - uses: actions/setup-python@v5

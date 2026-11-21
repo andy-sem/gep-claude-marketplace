@@ -23,7 +23,7 @@ The two plugins are independent and installable on their own:
 ### `destructive-guard` (`plugins/destructive-guard/`)
 
 - `hooks/hooks.json`: `Bash|mcp__.*` → `hooks/gate.sh` (fail-closed wrapper: finds Python via `GATE_INFRA_PYTHON`, `python3.14`, `python3`, runs `lib/gate_main.py` with `-I`); `Read|Edit|Write` → `hooks/env-guard.sh` (blocks `.env*` files except `.env.example`).
-- The gate **asks or has no opinion; it never allows**. It parses shell commands (sees through `sudo`, `xargs`, `bash -c`, `npx`) rather than grepping. Engine or config errors ask with a `gate-config:` reason.
+- The gate **asks or has no opinion; it never allows**. It parses shell commands (sees through `sudo`, `xargs`, `bash -c`, package runners) rather than grepping. Engine or config errors ask with a `gate-config:` reason.
 - `lib/destructive_guard/config.py` is the single place that turns env vars into config. Main vars: `GATE_ENABLED`, `GATE_CHECKS` (packs: `destructive` default, `postgres`, `terraform`; `base` always loaded), `GATE_RULES_FILE`, `GATE_DISABLE_RULES`, `GATE_STRICT` (default `0`), `GATE_LOG`, `GATE_JEV_*`.
 - Rule packs live in `packs/*.json`; `lib/destructive_guard/gate_scripts.py` scans scripts a command runs.
 - Optional **Jev** classifier (`lib/destructive_guard/gate_jev.py`, prompts in `jev/*.json`, off by default). With Jev on, its confident answer wins; rules decide in the uncertain band, on errors and when Jev is off. Fail-closed cases always ask and are never sent to Jev.
@@ -42,7 +42,7 @@ The two plugins are independent and installable on their own:
 
 ## Work in progress
 
-Both plugins are ported; WP-W5 (PR follow-up) is the last package (see the plan for its status). Plan, status, binding decisions and handoff: `docs/plans/gated-dev-simple-workflow.md` (§7 is the entry point for a new session). Read it before changing either plugin.
+Both plugins are ported and run on Python; the repo contains no JavaScript (`tests/test_no_js.py` keeps it that way). The port plan and its outcome: `docs/plans/python-port.md`; plan, binding decisions and handoff of the workflow plugin: `docs/plans/gated-dev-simple-workflow.md` (§7 is the entry point for a new session). Read them before changing either plugin.
 
 ## Public repo hygiene (binding)
 
@@ -59,7 +59,7 @@ claude plugin validate .                                    # marketplace + plug
 jq . .claude-plugin/marketplace.json
 
 uv sync                                                     # once: dev tools (pytest, ruff); needs uv and Python 3.14
-uv run pytest                                               # Python tests; GD_IMPL=py runs them against the Python port
+uv run pytest                                               # Python tests
 uv run ruff check .
 ```
 

@@ -10,7 +10,7 @@ stops the run with a message (nothing is guessed).
   "keyPattern": "^[A-Z]+-\\d+$",
   "baseBranch": "develop",
   "setupCommand": "npm ci",
-  "formatCommand": "npx prettier --write",
+  "formatCommand": "prettier --write",
   "riskPaths": ["**/migrations/**", "src/auth/**", "infra/**"],
   "escalationExtra": [
     "any change to the public API of packages/sdk",
