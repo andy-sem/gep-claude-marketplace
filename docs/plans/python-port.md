@@ -212,7 +212,9 @@ The Python package is built next to the JS; hooks keep calling JS until P9.
   (`sudo`/`xargs`/`bash -c`/`npx` unwrapping), rule evaluation, `classify`. All 537 corpus cases give the JS rule id
   through the Python `classify` (`test_*_case_py`); the tokenizer and normalisation are pinned by two JS-generated
   fixtures (516 + 1002 rows); `test_gate_engine.py` has no bridge left.
-- **P6** (plan: `docs/plans/python-port-p6.md`) `gate_scripts`.
+- **P6** (plan: `docs/plans/python-port-p6.md`) **done**. `gate_scripts`: project root, run targets (shell, node, python,
+  package scripts, workflows, `terraform test`), source/import following within limits, scan; `test_gate_scripts.py` has
+  no bridge left.
 - **P7** (plan: `docs/plans/python-port-p7.md`) `gate_jev` (prompts, redaction, request, uncertain band).
 - **P8** (plan: `docs/plans/python-port-p8.md`) `check` CLI + hook entry point (`GATE_RUN`, done-file protocol).
 - **P9** (plan: `docs/plans/python-port-p9.md`) Cutover: `gate.sh` → D1a interpreter lookup, `GATE_INFRA_PYTHON`, skill and
