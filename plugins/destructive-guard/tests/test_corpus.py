@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from destructive_guard.config import build_rules, read_config
-from destructive_guard.gate_engine import classify
+from destructive_guard.engine.classifier import Classifier
 from testkit import DG
 from testkit.check_cli import check_call, run_check
 from testkit.hook import decision, mcp_input, run_hook
@@ -69,7 +69,7 @@ def classify_case(corpus_env: dict, case: dict) -> str | None:
     """In-process leg: the rule id (the reason's first segment) when the case asks, else None; the same
     value the contract leg gets from `check --json` (`source`) or the hook reason."""
     rules, strict = _engine(tuple(sorted(corpus_env.items())))
-    result = classify(hook_input(case), rules, strict=strict)
+    result = Classifier(rules, strict).classify(hook_input(case))
     if not result or result["decision"] != "ask":
         return None
     reason = result["reason"]

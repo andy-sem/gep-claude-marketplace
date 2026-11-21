@@ -8,8 +8,8 @@ import json
 
 import pytest
 
+from destructive_guard.engine.classifier import Classifier
 from destructive_guard.errors import RulesError, UnparsableError
-from destructive_guard.gate_engine import classify
 from destructive_guard.rules.rule_loader import RuleLoader
 from destructive_guard.shell.tokenizer import ShellTokenizer
 from testkit import DG, REPO
@@ -78,7 +78,7 @@ def bash_input(command):
 
 def test_classify_reasons_in_process(engine_rules):
     def why(command):
-        return classify(bash_input(command), engine_rules)["reason"]
+        return Classifier(engine_rules).classify(bash_input(command))["reason"]
 
     assert why("cloudctl things delete config get") == 'cloudctl: write verb "delete"'
     assert why("cloudctl version apply") == 'cloudctl: write verb "apply"'
@@ -86,36 +86,36 @@ def test_classify_reasons_in_process(engine_rules):
     assert why("echo push | xargs dbtool") == "dbtool: dynamic argument"
     assert why("echo x | bash") == "unparsable: shell reads stdin"
     assert why('eval "$CMD"') == "unparsable: dynamic shell command"
-    assert classify(bash_input("ls"), engine_rules) is None
+    assert Classifier(engine_rules).classify(bash_input("ls")) is None
 
 
 def test_classify_marks_unparsable_commands(engine_rules):
-    result = classify(bash_input('echo "x'), engine_rules)
+    result = Classifier(engine_rules).classify(bash_input('echo "x'))
     assert result == {
         "decision": "ask",
         "reason": "unparsable: unterminated double quote",
         "commandUnparsable": True,
     }
-    assert classify(bash_input('echo "x'), engine_rules, strict=False) is None
+    assert Classifier(engine_rules, False).classify(bash_input('echo "x')) is None
 
 
 def test_classify_loose_still_checks_the_readable_parts(engine_rules):
-    result = classify(bash_input('echo "x; dbtool push'), engine_rules, strict=False)
+    result = Classifier(engine_rules, False).classify(bash_input('echo "x; dbtool push'))
     assert result is None  # the whole string is unreadable: no opinion
-    result = classify(bash_input("bash -c 'echo $HOME' && dbtool push"), engine_rules, strict=False)
+    result = Classifier(engine_rules, False).classify(bash_input("bash -c 'echo $HOME' && dbtool push"))
     assert result["reason"].startswith("dbtool:")
 
 
 @pytest.mark.parametrize("value", [None, "x", ["a"], 3])
 def test_classify_non_object_input(engine_rules, value):
-    assert classify(value, engine_rules) == {"decision": "ask", "reason": "unparsable: hook input is not an object"}
+    assert Classifier(engine_rules).classify(value) == {"decision": "ask", "reason": "unparsable: hook input is not an object"}
 
 
 def test_classify_input_level_failures_always_ask(engine_rules):
     for strict in (True, False):
-        assert classify({}, engine_rules, strict=strict)["reason"] == "unparsable: hook input has no tool_name"
-        assert classify({"tool_name": "Bash"}, engine_rules, strict=strict)["reason"] == "unparsable: Bash call has no command"
-        assert classify({"tool_name": "Bash", "tool_input": []}, engine_rules, strict=strict)["decision"] == "ask"
+        assert Classifier(engine_rules, strict).classify({})["reason"] == "unparsable: hook input has no tool_name"
+        assert Classifier(engine_rules, strict).classify({"tool_name": "Bash"})["reason"] == "unparsable: Bash call has no command"
+        assert Classifier(engine_rules, strict).classify({"tool_name": "Bash", "tool_input": []})["decision"] == "ask"
 
 
 # --- splitCommand / loadRules ---
