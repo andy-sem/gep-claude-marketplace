@@ -433,6 +433,30 @@ def test_invalid_tracker_config_exits_1(impl, tmp_path):
     assert "tracker.type" in r.stderr
 
 
+def test_flow_without_tracker_exits_1(impl, tmp_path):
+    p = Project(tmp_path, config={"flow": {"max": 2}})
+    r = p.launch(impl, "--dry-run", "PROJ-7", host=ORCA)
+    assert r.status == 1
+    assert "flow requires tracker" in r.stderr
+    assert r.stdout == ""
+
+
+def test_invalid_flow_config_exits_1(impl, tmp_path):
+    p = Project(tmp_path, config={"tracker": {"type": "jira"}, "flow": {"pollSeconds": 5}})
+    r = p.launch(impl, "--dry-run", "PROJ-7", host=ORCA)
+    assert r.status == 1
+    assert "flow.pollSeconds" in r.stderr
+
+
+def test_valid_flow_config_does_not_change_a_tracker_dry_run(impl, tmp_path):
+    flow = {"max": 2, "jql": "parent = {parent}", "pollSeconds": 30, "remoteControl": True}
+    p = Project(tmp_path, config={"tracker": {"type": "jira"}, "flow": flow})
+    p.orca()
+    r = p.launch(impl, "--dry-run", "PROJ-7", host=ORCA)
+    assert r.status == 0, r.stderr
+    assert r.stdout.startswith("PROJ-7: main-checkout\n")
+
+
 def test_all_with_tracker_lists_only_ticket_files(impl, tmp_path):
     p = Project(tmp_path, config=TRACKER_CONFIG, tickets={"PROJ-1": "# One\n"})
     p.orca()
