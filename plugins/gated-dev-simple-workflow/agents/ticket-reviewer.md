@@ -27,6 +27,7 @@ If `WORKTREE`, `KEY`, `TICKET_DIR` or `BASE_BRANCH` is missing, end with a `NEED
 - Use absolute paths under `WORKTREE` only. Never read or write the main checkout or any other directory, except the scratch space your harness provides. Run every shell command with `cd <WORKTREE> &&` or an absolute path.
 - Context from earlier stages exists only in the files under `TICKET_DIR` and in `DECISIONS`. Read them first.
 - Stage files are safe to overwrite: running the same stage twice must give the same kind of result.
+- Never change anything outside `WORKTREE` through any tool: issue trackers, chat, cloud consoles, other repositories. The orchestrator makes every outside update.
 
 ## Gate prompts
 
