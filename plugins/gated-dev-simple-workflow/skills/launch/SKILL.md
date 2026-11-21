@@ -1,6 +1,6 @@
 ---
 name: launch
-description: Open one new Claude Code session per ticket, each running /ticket <KEY>, in new Orca or iTerm2 tabs. Use when the user asks to "launch", "open sessions for" or "start in parallel" several tickets, or all ticket files that have no run yet (--all). A ticket with a run is reopened in its worktree with --resume (a finished run then watches its PR again). Only opens tabs; the pipeline itself runs in each new session.
+description: Open one new Claude Code session per ticket, each running /ticket <KEY>, in new Orca or iTerm2 tabs. Use when the user asks to "launch", "open sessions for" or "start in parallel" several tickets, or all ticket files that have no run yet (--all). With a Jira tracker configured, any issue key can be launched; --all still lists only ticket files. A ticket with a run is reopened in its worktree with --resume (a finished run then watches its PR again). Only opens tabs; the pipeline itself runs in each new session.
 ---
 
 # Launch ticket sessions
@@ -24,7 +24,7 @@ than 3.14, run the script with the interpreter in `$GATE_INFRA_PYTHON` instead
 
 Modes: `orca-worktree` (a new Orca worktree on branch `<KEY>/<slug>`; the
 session adopts it), `main-checkout` (iTerm2, or Orca with a repo Orca does not
-know: the session creates its own git worktree), `resume` (the run's worktree,
+know: the session creates its own git worktree; also used for a key with no `ticket.md` when a tracker or intake rules are configured (the session writes it; the tab is titled with the plain key)), `resume` (the run's worktree,
 `/ticket <KEY> --resume`; for a finished run that restarts the PR watch).
 
 Outside Orca and iTerm2 the script refuses to open tabs (exit 1); `--dry-run`

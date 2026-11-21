@@ -2,10 +2,9 @@
 
 `/ticket <KEY>` runs one ticket through **spec → plan → dev → review → PR**,
 one subagent per stage, in its own git worktree. The pipeline is file-based:
-the ticket is a Markdown file (`docs/tickets/<KEY>/ticket.md` by default),
-and every stage reads and writes files next to it. The pipeline uses no issue
-tracker itself; a project can connect one with its own
-[project rules](#project-rules).
+by default the ticket is a Markdown file (`docs/tickets/<KEY>/ticket.md`), and
+every stage reads and writes files next to it. A project can **switch to Jira
+issues** instead (see [Jira](#jira)); the stages still work on files.
 
 ## Usage
 
@@ -97,33 +96,83 @@ default and the ticket file format: `skills/ticket/references/config.md`.
 
 `"orchestratorRules": ".claude/gated-dev-rules.md"` points to a Markdown file
 with extra steps the orchestrator runs at fixed events: `intake` (no
-`ticket.md` yet: the rules may write it, for example from an issue tracker),
-`started`, `resumed`, `spec-done`, `plan-approved`, `dev-done`,
-`review-done`, `pr-body`, `pr-opened`, `pr-feedback-addressed`, `merged`,
-`aborted`. One `## <event>` section per event:
+`ticket.md` yet: the rules may write it), `started`, `resumed`, `spec-done`,
+`plan-approved`, `dev-done`, `review-done`, `pr-body`, `pr-opened`,
+`pr-feedback-addressed`, `merged`, `aborted`. One `## <event>` section per
+event:
 
 ```markdown
-Tickets live in the team tracker; use its MCP tools.
+Team notifications go through the chat tool; use its MCP tools.
 
-## intake
-Fetch the ticket, its parent and linked issues and write them to ticket.md
-(`# <summary>`, then the description). If the parent has a branch
-`feature/<PARENT>/*` on origin, put it in the front matter as `base:`.
-
-## started
-Assign the ticket to me and move it to In Progress if it is in To Do.
+## plan-approved
+Add a line for this ticket to CHANGELOG.md under "Unreleased".
 
 ## pr-opened
-Comment on the ticket with the PR link.
+Post the PR link to the team channel with `mcp__chat__send_message`.
 
 ## merged
-Move the ticket to Done unless it already is.
+Post "<KEY> merged" to the team channel with `mcp__chat__send_message`.
 ```
 
 Steps only add to the pipeline: they cannot skip a stop point, change what
 the stage agents get, or widen what the approved plan allows. A failing step
-is recorded as a warning and the run goes on (except at `intake`). Details:
-`skills/ticket/SKILL.md` section 0a.
+is recorded as a warning and the run goes on (except at `intake`). With a
+[tracker](#jira), the rules run after the tracker step at each event and may
+not define `intake`. Details: `skills/ticket/SKILL.md` section 0a.
+
+## Jira
+
+Off by default. Without `tracker` nothing in this section applies: `ticket.md`
+is the ticket and no Jira call is ever made.
+
+**Requirement:** a Jira MCP server or connector in the Claude Code session,
+with rights to read issues, list and apply transitions, comment and assign
+(and to read the current user). No API tokens and no client of its own.
+Without these tools, kickoff stops before creating anything.
+
+Minimal config in `.claude/gated-dev.json`:
+
+```json
+{ "tracker": { "type": "jira", "site": "acme.example.net" } }
+```
+
+`/ticket PROJ-1` then fetches the issue (summary, description, type, status,
+parent, links, the last human comments) and writes it to `ticket.md`. The key
+pattern defaults to `^[A-Z][A-Z0-9]*-\d+$`.
+
+| When | Status moves | Only if the status is |
+| --- | --- | --- |
+| Kickoff | To Do to In Progress | in `startFrom` (default: any To Do category status) |
+| PR opened or reused | In Progress to In Review | In Progress (or a `startFrom` status) |
+| PR merged | to Done | not already Done |
+
+The pipeline never moves an issue backwards and makes no other status change
+(no change on abort, restart, PR feedback rounds or resume).
+
+What lands in Jira: the issue is assigned to you at kickoff (`"assign": false`
+turns that off), and a short `Pipeline:` comment (Done / Next / Blockers) is
+posted at each stage transition, with the PR link when it opens. Set
+`"comments": false` to post none; status changes happen either way.
+
+Customise in the `tracker` object:
+
+- `statuses`: target names, `{"inProgress": "In Progress", "inReview": "In
+  Review", "done": "Done"}` by default. `"inReview": null` skips that step for
+  workflows without In Review.
+- `startFrom`: statuses kickoff may move to In Progress.
+- `site`: needed only when the tools reach several Jira sites.
+- `baseFromParent`: a branch glob such as `feature/{parent}/*`. If the issue
+  has a parent and exactly one matching branch exists on `origin`, it becomes
+  the base; none means the normal base rules; several ask you.
+
+A failed Jira call after kickoff is a warning, not a stop: `/ticket KEY
+--status` lists it and the run goes on. Kickoff stops only when the issue
+cannot be read or the session has no Jira tools.
+
+The stage agents never touch Jira and read only `ticket.md`, which is
+generated from the issue and committed with the spec and plan. Every key and
+the file format: `skills/ticket/references/config.md`; behaviour:
+`skills/ticket/references/jira.md`.
 
 ## Launching several tickets
 
@@ -142,6 +191,7 @@ python3 -I <plugin>/scripts/launch.py --all                     # every ticket.m
 | New ticket, Orca, repo registered in Orca | A new Orca worktree on `<KEY>/<slug>` (base: front matter `base:`, `baseBranch`, `origin/HEAD`, `main`), with `ticket.md` and `.claude/settings.local.json` copied in; the session adopts it |
 | New ticket, iTerm2 (or a repo Orca does not know) | The main checkout; the session creates its worktree |
 | New ticket without `ticket.md`, `orchestratorRules` set | The main checkout; the session's `intake` rules write the ticket, then it creates its worktree |
+| New Jira key without `ticket.md` (`tracker` set) | The main checkout, titled with the plain key; the session fetches the issue and writes `ticket.md`, then creates its worktree |
 | Ticket with a run | Its worktree, with `/ticket <KEY> --resume` (for a finished run, `stage: done`, that restarts the PR watch) |
 
 Sessions are named `<KEY> · <title>` (`<KEY> resume · <title>`) and get
@@ -181,6 +231,87 @@ the ones that will ask, with their rule IDs, in the plan's
 `## Gated operations` table; you see that table at plan approval. Without a
 gate the table lists the calls it expects to need approval, with
 `Rule ID: unknown`.
+
+## Design decisions and history
+
+This section replaces the finished plan files that used to sit in
+`docs/plans/`. Git history keeps the full text.
+
+### Origin and binding decisions
+
+The `/ticket` pipeline (skill, four stage agents, launcher, PR watcher)
+started inside a private project and was generalised into this plugin.
+Decisions made with the user while porting it:
+
+- **Workflow and gates are separate.** The pipeline knows nothing about gate
+  internals. It runs the same with or without `destructive-guard` and treats
+  any gate prompt or denial as a checkpoint (`NEEDS_DECISION`), never as
+  something to work around. Its only coupling is a contract: when the gate's
+  `check` skill is installed, the planner dry-runs its calls through it.
+  Otherwise it writes `Rule ID: unknown`. No path into the other plugin is
+  hard-coded.
+- **File-based, no issue tracker.** The ticket is
+  `<ticketsDir>/<KEY>/ticket.md`, and the key is free-form. Agents have no
+  tracker tools or tracker wording. A project that wants tracker steps adds
+  them through `orchestratorRules` (one section per pipeline event).
+- **Orca and iTerm2 are supported**, as well as plain `git worktree`. The
+  skill detects the host and adopts a linked worktree it was opened in. The
+  launcher opens one session per ticket.
+- **Plan approval is always a stop point.** After it, the run commits,
+  pushes, opens a PR with `gh` and watches it. New feedback starts a
+  follow-up round; a merge sends a notification and removes the worktree
+  (the branch is kept).
+- **Public repo hygiene:** no source-project names, ticket keys or branch
+  names, and neutral placeholders (`PROJ-1`, `apps/web`).
+
+### What was checked end to end
+
+The pipeline was run in a private demo repo: by hand, through the launcher
+in Orca and in iTerm2, headless (`claude -p '/gated-dev-simple-workflow:ticket <KEY>'`,
+`--continue` to answer a stop point), `--status`, interrupt plus `--resume`,
+gated rows with real rule IDs, the `unknown` path without the gate, spec
+questions, a denial treated as a checkpoint, and a full PR feedback round
+through to merge and cleanup. Findings worth knowing:
+
+- The plugin cache is a copy. After changing the plugin, run
+  `claude plugin update gated-dev-simple-workflow@gep-claude-marketplace` in
+  the project before the next run.
+- The launcher reads `.claude/gated-dev.json` from the main checkout, while
+  a session in a worktree reads the base branch's copy. They can differ, and
+  the session reports it.
+- A `Bash(git push:*)` deny in Claude Code settings doesn't match
+  `git -C <worktree> push`.
+- The watcher exits `0` for feedback, merged or closed, `1` on error and
+  `2` on usage errors. Distinct non-zero codes per outcome made Claude Code
+  report a merge as a failure.
+
+### Python port (0.9, November 2026)
+
+The launcher, the PR watcher and the notification hook were rewritten in
+Python (>= 3.14, standard library only), and the repo contains no
+JavaScript. `hooks/notify.py` starts through `hooks/run-python.sh`, which
+uses the same interpreter lookup as the gate (`GATE_INFRA_PYTHON`, then
+`python3.14`, then `python3`, always with `-I`). Unlike the gate,
+notifications are best-effort: with no suitable Python the hook stays
+silent. `jq` is no longer needed. `tests/PORTING.md` maps every old test to
+its Python replacement. An installed `destructive-guard` older than its
+Python version has no `lib/check.py`, so the planner writes `unknown` rule
+IDs.
+
+### Class refactor (November 2026)
+
+One class per file, with no change in behaviour:
+- `gated_dev/launch/`: naming, terminal commands, ticket project, Orca
+  worktrees, launcher, CLI;
+- `gated_dev/watch/`: PR client, feedback detector, watcher, CLI;
+- `notify.py`, `process.py` and `errors.py`.
+
+### Planned change in the gate
+
+If `destructive-guard` moves to the Jev-only design in
+`docs/plans/lean-gate.md`, it has no rule ids any more. The planner's
+`## Gated operations` table would then need another source (decision D6
+there).
 
 ## Requirements
 
