@@ -10,7 +10,7 @@ is tunable through env variables.
   Code's normal permission rules apply to everything else.
 - **Parses, does not grep.** `echo rm -rf /` or a commit message that
   mentions `git push --force` pass; `sudo xargs rm -rf`, `bash -c '…'` and
-  `npx … ` wrappers are seen through.
+  <!-- recognises-js -->`npx … `<!-- /recognises-js --> wrappers are seen through.
 - **Fails closed.** An engine error or invalid configuration asks with a
   `gate-config:` reason instead of letting calls through.
 - **Optional Jev classifier** for what static rules cannot see (off by default).
@@ -250,13 +250,13 @@ Top-level keys besides `rules`:
 | Key | Meaning |
 | --- | --- |
 | `wrappers` | Programs that run their arguments (`sudo`, `xargs`, …); the wrapped command is checked. |
-| `runners` | Package runners (`npx`, `pnpm exec`, …): `program`, `subcommands`, `valueOptions` (options that take a value), `shellOptions` (`-c`), `bareBin`. |
+| `runners` | <!-- recognises-js -->Package runners (`npx`, `pnpm exec`, …)<!-- /recognises-js -->: `program`, `subcommands`, `valueOptions` (options that take a value), `shellOptions` (`-c`), `bareBin`. |
 | `inertPrograms` | Programs that never change anything; `inertUnsafeFlags` (`{ "rg": ["--pre"] }`) lists the flags that make them unsafe. |
 | `scriptPatterns` | Regexes: a project script the command runs that matches one asks. |
 | `scriptScanExempt` | Globs of project scripts the scanner skips. |
 
 The script scanner reads scripts a Bash command runs inside the project
-(`bash x.sh`, `node x.mjs`, `pnpm run <script>`, …) and asks when one calls a
+(<!-- recognises-js -->`bash x.sh`, `node x.mjs`, `pnpm run <script>`<!-- /recognises-js -->, …) and asks when one calls a
 program named by a CLI rule (unless `scriptScan: false`), matches
 `scriptPatterns`, or cannot be read. The built-in destructive rules opt out
 of it, so it is quiet by default; your own rules take part unless they set

@@ -83,7 +83,7 @@ invalid file or an unknown key stops the run with a message. Example:
   "keyPattern": "^[A-Z]+-\\d+$",
   "baseBranch": "develop",
   "setupCommand": "npm ci",
-  "formatCommand": "npx prettier --write",
+  "formatCommand": "prettier --write",
   "riskPaths": ["**/migrations/**", "src/auth/**"],
   "escalationExtra": ["any change to the public API of packages/sdk"],
   "models": { "plan": "opus", "reviewRisk": "opus" }

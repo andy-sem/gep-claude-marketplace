@@ -241,7 +241,7 @@ The Python package is built next to the JS; hooks keep calling JS until P9.
 
 ### Phase 4: cleanup
 
-- **P14** (plan: `docs/plans/python-port-p14.md`) Remove `_bridge.mjs`, the `js` impl, the node CI job, and the
+- **P14** (done; plan: `docs/plans/python-port-p14.md`) Remove `_bridge.mjs`, the `js` impl, the node CI job, and the
   `node` mentions in this repo's docs; add the "no JS in the repo" test; update
   `CLAUDE.md` (test commands, "needs Node.js" → "needs Python ≥ 3.14"),
   catalog descriptions and `metadata.version`; close this plan.
@@ -263,3 +263,14 @@ The Python package is built next to the JS; hooks keep calling JS until P9.
 None. Decided 2026-11-20: Python ≥ 3.14 (D1; 3.11 considered and rejected), system Python for users and a
 uv venv for development (D1c), pytest (D2), `notify.sh` → Python (D4a),
 subagent-driven execution.
+
+## 7. Outcome
+
+Done (P14). The repo contains no JavaScript and no `node` invocation; `tests/test_no_js.py` keeps it that
+way (no tracked `*.js`/`*.mjs`/`*.cjs`, no `node`/`npx` in hooks, skills, agents, READMEs, CI or
+`CLAUDE.md` outside `<!-- recognises-js -->` sections, no `setup-node`, no `GATE_INFRA_NODE`). Final suite:
+3320 passed, 3 skipped (baseline before P14: 3318 passed, 3 skipped; the cleanup removed the fast-timers
+test and the JS-impl tests and added the guard tests), ruff clean, `claude plugin validate .` clean. Latency numbers of the JS vs Python hook are in
+the P8 results. The `PORTING.md` files under `plugins/*/tests/` are kept as the record of which Python test
+replaces which JS test. Known difference: an installed `destructive-guard` older than the Python version has no
+`lib/check.py`, so the `ticket` skill passes no `GATE_CHECK` and the planner writes `unknown` rule IDs.

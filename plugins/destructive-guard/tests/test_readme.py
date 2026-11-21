@@ -8,7 +8,7 @@ from testkit import DG
 
 README = (DG / "README.md").read_text()
 # Variables the hook wrapper and the tests use internally; not user settings.
-INTERNAL = {"GATE_RUN", "GATE_DONE_FILE", "GATE_INFRA_NODE", "GATE_INFRA_PYTHON"}
+INTERNAL = {"GATE_RUN", "GATE_DONE_FILE", "GATE_INFRA_PYTHON"}
 ENV_NAME = re.compile(r"\b(?:GATE|TYPESAFE)_[A-Z_]*[A-Z]\b")
 
 

@@ -1,4 +1,4 @@
-"""Which implementation (JS or Python) a test runs against."""
+"""The command lines tests use to run each plugin entry point."""
 
 import os
 from collections.abc import Mapping
@@ -17,7 +17,7 @@ DEFAULT_IMPL: dict[str, str] = {
 
 @dataclass(frozen=True)
 class Impl:
-    name: Literal["js", "py"]
+    name: Literal["py"]
     plugin: str
 
     @property
@@ -57,7 +57,7 @@ class Impl:
         return [self._python(), "-I", str(Path(__file__).resolve().parent / "_fast_sleep.py"), str(GD / "scripts" / "watch_pr.py")]
 
     def notify(self) -> list[str]:
-        """The hook command line; the hook is Python-only (P10), whatever GD_IMPL says."""
+        """The hook command line; the hook runs through run-python.sh."""
         return ["bash", str(GD / "hooks" / "run-python.sh"), str(GD / "hooks" / "notify.py")]
 
     def env(self) -> dict[str, str]:
@@ -67,9 +67,4 @@ class Impl:
 def select_impl(plugin: str, env: Mapping[str, str]) -> Impl:
     if plugin not in DEFAULT_IMPL:
         raise ValueError(f"unknown plugin {plugin!r}")
-    name = env.get("GD_IMPL") or DEFAULT_IMPL[plugin]
-    if name not in ("js", "py"):
-        raise ValueError(f"GD_IMPL must be js or py, got {name!r}")
-    if name == "js":
-        raise ValueError("there is no JS implementation any more; GD_IMPL=py (the default)")
-    return Impl(name, plugin)
+    return Impl("py", plugin)
