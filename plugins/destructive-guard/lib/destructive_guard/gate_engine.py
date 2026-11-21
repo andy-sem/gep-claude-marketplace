@@ -16,28 +16,21 @@ from typing import Any
 
 from .errors import UnparsableError
 from .rules.rule_loader import Rules
+from .shell.cmd import Cmd
+from .shell.tokenizer import ShellTokenizer
 from .verdict import Verdict
 
 __all__ = [
-    "Cmd",
     "Rules",
     "classify",
     "gate",
     "nested_shell_string",
     "shell_script_index",
-    "split_command",
     "strip_wrappers",
 ]
 
-MAX_DEPTH = 8
-# Placeholder left in a word where a command substitution was (its value is unknown).
-DYN = "\u0000"
-SHELLS = frozenset({"bash", "sh", "zsh"})
-ASSIGNMENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 # `$` that is not the start of `$(`: an expansion whose value is unknown.
 _DOLLAR_EXPANSION = re.compile(r"\$(?!\()")
-# Shell keywords/grouping words that may precede a command.
-LEADING_RESERVED = frozenset({"if", "then", "else", "elif", "fi", "do", "done", "while", "until", "esac", "!", "{", "}"})
 # Wrapper options that take a value (given separately, attached, or as `--opt=v`).
 # Only options that always take a value are listed: wrongly consuming a word could
 # hide the real program, so ambiguous ones are left out (the later-token scan in
@@ -63,416 +56,6 @@ WRAPPER_VALUE_OPTS: dict[str, list[str]] = {
         "--delimiter", "--eof", "--arg-file", "--max-chars", "--process-slot-var",
     ],
 }
-
-
-class Scope:
-    """The `( … )` group or substitution a command belongs to. A `cd` inside a scope does not move
-    the directory of its parent. `host` is the command that ran the shell this scope's text came from."""
-
-    __slots__ = ("host", "parent")
-
-    def __init__(self, parent: Scope | None) -> None:
-        self.parent = parent
-        self.host: Cmd | None = None
-
-
-class Cmd(list):
-    """A simple command: its words, plus the heredoc / here-string payloads fed to it (`stdin`) and
-    its `scope`. Compares as a plain list; hashes by identity (scope hosts are looked up by identity)."""
-
-    stdin: list[dict[str, Any]]
-    scope: Scope | None
-
-    __hash__ = object.__hash__  # type: ignore[assignment]
-
-    def __init__(self, words=(), stdin=None, scope=None) -> None:
-        super().__init__(words)
-        self.stdin = stdin if stdin is not None else []
-        self.scope = scope
-
-
-def basename(token: str) -> str:
-    return token.split("/")[-1]
-
-
-# ---------------------------------------------------------------------------
-# Shell tokenizer
-# ---------------------------------------------------------------------------
-
-_REDIRECT_OP = re.compile(r"<<<|<<-|<<|<>|>>|>\||>&|<&|>|<")
-_DIGITS = re.compile(r"[0-9]+")
-_BACKTICK_ESCAPE = re.compile(r"\\([`$\\])")
-
-
-def scan_list(s: str, start: int, closer: str | None, out: list[Cmd], depth: int, parent: Scope | None) -> int:
-    """Scans `s` from `start`, appending every simple command found (including those in nested
-    substitutions and groups) to `out`. When `closer` is ')' it stops after the matching paren and
-    returns the index following it; otherwise it scans to the end."""
-    return _scan_list(s, start, closer, out, depth, Scope(parent))
-
-
-def _scan_list(s: str, start: int, closer: str | None, out: list[Cmd], depth: int, scope: Scope) -> int:
-    if depth > MAX_DEPTH:
-        raise UnparsableError("nesting too deep")
-    n = len(s)
-    i = start
-    tokens: list[str] = []
-    word = ""
-    in_word = False
-    word_quoted = False
-    redir_next = False
-    heredoc_pending: dict[str, bool] | None = None
-    here_pending = False
-    cmd_stdin: list[dict[str, Any]] = []
-    heredocs: list[dict[str, Any]] = []
-
-    def end_word() -> None:
-        nonlocal word, in_word, word_quoted, redir_next, heredoc_pending, here_pending
-        if not in_word:
-            return
-        if redir_next:
-            redir_next = False
-            if heredoc_pending is not None:
-                entry = {"delim": word, "quoted": word_quoted, "strip": heredoc_pending["strip"], "body": ""}
-                heredocs.append(entry)
-                cmd_stdin.append(entry)
-                heredoc_pending = None
-            elif here_pending:
-                cmd_stdin.append({"body": word})
-                here_pending = False
-        else:
-            tokens.append(word)
-        word = ""
-        in_word = False
-        word_quoted = False
-
-    def end_cmd() -> None:
-        nonlocal redir_next, heredoc_pending, here_pending, cmd_stdin, tokens
-        end_word()
-        redir_next = False
-        heredoc_pending = None
-        here_pending = False
-        k = 0
-        while k < len(tokens) and tokens[k] in LEADING_RESERVED:
-            k += 1
-        words = tokens[k:]
-        if words:
-            # heredoc / here-string payloads fed to this command (not enumerable)
-            out.append(Cmd(words, cmd_stdin, scope))
-        cmd_stdin = []
-        tokens = []
-
-    def append(text: str) -> None:
-        nonlocal word, in_word
-        word += text
-        in_word = True
-
-    def sub(frm: int) -> int:
-        nonlocal word
-        word += DYN
-        return scan_list(s, frm, ")", out, depth + 1, scope)
-
-    def backtick(frm: int) -> int:
-        nonlocal word
-        word += DYN
-        end = find_backtick_end(s, frm)
-        inner = _BACKTICK_ESCAPE.sub(r"\1", s[frm + 1 : end])
-        scan_list(inner, 0, None, out, depth + 1, scope)
-        return end + 1
-
-    def redirect(op: str) -> None:
-        nonlocal word, in_word, redir_next, heredoc_pending, here_pending
-        if in_word and not word_quoted and _DIGITS.fullmatch(word):
-            word = ""
-            in_word = False
-        else:
-            end_word()
-        if s[i + len(op) : i + len(op) + 1] == "(":
-            return  # process substitution, handled as a group
-        redir_next = True
-        if op in ("<<", "<<-"):
-            heredoc_pending = {"strip": op == "<<-"}
-        elif op == "<<<":
-            here_pending = True
-
-    def consume_heredocs() -> None:
-        nonlocal i
-        for h in heredocs:
-            lines: list[str] = []
-            found = False
-            while i < n and not found:
-                nl = s.find("\n", i)
-                if nl == -1:
-                    nl = n
-                line = s[i:nl]
-                i = min(nl + 1, n)
-                cmp = line.lstrip("\t") if h["strip"] else line
-                if cmp == h["delim"]:
-                    found = True
-                else:
-                    lines.append(line)
-            h["body"] = "\n".join(lines)
-            if not h["quoted"]:
-                extract_subs(h["body"], out, depth + 1, scope)
-        heredocs.clear()
-
-    while i < n:
-        c = s[i]
-        nxt = s[i + 1 : i + 2]
-        if c == "\\":
-            if i + 1 < n:
-                if nxt != "\n":
-                    append(nxt)
-                i += 2
-            else:
-                i += 1
-        elif c == "'":
-            end = s.find("'", i + 1)
-            if end == -1:
-                raise UnparsableError("unterminated single quote")
-            append(s[i + 1 : end])
-            word_quoted = True
-            i = end + 1
-        elif c == '"':
-            in_word = True
-            word_quoted = True
-            i += 1
-            closed = False
-            while i < n:
-                d = s[i]
-                dn = s[i + 1 : i + 2]
-                if d == '"':
-                    closed = True
-                    i += 1
-                    break
-                elif d == "\\" and i + 1 < n:
-                    if dn != "\n":
-                        word += dn
-                    i += 2
-                elif d == "$" and dn == "(":
-                    i = sub(i + 2)
-                elif d == "$" and dn == "{":
-                    end = find_brace_end(s, i + 2, out, depth, scope)
-                    word += s[i:end]
-                    i = end
-                elif d == "`":
-                    i = backtick(i)
-                else:
-                    word += d
-                    i += 1
-            if not closed:
-                raise UnparsableError("unterminated double quote")
-        elif c == "$" and nxt == "(":
-            in_word = True
-            i = sub(i + 2)
-        elif c == "$" and nxt == "{":
-            end = find_brace_end(s, i + 2, out, depth, scope)
-            append(s[i:end])
-            i = end
-        elif c == "`":
-            in_word = True
-            i = backtick(i)
-        elif c in (" ", "\t", "\r"):
-            end_word()
-            i += 1
-        elif c == "\n":
-            end_cmd()
-            i += 1
-            consume_heredocs()
-        elif c == "#" and not in_word:
-            while i < n and s[i] != "\n":
-                i += 1
-        elif c == ";":
-            end_cmd()
-            i += 1
-        elif c == "|":
-            end_cmd()
-            i += 2 if nxt in ("|", "&") and nxt != "" else 1
-        elif c == "&":
-            if nxt == "&":
-                end_cmd()
-                i += 2
-            elif nxt == ">":
-                op = "&>>" if s[i + 2 : i + 3] == ">" else "&>"
-                redirect(op)
-                i += len(op)
-            else:
-                end_cmd()
-                i += 1
-        elif c in ("<", ">"):
-            m = _REDIRECT_OP.match(s[i : i + 3])
-            assert m is not None
-            redirect(m.group(0))
-            i += len(m.group(0))
-        elif c == "(":
-            end_cmd()
-            i = scan_list(s, i + 1, ")", out, depth + 1, scope)
-        elif c == ")":
-            if closer == ")":
-                end_cmd()
-                return i + 1
-            raise UnparsableError("unbalanced parenthesis")
-        else:
-            append(c)
-            i += 1
-    if closer is not None:
-        raise UnparsableError("unterminated command substitution or group")
-    end_cmd()
-    return i
-
-
-def find_backtick_end(s: str, frm: int) -> int:
-    j = frm + 1
-    while j < len(s):
-        if s[j] == "\\":
-            j += 1
-        elif s[j] == "`":
-            return j
-        j += 1
-    raise UnparsableError("unterminated backtick substitution")
-
-
-def find_brace_end(s: str, frm: int, out: list[Cmd], depth: int, scope: Scope) -> int:
-    """The index after the closing `}` of a `${…}` expansion starting at `frm` (the index after
-    `${`), scanning any command substitutions inside it."""
-    level = 1
-    j = frm
-    n = len(s)
-    while j < n:
-        c = s[j]
-        if c == "\\":
-            j += 2
-        elif c == "$" and s[j + 1 : j + 2] == "(":
-            j = scan_list(s, j + 2, ")", out, depth + 1, scope)
-        elif c == "`":
-            end = find_backtick_end(s, j)
-            scan_list(s[j + 1 : end], 0, None, out, depth + 1, scope)
-            j = end + 1
-        elif c in ("'", '"'):
-            end = s.find(c, j + 1)
-            if end == -1:
-                raise UnparsableError("unterminated quote in parameter expansion")
-            j = end + 1
-        elif c == "{":
-            level += 1
-            j += 1
-        elif c == "}":
-            level -= 1
-            j += 1
-            if level == 0:
-                return j
-        else:
-            j += 1
-    raise UnparsableError("unterminated parameter expansion")
-
-
-def extract_subs(text: str, out: list[Cmd], depth: int, scope: Scope) -> None:
-    """Finds command substitutions inside text that is otherwise literal (heredoc bodies)."""
-    j = 0
-    while j < len(text):
-        c = text[j]
-        if c == "\\":
-            j += 2
-        elif c == "$" and text[j + 1 : j + 2] == "(":
-            j = scan_list(text, j + 2, ")", out, depth + 1, scope)
-        elif c == "`":
-            end = find_backtick_end(text, j)
-            scan_list(text[j + 1 : end], 0, None, out, depth + 1, scope)
-            j = end + 1
-        else:
-            j += 1
-
-
-_SIGN_START = re.compile(r"[-+]")
-_C_CLUSTER = re.compile(r"-[A-Za-z]*c[A-Za-z]*")
-_S_CLUSTER = re.compile(r"-[A-Za-z]*s[A-Za-z]*")
-_O_CLUSTER = re.compile(r"[-+][A-Za-z]*[oO]")
-
-
-def parse_shell(tokens: list[str]) -> dict[str, Any]:
-    """Reads a shell invocation's options: `-c <str>`, option values (`-o`, `-O`), and whether a
-    script file argument follows (otherwise the shell reads stdin). The result has `command` (the
-    `-c` string), or `script` (bool) and, when a script follows, its `index`."""
-    stdin_flag = False
-    has_c = False
-    j = 1
-    while j < len(tokens):
-        t = tokens[j]
-        if t == "--":
-            if has_c:
-                return {"command": tokens[j + 1] if j + 1 < len(tokens) else ""}
-            return {"script": j + 1 < len(tokens) and not stdin_flag, "index": j + 1}
-        if t == "-":
-            stdin_flag = True  # a lone `-` makes the shell read stdin
-            j += 1
-            continue
-        if not _SIGN_START.match(t):
-            if has_c:
-                return {"command": t}  # first operand after -c is the command string
-            return {"script": not stdin_flag, "index": j}
-        if _C_CLUSTER.fullmatch(t):
-            has_c = True
-        if _S_CLUSTER.fullmatch(t):
-            stdin_flag = True
-        # Option values: a short-flag cluster ending in o/O (`-eo`, `-lo`, `+O`) or a long option
-        if _O_CLUSTER.fullmatch(t) or t in ("--rcfile", "--init-file"):
-            j += 1
-        j += 1
-    return {"command": ""} if has_c else {"script": False}
-
-
-def nested_strings(raw_tokens: list[str], loose: bool = False) -> list[str]:
-    """Strings that a command hands to a nested shell: `<sh> -c '<str>'`, `eval …` and heredoc /
-    here-string payloads fed to a shell. A shell that reads an unknown stdin, or a string containing
-    an unresolvable `$` expansion, cannot be analysed."""
-    k = 0
-    while k < len(raw_tokens) and ASSIGNMENT_RE.match(raw_tokens[k]):
-        k += 1
-    tokens = raw_tokens[k:]
-    if not tokens:
-        return []
-    base = basename(tokens[0])
-    found: list[str] = []
-    if base == "eval":
-        found = [" ".join(tokens[1:])] if len(tokens) > 1 else []
-    elif base in SHELLS:
-        info = parse_shell(tokens)
-        if "command" in info:
-            found = [info["command"]] if info["command"] else []
-        elif not info["script"]:
-            found = [e["body"] for e in (getattr(raw_tokens, "stdin", None) or [])]
-            if not found:
-                raise UnparsableError("shell reads stdin")
-    for s in found:
-        if not loose and _DOLLAR_EXPANSION.search(s):
-            raise UnparsableError("dynamic shell command")
-    return found
-
-
-def split_inner(cmd: str, depth: int, loose: bool = False) -> list[Cmd]:
-    if depth > MAX_DEPTH:
-        raise UnparsableError("nesting too deep")
-    out: list[Cmd] = []
-    scan_list(cmd, 0, None, out, depth, None)
-    result = list(out)
-    for tokens in out:
-        for s in nested_strings(tokens, loose):
-            inner = split_inner(s, depth + 1, loose)
-            # the outermost scope of the string remembers the command that ran the shell
-            for c in inner:
-                top = c.scope
-                while top is not None and top.parent is not None:
-                    top = top.parent
-                if top is not None and top.host is None:
-                    top.host = tokens
-            result.extend(inner)
-    return result
-
-
-def split_command(cmd: str, *, loose: bool = False) -> list[Cmd]:
-    """One word list per simple command (nested shells and substitutions included). Raises
-    UnparsableError. With `loose`, nested shell strings with `$` expansions are read like any other."""
-    return split_inner(cmd, 0, loose)
 
 
 # ---------------------------------------------------------------------------
@@ -532,7 +115,7 @@ def split_words(s: str) -> list[str]:
     if "$" in s or "`" in s:
         raise UnparsableError("dynamic env -S string")
     out: list[Cmd] = []
-    scan_list(s, 0, None, out, MAX_DEPTH, None)
+    ShellTokenizer.scan_list(s, 0, None, out, ShellTokenizer.MAX_DEPTH, None)
     return [w for c in out for w in c]
 
 
@@ -554,12 +137,12 @@ def strip_wrappers(raw_tokens: list[str], rules: Rules) -> dict[str, Any]:
     args_from_input = False
     for _ in range(64):
         k = 0
-        while k < len(tokens) and ASSIGNMENT_RE.match(tokens[k]):
+        while k < len(tokens) and ShellTokenizer.ASSIGNMENT_RE.match(tokens[k]):
             k += 1
         tokens = tokens[k:]
         if not tokens:
             return {"tokens": tokens, "argsFromInput": args_from_input}
-        base = basename(tokens[0])
+        base = Cmd.basename(tokens[0])
         if base not in rules["wrappers"]:
             return {"tokens": tokens, "argsFromInput": args_from_input}
         opts = strip_options(tokens[1:], WRAPPER_VALUE_OPTS.get(base, []))
@@ -585,9 +168,9 @@ def strip_wrappers(raw_tokens: list[str], rules: Rules) -> dict[str, Any]:
 def shell_script_index(tokens: list[str]) -> int:
     """The index of the script operand of `bash|sh|zsh …`, or -1 when the shell runs a `-c` string
     or reads stdin."""
-    if not tokens or basename(tokens[0]) not in SHELLS:
+    if not tokens or Cmd.basename(tokens[0]) not in ShellTokenizer.SHELLS:
         return -1
-    info = parse_shell(tokens)
+    info = ShellTokenizer.parse_shell(tokens)
     return info["index"] if info.get("script") else -1
 
 
@@ -599,9 +182,9 @@ def nested_shell_string(raw_tokens: list[str], rules: Rules) -> str | None:
         n = normalize(raw_tokens, rules)
     except Exception:  # noqa: BLE001 (any failure: no string)
         return None
-    if not n["tokens"] or basename(n["tokens"][0]) not in SHELLS:
+    if not n["tokens"] or Cmd.basename(n["tokens"][0]) not in ShellTokenizer.SHELLS:
         return None
-    s = parse_shell(n["tokens"]).get("command")
+    s = ShellTokenizer.parse_shell(n["tokens"]).get("command")
     if not s or _DOLLAR_EXPANSION.search(s):
         return None
     return s
@@ -617,7 +200,7 @@ def normalize(raw_tokens: list[str], rules: Rules) -> dict[str, Any]:
         args_from_input = args_from_input or w["argsFromInput"]
         if w.get("final") or not tokens:
             return {"tokens": tokens, "argsFromInput": args_from_input}
-        base = basename(tokens[0])
+        base = Cmd.basename(tokens[0])
         runner = next((r for r in rules["runners"] if r["program"] == base), None)
         if runner is None:
             return {"tokens": tokens, "argsFromInput": args_from_input}
@@ -710,7 +293,7 @@ def allowlist_decision(rule: dict, rest: list[str], later: bool) -> dict | None:
 def apply_cli_rule(rule: dict, tokens: list[str], *, later: bool = False, args_from_input: bool = False) -> dict | None:
     """`later`: the program was found after the command word (an unknown wrapper such as
     `./with-secrets.sh env tool …`). `args_from_input`: arguments are appended at run time (`xargs`)."""
-    program = basename(tokens[0])
+    program = Cmd.basename(tokens[0])
     rest = tokens[1:]
     dynamic = args_from_input or any(is_dynamic(t) for t in rest)
     kind = rule["kind"]
@@ -806,12 +389,12 @@ def is_help_call(rule: dict, rest: list[str]) -> bool:
 def is_dynamic(token: str) -> bool:
     """A word whose value is only known at run time: `$…` expansions, command substitutions, and the
     `{}` placeholder `find -exec` / `xargs -I{}` fill in."""
-    return "$" in token or DYN in token or token == "{}"
+    return "$" in token or ShellTokenizer.DYN in token or token == "{}"
 
 
 def shell_command_string(tokens: list[str], loose: bool) -> list[str]:
     """The `-c` string of a shell invocation found later in a command, if any."""
-    info = parse_shell(tokens)
+    info = ShellTokenizer.parse_shell(tokens)
     if not info.get("command"):
         return []
     if not loose and _DOLLAR_EXPANSION.search(info["command"]):
@@ -847,15 +430,15 @@ def later_scan(raw: list[str], tokens: list[str], rules: Rules, depth: int, loos
     /dev/null …`, `find -exec …`) cannot hide a gated call. Programs listed in inertPrograms do not
     run their arguments and are skipped, unless an inertUnsafeFlags flag makes them run one (`rg --pre
     CMD`, `man -P CMD`): then the call is not inert and asks without parsing the value."""
-    if basename(tokens[0]) in rules["inertPrograms"]:
-        return Verdict.inert_flag() if has_unsafe_flag(basename(tokens[0]), tokens[1:], rules) else None
+    if Cmd.basename(tokens[0]) in rules["inertPrograms"]:
+        return Verdict.inert_flag() if has_unsafe_flag(Cmd.basename(tokens[0]), tokens[1:], rules) else None
     j = 1
     while j < len(raw):
         t = raw[j]
         if t.startswith("-") or ":" in t or "=" in t or is_dynamic(t):
             j += 1
             continue
-        base = basename(t)
+        base = Cmd.basename(t)
         sub = raw[j:]
         if base in rules["inertPrograms"]:
             # its arguments, up to a `find -exec` terminator (`;` or `{} +`)
@@ -869,10 +452,10 @@ def later_scan(raw: list[str], tokens: list[str], rules: Rules, depth: int, loos
         if any(r["program"] == base for r in rules["runners"]):
             # everything after a runner is the runner's command
             return eval_tokens(sub, rules, depth + 1, loose)
-        if base in SHELLS or base == "eval":
-            strs = nested_strings(sub, loose) if base == "eval" else shell_command_string(sub, loose)
+        if base in ShellTokenizer.SHELLS or base == "eval":
+            strs = ShellTokenizer.nested_strings(sub, loose) if base == "eval" else shell_command_string(sub, loose)
             for s in strs:
-                for cmd in split_inner(s, depth + 1, loose):
+                for cmd in ShellTokenizer.split_inner(s, depth + 1, loose):
                     r = eval_tokens(cmd, rules, depth + 1, loose)
                     if r:
                         return r
@@ -887,10 +470,10 @@ def later_scan(raw: list[str], tokens: list[str], rules: Rules, depth: int, loos
 
 
 def eval_tokens(raw_tokens: list[str], rules: Rules, depth: int, loose: bool = False) -> dict | None:
-    if depth > MAX_DEPTH:
+    if depth > ShellTokenizer.MAX_DEPTH:
         raise UnparsableError("nesting too deep")
     k = 0
-    while k < len(raw_tokens) and ASSIGNMENT_RE.match(raw_tokens[k]):
+    while k < len(raw_tokens) and ShellTokenizer.ASSIGNMENT_RE.match(raw_tokens[k]):
         k += 1
     n = normalize(raw_tokens, rules)
     if not n["tokens"]:
@@ -901,9 +484,9 @@ def eval_tokens(raw_tokens: list[str], rules: Rules, depth: int, loose: bool = F
         raise UnparsableError("dynamic command word")
 
     # A shell/eval hidden behind wrappers; plain ones were already expanded by split_command.
-    if len(nested_strings(raw_tokens, loose)) == 0:
-        for s in nested_strings(tokens, loose):
-            for cmd in split_inner(s, depth + 1, loose):
+    if len(ShellTokenizer.nested_strings(raw_tokens, loose)) == 0:
+        for s in ShellTokenizer.nested_strings(tokens, loose):
+            for cmd in ShellTokenizer.split_inner(s, depth + 1, loose):
                 r = eval_tokens(cmd, rules, depth + 1, loose)
                 if r:
                     return r
@@ -932,7 +515,7 @@ def eval_mcp(rule: dict, tool_input: dict, rules: Rules) -> dict | None:
     args = _member(tool_input.get("tool_input"), rule["argsField"])
     if not isinstance(args, list) or any(not isinstance(a, str) for a in args):
         return Verdict.ask("unparsable", f'{tool_name} is missing a string array "{rule["argsField"]}"')
-    lst = args[1:] if args and basename(args[0]) == rule["program"] else args
+    lst = args[1:] if args and Cmd.basename(args[0]) == rule["program"] else args
     return eval_tokens(
         [rule["program"], *lst],
         {**rules, "rules": [r for r in rules["rules"] if is_cli_rule(r)]},
@@ -1014,7 +597,7 @@ def _classify_inner(input: Any, rules: Rules, strict: bool) -> dict | None:
         loose = not strict
         if loose:
             try:
-                parts = split_command(command, loose=True)
+                parts = ShellTokenizer.split_command(command, loose=True)
             except UnparsableError:
                 return None
             for tokens in parts:
@@ -1026,7 +609,7 @@ def _classify_inner(input: Any, rules: Rules, strict: bool) -> dict | None:
                     pass
             return None
         try:
-            for tokens in split_command(command):
+            for tokens in ShellTokenizer.split_command(command):
                 r = eval_tokens(tokens, rules, 0)
                 if r:
                     return r

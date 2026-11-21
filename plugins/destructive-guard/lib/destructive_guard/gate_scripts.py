@@ -18,14 +18,13 @@ from collections.abc import Mapping
 from typing import Any
 
 from .gate_engine import (
-    ASSIGNMENT_RE,
     nested_shell_string,
     shell_script_index,
-    split_command,
     strip_wrappers,
 )
-from .gate_engine import Cmd as _Cmd
 from .rules.rule_loader import Rules
+from .shell.cmd import Cmd as _Cmd
+from .shell.tokenizer import ShellTokenizer
 from .verdict import Verdict
 
 __all__ = [
@@ -365,7 +364,7 @@ def run_targets(raw_tokens: list[str], rules: Rules, *, cwd: str | None, root: s
     out: list[dict] = []
     # A shell command string handed over by a wrapper or runner (`watch bash x.sh`, `npx -c '…'`);
     # a plain `bash -c '…'` is already split out by split_command.
-    first = next((t for t in raw_tokens if not ASSIGNMENT_RE.match(t)), None)
+    first = next((t for t in raw_tokens if not ShellTokenizer.ASSIGNMENT_RE.match(t)), None)
     if first is not None and _basename(first) not in SHELLS:
         nested = nested_shell_string(raw_tokens, rules)
         if nested is not None:
@@ -496,7 +495,7 @@ def command_targets(command: str, rules: Rules, cwd: str | None, root: str, dept
     Variables assigned earlier in the same command (`P=$D/infra; cd $P`) are expanded; anything else
     stays a `$` word, which is unresolvable."""
     try:
-        simple = split_command(command)
+        simple = ShellTokenizer.split_command(command)
     except Exception:  # noqa: BLE001 (unparsable: the rule layer asks)
         return []
     out: list[dict] = []
@@ -526,7 +525,7 @@ def command_targets(command: str, rules: Rules, cwd: str | None, root: str, dept
         tokens = _Cmd([expand_vars(t, state["vars"]) for t in raw], stdin=raw.stdin, scope=raw.scope)
         # `D=/abs; P=$D/x`: a command of assignments only sets variables for the commands after it;
         # `X=1 cmd` sets X for cmd alone
-        if tokens and all(ASSIGNMENT_RE.match(t) for t in tokens):
+        if tokens and all(ShellTokenizer.ASSIGNMENT_RE.match(t) for t in tokens):
             for t in tokens:
                 eq = t.index("=")
                 state["vars"][t[:eq]] = t[eq + 1 :]

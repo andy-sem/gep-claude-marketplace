@@ -9,8 +9,9 @@ import json
 import pytest
 
 from destructive_guard.errors import RulesError, UnparsableError
-from destructive_guard.gate_engine import classify, split_command
+from destructive_guard.gate_engine import classify
 from destructive_guard.rules.rule_loader import RuleLoader
+from destructive_guard.shell.tokenizer import ShellTokenizer
 from testkit import DG, REPO
 from testkit.check_cli import check_call
 from testkit.hook import decision, run_hook
@@ -121,9 +122,9 @@ def test_classify_input_level_failures_always_ask(engine_rules):
 
 
 def test_split_command():
-    assert split_command('a b && c "d e"; f') == [["a", "b"], ["c", "d e"], ["f"]]
-    raises("UnparsableError", lambda: split_command('echo "x'))
-    raises("UnparsableError", lambda: split_command("(echo x"))
+    assert ShellTokenizer.split_command('a b && c "d e"; f') == [["a", "b"], ["c", "d e"], ["f"]]
+    raises("UnparsableError", lambda: ShellTokenizer.split_command('echo "x'))
+    raises("UnparsableError", lambda: ShellTokenizer.split_command("(echo x"))
 
 
 def test_load_rules_runners(tmp_path):
