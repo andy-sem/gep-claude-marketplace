@@ -11,7 +11,7 @@ from destructive_guard.scripts.project_paths import ProjectPaths
 from destructive_guard.scripts.script_collector import ScriptCollector
 from destructive_guard.scripts.script_scanner import ScriptScanner
 from testkit import DG
-from testkit.projects import provision_project, temp_project
+from testkit.projects import TempProject
 
 SHIPPED = DG / "tests" / "fixtures" / "rules.json"
 RULES = RuleLoader.load_rules(SHIPPED)
@@ -35,7 +35,7 @@ def scan_many(root: Path, commands: list[str]) -> list[str | None]:
 
 
 def test_find_project_root_git_ancestor_env_and_cwd_fallback(tmp_path, tmp_path_factory):
-    root = temp_project(tmp_path, {"a/b/c.txt": "x"})
+    root = TempProject.temp_project(tmp_path, {"a/b/c.txt": "x"})
     bare = tmp_path_factory.mktemp("gate-noroot-").resolve()
     found = ProjectPaths.find_project_root(str(root / "a/b"))
     env_fallback = ProjectPaths.find_project_root(str(bare), {"CLAUDE_PROJECT_DIR": str(root)})
@@ -46,7 +46,7 @@ def test_find_project_root_git_ancestor_env_and_cwd_fallback(tmp_path, tmp_path_
 
 
 def test_shell_scripts_found_for_every_way_of_running_them(tmp_path):
-    root = temp_project(tmp_path, {"x.sh": "echo hi\n", "infra/cloud/apply.sh": "echo apply\n"})
+    root = TempProject.temp_project(tmp_path, {"x.sh": "echo hi\n", "infra/cloud/apply.sh": "echo apply\n"})
     commands = [
         "bash x.sh",
         "sh x.sh --flag",
@@ -73,14 +73,14 @@ def test_shell_scripts_found_for_every_way_of_running_them(tmp_path):
 
 
 def test_bash_c_strings_and_stdin_shells_give_no_file(tmp_path):
-    root = temp_project(tmp_path, {"x.sh": "echo hi\n"})
+    root = TempProject.temp_project(tmp_path, {"x.sh": "echo hi\n"})
     plain, nested = collect_many(root, ["bash -c 'echo x'", "bash -c './x.sh'"])
     assert paths(plain) == []
     assert paths(nested) == ["x.sh"]
 
 
 def test_cd_in_subshell_or_substitution_does_not_move_later_commands_popd_goes_back(tmp_path):
-    root = temp_project(
+    root = TempProject.temp_project(
         tmp_path,
         {"infra/ok.sh": "echo ok\n", "infra/apply.sh": "terraform apply\n", "apply.sh": "echo top\n"},
     )
@@ -107,7 +107,7 @@ def test_cd_in_subshell_or_substitution_does_not_move_later_commands_popd_goes_b
 
 
 def test_sourced_file_resolved_against_the_directory_the_script_ran_in(tmp_path):
-    root = temp_project(
+    root = TempProject.temp_project(
         tmp_path,
         {
             "infra/wrap.sh": "source ./inner.sh\n",
@@ -132,7 +132,7 @@ def test_sourced_file_resolved_against_the_directory_the_script_ran_in(tmp_path)
 
 
 def test_cd_after_shell_string_does_not_move_commands_inside_it(tmp_path):
-    root = temp_project(
+    root = TempProject.temp_project(
         tmp_path,
         {"infra/apply.sh": "terraform apply\n", "apply.sh": "echo top\n", "lib/x.txt": ""},
     )
@@ -157,7 +157,7 @@ def test_cd_after_shell_string_does_not_move_commands_inside_it(tmp_path):
 
 
 def test_shell_strings_through_wrappers_and_runners_are_followed(tmp_path):
-    root = temp_project(tmp_path, {"infra/apply.sh": "terraform apply\n", "x.sh": "echo hi\n"})
+    root = TempProject.temp_project(tmp_path, {"infra/apply.sh": "terraform apply\n", "x.sh": "echo hi\n"})
     commands = [
         "watch bash infra/apply.sh",
         "watch -n 5 'bash infra/apply.sh'",
@@ -185,7 +185,7 @@ def test_shell_strings_through_wrappers_and_runners_are_followed(tmp_path):
 
 
 def test_node_targets_files_preloads_test_and_run(tmp_path):
-    root = temp_project(
+    root = TempProject.temp_project(
         tmp_path,
         {
             "a.mjs": "",
@@ -214,7 +214,7 @@ def test_node_targets_files_preloads_test_and_run(tmp_path):
 
 
 def test_python_tsx_and_deno_targets(tmp_path):
-    root = temp_project(tmp_path, {"a.py": "", "b.ts": "", "c.ts": ""})
+    root = TempProject.temp_project(tmp_path, {"a.py": "", "b.ts": "", "c.ts": ""})
     cases = [
         ("python a.py", ["a.py"]),
         ("python3 -u a.py", ["a.py"]),
@@ -234,7 +234,7 @@ def test_python_tsx_and_deno_targets(tmp_path):
 
 
 def test_package_scripts_resolve_from_cwd_or_dir_options(tmp_path):
-    root = temp_project(
+    root = TempProject.temp_project(
         tmp_path,
         {
             "package.json": json.dumps({"scripts": {"build": "turbo build", "db:x": "node scripts/a.mjs"}}),
@@ -264,12 +264,12 @@ def test_package_scripts_resolve_from_cwd_or_dir_options(tmp_path):
     results = collect_many(root, [c for c, _ in cases])
     for (command, expected), c in zip(cases, results, strict=True):
         assert paths(c) == expected, command
-    other = temp_project(tmp_path, {"package.json": json.dumps({"scripts": {"test": "node --test"}})})
+    other = TempProject.temp_project(tmp_path, {"package.json": json.dumps({"scripts": {"test": "node --test"}})})
     assert paths(collect(other, "npm test")) == ["package.json#scripts.test"]
 
 
 def test_gh_workflow_run_resolves_file_name_or_workflow_name(tmp_path):
-    root = temp_project(
+    root = TempProject.temp_project(
         tmp_path,
         {
             ".github/workflows/deploy.yml": "name: Deploy Cloud\non: workflow_dispatch\n",
@@ -292,7 +292,7 @@ def test_gh_workflow_run_resolves_file_name_or_workflow_name(tmp_path):
 
 
 def test_source_and_import_following_resolution_extensions_depth_cycles(tmp_path):
-    root = temp_project(
+    root = TempProject.temp_project(
         tmp_path,
         {
             "run.sh": (
@@ -365,7 +365,7 @@ def test_source_and_import_following_resolution_extensions_depth_cycles(tmp_path
 
 
 def test_script_sourcing_script_dir_resolves_against_the_script(tmp_path):
-    root = temp_project(
+    root = TempProject.temp_project(
         tmp_path,
         {
             "tools/run.sh": 'source "$SCRIPT_DIR/helper.sh"\nsource ${SCRIPT_DIR}/two.sh\n',
@@ -377,7 +377,7 @@ def test_script_sourcing_script_dir_resolves_against_the_script(tmp_path):
 
 
 def test_64_kb_per_file_cut_is_kept_and_reported_as_a_problem(tmp_path):
-    root = temp_project(tmp_path, {"big.mjs": f"// {'x' * 70000}\ncloudctl\n"})
+    root = TempProject.temp_project(tmp_path, {"big.mjs": f"// {'x' * 70000}\ncloudctl\n"})
     c = collect(root, "node big.mjs")
     assert len(c["files"]) == 1
     assert c["files"][0]["truncated"] is True
@@ -390,7 +390,7 @@ def test_64_kb_per_file_cut_is_kept_and_reported_as_a_problem(tmp_path):
 def test_more_than_32_files_stops_following_and_is_a_problem(tmp_path):
     files = {f"m{i}.mjs": "" for i in range(1, 41)}
     files["m0.mjs"] = "".join(f'import "./m{i}.mjs"\n' for i in range(1, 41))
-    root = temp_project(tmp_path, files)
+    root = TempProject.temp_project(tmp_path, files)
     c = collect(root, "node m0.mjs")
     assert len(c["files"]) == 32
     assert [p["reason"] for p in c["problems"]] == ["more than 32 files"]
@@ -399,7 +399,7 @@ def test_more_than_32_files_stops_following_and_is_a_problem(tmp_path):
 def test_files_outside_project_symlinks_out_and_non_regular_files_are_problems(tmp_path, tmp_path_factory):
     outside = tmp_path_factory.mktemp("gate-outside-").resolve()
     (outside / "x.sh").write_text("echo\n")
-    root = temp_project(tmp_path, {"dir/keep": ""})
+    root = TempProject.temp_project(tmp_path, {"dir/keep": ""})
     (root / "link.sh").symlink_to(outside / "x.sh")
     out_x = str(outside / "x.sh")
     absolute, link, directory, command_word, system = collect_many(
@@ -425,7 +425,7 @@ def test_files_outside_project_symlinks_out_and_non_regular_files_are_problems(t
 
 
 def test_missing_glob_and_dynamic_paths_are_skipped(tmp_path):
-    root = temp_project(tmp_path, {"a.sh": ""})
+    root = TempProject.temp_project(tmp_path, {"a.sh": ""})
     commands = [
         "bash missing.sh",
         "bash a-*.sh",
@@ -442,12 +442,12 @@ def test_missing_glob_and_dynamic_paths_are_skipped(tmp_path):
 
 
 def test_unparsable_command_collects_nothing(tmp_path):
-    root = temp_project(tmp_path, {"a.sh": ""})
+    root = TempProject.temp_project(tmp_path, {"a.sh": ""})
     assert collect(root, 'bash "a.sh') == {"files": [], "problems": []}
 
 
 def test_scan_scripts_program_names_patterns_and_reasons(tmp_path):
-    root = temp_project(
+    root = TempProject.temp_project(
         tmp_path,
         {
             "tf.sh": "terraform -chdir=infra apply\n",
@@ -492,7 +492,7 @@ def test_scan_scripts_program_names_patterns_and_reasons(tmp_path):
 
 
 def test_scan_scripts_workflow_with_acmecloud_actions_step_asks(tmp_path):
-    root = temp_project(
+    root = TempProject.temp_project(
         tmp_path,
         {
             ".github/workflows/deploy.yml": (
@@ -509,7 +509,7 @@ def test_scan_scripts_workflow_with_acmecloud_actions_step_asks(tmp_path):
 
 
 def test_scan_scripts_package_script_body_running_gated_program_asks(tmp_path):
-    root = temp_project(
+    root = TempProject.temp_project(
         tmp_path,
         {"package.json": json.dumps({"scripts": {"push": "dbhost db push", "hi": "echo hi"}})},
     )
@@ -517,7 +517,7 @@ def test_scan_scripts_package_script_body_running_gated_program_asks(tmp_path):
 
 
 def test_exempt_test_files_and_their_imports_are_not_scanned(tmp_path):
-    root = temp_project(
+    root = TempProject.temp_project(
         tmp_path,
         {
             "scripts/a.test.mjs": 'import "./runner.mjs"\n',
@@ -551,7 +551,7 @@ def test_exempt_test_files_and_their_imports_are_not_scanned(tmp_path):
 
 
 def test_exempt_file_that_is_too_large_does_not_ask(tmp_path):
-    root = temp_project(tmp_path, {"scripts/big.test.mjs": "x" * 70000})
+    root = TempProject.temp_project(tmp_path, {"scripts/big.test.mjs": "x" * 70000})
     assert scan_many(root, ["node scripts/big.test.mjs"]) == [None]
 
 
@@ -605,7 +605,7 @@ ENV = "infra/cloud/environments/preview-x"
 
 
 def test_terraform_test_sends_root_and_test_dir_tftest_files_as_exempt_context(tmp_path):
-    root = temp_project(
+    root = TempProject.temp_project(
         tmp_path,
         {
             f"{ENV}/main.tf": 'provider "acmecloud" {}\n',
@@ -634,7 +634,7 @@ def test_terraform_test_sends_root_and_test_dir_tftest_files_as_exempt_context(t
 
 
 def test_terraform_test_sends_nothing_when_directory_unknown_or_not_local(tmp_path):
-    root = temp_project(tmp_path, {f"{ENV}/tests/a.tftest.hcl": "run {}\n"})
+    root = TempProject.temp_project(tmp_path, {f"{ENV}/tests/a.tftest.hcl": "run {}\n"})
     commands = [
         f"cd {ENV} && terraform plan",
         f"cd {ENV} && terraform validate",
@@ -651,7 +651,7 @@ def test_terraform_test_sends_nothing_when_directory_unknown_or_not_local(tmp_pa
 
 
 def test_variables_assigned_earlier_resolve_script_paths(tmp_path):
-    root = temp_project(tmp_path, {"infra/apply.sh": "echo apply\n"})
+    root = TempProject.temp_project(tmp_path, {"infra/apply.sh": "echo apply\n"})
     commands = [
         "S=infra/apply.sh; bash $S",
         "D=infra; S=${D}/apply.sh; bash $S",
@@ -666,15 +666,15 @@ def test_variables_assigned_earlier_resolve_script_paths(tmp_path):
 
 def test_scan_matches_hook_rows_on_corpus_projects(tmp_path):
     """The script rows of test_gate_hook.py, through the Python scan."""
-    terraform = temp_project(
+    terraform = TempProject.temp_project(
         tmp_path, {"infra/cloud/apply.sh": "#!/bin/bash\nterraform -chdir=environments/dev apply dev.tfplan\n"}
     )
-    cloudflare = temp_project(
+    cloudflare = TempProject.temp_project(
         tmp_path,
         {"scripts/cf.mjs": 'await fetch("https://api.cloudflare.com/client/v4/x")\nspawn("wrangler", ["deploy"])\n'},
     )
     (tf,) = scan_many(terraform, ["bash infra/cloud/apply.sh --apply"])
     assert tf == "script: infra/cloud/apply.sh runs terraform"
-    (provision,) = scan_many(provision_project(tmp_path), ["node scripts/provision-cloud-app-dev.mjs"])
+    (provision,) = scan_many(TempProject.provision_project(tmp_path), ["node scripts/provision-cloud-app-dev.mjs"])
     assert provision.startswith("script: scripts/provision-cloud-app-dev.mjs ")
     assert scan_many(cloudflare, ["node scripts/cf.mjs"]) == [None]

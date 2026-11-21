@@ -5,8 +5,8 @@ import subprocess
 import pytest
 
 from testkit import DG
-from testkit.impl import select_impl
-from testkit.pythons import find_python
+from testkit.impl import Impl
+from testkit.pythons import Pythons
 
 
 def _fake(dir_path, name):
@@ -17,76 +17,76 @@ def _fake(dir_path, name):
 
 
 def test_defaults():
-    assert select_impl("destructive-guard", {}).name == "py"
-    assert select_impl("gated-dev-simple-workflow", {}).name == "py"
+    assert Impl.select("destructive-guard", {}).name == "py"
+    assert Impl.select("gated-dev-simple-workflow", {}).name == "py"
 
 
 def test_unknown_plugin_raises():
     with pytest.raises(ValueError):
-        select_impl("nope", {})
+        Impl.select("nope", {})
 
 
 def test_entry_points_exist():
-    dg = select_impl("destructive-guard", {})
-    gd = select_impl("gated-dev-simple-workflow", {})
+    dg = Impl.select("destructive-guard", {})
+    gd = Impl.select("gated-dev-simple-workflow", {})
     for argv in (dg.gate_hook(), dg.env_guard(), dg.check(), gd.launch(), gd.watch_pr(), gd.notify()):
         assert os.path.isfile(argv[-1]), argv
 
 
 def test_py_argv_shapes():
-    dg = select_impl("destructive-guard", {})
+    dg = Impl.select("destructive-guard", {})
     assert dg.check()[1] == "-I"
     assert dg.check()[-1].endswith("lib/check.py")
-    gd = select_impl("gated-dev-simple-workflow", {})
+    gd = Impl.select("gated-dev-simple-workflow", {})
     assert gd.notify()[1].endswith("run-python.sh")
     assert gd.watch_pr()[-1].endswith("scripts/watch_pr.py")
 
 
 def test_find_python_prefers_env():
-    assert find_python({"GATE_INFRA_PYTHON": "/nope", "PATH": os.environ["PATH"]}) == "/nope"
+    assert Pythons.find_python({"GATE_INFRA_PYTHON": "/nope", "PATH": os.environ["PATH"]}) == "/nope"
 
 
 def test_find_python_prefers_314_over_python3(tmp_path):
     _fake(tmp_path, "python3")
     _fake(tmp_path, "python3.14")
-    assert find_python({"PATH": str(tmp_path)}).endswith("python3.14")
+    assert Pythons.find_python({"PATH": str(tmp_path)}).endswith("python3.14")
 
 
 def test_find_python_falls_back_to_python3(tmp_path):
     _fake(tmp_path, "python3")
-    assert find_python({"PATH": str(tmp_path)}).endswith("python3")
+    assert Pythons.find_python({"PATH": str(tmp_path)}).endswith("python3")
 
 
 def test_find_python_none(tmp_path):
-    assert find_python({"PATH": str(tmp_path)}) is None
+    assert Pythons.find_python({"PATH": str(tmp_path)}) is None
 
 
 def test_empty_env_var_is_ignored(tmp_path):
     _fake(tmp_path, "python3")
-    assert find_python({"GATE_INFRA_PYTHON": "", "PATH": str(tmp_path)}).endswith("python3")
+    assert Pythons.find_python({"GATE_INFRA_PYTHON": "", "PATH": str(tmp_path)}).endswith("python3")
 
 
 def test_impl_interpreter_fields():
-    py = select_impl("destructive-guard", {})
+    py = Impl.select("destructive-guard", {})
     assert py.interpreter_var == "GATE_INFRA_PYTHON"
     assert py.unavailable_reason == "unparsable: python unavailable"
     assert py.check_invocation("--config") == f'python3 "{DG}/lib/check.py" --config'
 
 
 def test_require_new_python_rejects_old(tmp_path):
-    from testkit.pythons import require_new_python
+    from testkit.pythons import Pythons
 
     fake = tmp_path / "python3"
     fake.write_text('#!/bin/sh\nfor a; do case "$a" in *version_info*) echo "3.9"; exit 0;; esac; done\necho 3.9\n')
     fake.chmod(0o755)
     with pytest.raises(RuntimeError, match=r"need Python >= 3\.14, found 3\.9 at .*python3; set GATE_INFRA_PYTHON"):
-        require_new_python({"PATH": str(tmp_path)})
+        Pythons.require_new_python({"PATH": str(tmp_path)})
     with pytest.raises(RuntimeError, match="found nothing"):
-        require_new_python({"PATH": str(tmp_path / "none")})
+        Pythons.require_new_python({"PATH": str(tmp_path / "none")})
 
 
 def test_impl_watch_pr_fast_py(tmp_path):
-    gd = select_impl("gated-dev-simple-workflow", {})
+    gd = Impl.select("gated-dev-simple-workflow", {})
     argv = gd.watch_pr(fast=True)
     assert argv[1] == "-I"
     assert argv[2].endswith("testkit/_fast_sleep.py")
@@ -108,4 +108,4 @@ def test_impl_watch_pr_fast_py(tmp_path):
 
 
 def test_gate_hook_is_the_shipped_gate_sh():
-    assert select_impl("destructive-guard", {}).gate_hook()[-1].endswith("hooks/gate.sh")
+    assert Impl.select("destructive-guard", {}).gate_hook()[-1].endswith("hooks/gate.sh")

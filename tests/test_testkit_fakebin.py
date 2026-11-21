@@ -1,7 +1,7 @@
 import subprocess
 
 from testkit.fakebin import FakeBin
-from testkit.gitrepo import add_worktree, init_repo
+from testkit.gitrepo import GitRepo
 
 
 def run(fb, name, *args, stdin=None, cwd=None):
@@ -58,8 +58,8 @@ def test_fakebin_path_has_no_real_tools(tmp_path):
 
 
 def test_git_helpers_isolated(tmp_path):
-    repo = init_repo(tmp_path / "repo", origin=tmp_path / "origin.git")
-    wt = add_worktree(repo, tmp_path / "wts" / "a", "K-1/a")
+    repo = GitRepo.init_repo(tmp_path / "repo", origin=tmp_path / "origin.git")
+    wt = GitRepo.add_worktree(repo, tmp_path / "wts" / "a", "K-1/a")
     proc = subprocess.run(
         ["git", "-C", str(repo), "worktree", "list", "--porcelain"], capture_output=True, text=True, check=False
     )

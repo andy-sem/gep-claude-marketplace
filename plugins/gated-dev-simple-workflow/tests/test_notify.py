@@ -7,8 +7,8 @@ import subprocess
 import pytest
 
 from testkit import GD
-from testkit.envs import clean_env
-from testkit.fakebin import FakeBin, absolute
+from testkit.envs import IsolatedEnv
+from testkit.fakebin import FakeBin
 
 EVENT = json.dumps({"hook_event_name": "Notification", "message": "Claude needs your permission to use Bash"})
 
@@ -24,11 +24,11 @@ def run_notify(impl, tmp_path, *, os_name="Darwin", env=None, stdin="", notifier
     for name in notifiers:
         fb.add(name)
     proc = subprocess.run(
-        [*absolute(impl.notify()), *args],
+        [*FakeBin.absolute(impl.notify()), *args],
         input=stdin,
         capture_output=True,
         text=True,
-        env=clean_env(impl.env(), {"PATH": str(fb.path)}, env or {}),
+        env=IsolatedEnv.clean(impl.env(), {"PATH": str(fb.path)}, env or {}),
         timeout=30,
         check=False,
     )
@@ -95,11 +95,11 @@ def test_a_failing_notifier_does_not_fail_the_hook(impl, tmp_path):
     fb.add("osascript", stderr="boom\n", status=1)
     fb.link("cat")
     proc = subprocess.run(
-        absolute(impl.notify()),
+        FakeBin.absolute(impl.notify()),
         input=EVENT,
         capture_output=True,
         text=True,
-        env=clean_env(impl.env(), {"PATH": str(fb.path), "TICKET_FLOW_KEY": "PROJ-1"}),
+        env=IsolatedEnv.clean(impl.env(), {"PATH": str(fb.path), "TICKET_FLOW_KEY": "PROJ-1"}),
         timeout=30,
         check=False,
     )
@@ -123,10 +123,10 @@ def test_title_fallback_and_non_utf8_stdin(impl, tmp_path):
     fb.add("uname", stdout="Linux\n")
     fb.add("notify-send")
     proc = subprocess.run(
-        absolute(impl.notify()),
+        FakeBin.absolute(impl.notify()),
         input=b"\xff\xfe",
         capture_output=True,
-        env=clean_env(impl.env(), {"PATH": str(fb.path), "TICKET_FLOW_KEY": "PROJ-1"}),
+        env=IsolatedEnv.clean(impl.env(), {"PATH": str(fb.path), "TICKET_FLOW_KEY": "PROJ-1"}),
         timeout=30,
         check=False,
     )
@@ -150,7 +150,7 @@ def test_no_python_is_silent(impl, tmp_path):
         input=EVENT,
         capture_output=True,
         text=True,
-        env=clean_env({"PATH": str(fb.path), "TICKET_FLOW_KEY": "PROJ-1", "GATE_INFRA_PYTHON": "/nope"}),
+        env=IsolatedEnv.clean({"PATH": str(fb.path), "TICKET_FLOW_KEY": "PROJ-1", "GATE_INFRA_PYTHON": "/nope"}),
         timeout=30,
         check=False,
     )

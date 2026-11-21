@@ -13,7 +13,7 @@ from destructive_guard.jev.config import JevConfig
 from destructive_guard.jev.decider import JevDecider
 from destructive_guard.jev.prompt import JevPrompt
 from testkit import DG
-from testkit.check_cli import run_check
+from testkit.check_cli import CheckRunner
 
 BASE_ENV = {"GATE_JEV": "1", "TYPESAFE_API_KEY": "key-123"}
 JEV_DIR = DG / "jev"
@@ -93,7 +93,7 @@ def test_jev_decision_with_destructive_prompt():
 def test_ask_jev_sends_destructive_question(impl, jev, tmp_path):
     jev.answer(d(0.05, 0.05, 0.9), question="destructive")
     env = {"GATE_JEV": "1", "TYPESAFE_API_KEY": "k", "GATE_JEV_URL": jev.url}
-    proc = run_check(impl, "--json", "--jev", "--", "rm -rf ~/work", env=env, cwd=tmp_path)
+    proc = CheckRunner.run_check(impl, "--json", "--jev", "--", "rm -rf ~/work", env=env, cwd=tmp_path)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     [body] = jev.bodies
     assert list(body["questions"]) == ["destructive"]

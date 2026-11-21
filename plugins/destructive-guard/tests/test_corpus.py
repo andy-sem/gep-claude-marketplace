@@ -11,10 +11,10 @@ import pytest
 from destructive_guard.config import GateConfig
 from destructive_guard.engine.classifier import Classifier
 from testkit import DG
-from testkit.check_cli import check_call, run_check
-from testkit.hook import decision, mcp_input, run_hook
-from testkit.impl import select_impl
-from testkit.projects import temp_project
+from testkit.check_cli import CheckRunner
+from testkit.hook import HookRunner
+from testkit.impl import Impl
+from testkit.projects import TempProject
 
 CASES = DG / "tests" / "cases"
 FIXTURES = DG / "tests" / "fixtures"
@@ -81,8 +81,8 @@ def classify_case(corpus_env: dict, case: dict) -> str | None:
 def corpus_results(tmp_path_factory) -> dict[tuple[str, int], str | None]:
     """Every case of every corpus, run once and concurrently: when it asks, the rule id (source), or the
     reason's first segment for REASON_CORPORA; else None."""
-    impl = select_impl("destructive-guard", os.environ)
-    cwd = temp_project(tmp_path_factory.mktemp("corpus"), {})
+    impl = Impl.select("destructive-guard", os.environ)
+    cwd = TempProject.temp_project(tmp_path_factory.mktemp("corpus"), {})
     jobs = []
     for name in CORPORA:
         env, cases = load_corpus(name)
@@ -95,11 +95,11 @@ def corpus_results(tmp_path_factory) -> dict[tuple[str, int], str | None]:
             stdin = (
                 json.dumps({**call["hook"], "cwd": str(cwd)})
                 if "hook" in call
-                else mcp_input(call["mcp"], call["input"], cwd)
+                else HookRunner.mcp_input(call["mcp"], call["input"], cwd)
             )
-            out = run_hook(impl, stdin, env, cwd=cwd).stdout
-            return key, decision(out)["permissionDecisionReason"].split(":")[0] if out else None
-        r = check_call(impl, call, env=env, cwd=cwd)
+            out = HookRunner.run(impl, stdin, env, cwd=cwd).stdout
+            return key, HookRunner.decision(out)["permissionDecisionReason"].split(":")[0] if out else None
+        r = CheckRunner.check_call(impl, call, env=env, cwd=cwd)
         if r["decision"] != "ask":
             return key, None
         return key, r["reason"].split(":")[0] if key[0] in REASON_CORPORA else r["source"]
@@ -169,15 +169,15 @@ def test_every_destructive_rule_has_an_asking_case():
 
 
 def test_destructive_rules_do_not_make_script_scan_ask(impl, tmp_path):
-    root = temp_project(tmp_path, {"build.sh": "rm -rf dist\ngit push\n"})
-    assert check_call(impl, {"bash": "bash build.sh"}, cwd=root)["decision"] == "none"
+    root = TempProject.temp_project(tmp_path, {"build.sh": "rm -rf dist\ngit push\n"})
+    assert CheckRunner.check_call(impl, {"bash": "bash build.sh"}, cwd=root)["decision"] == "none"
     # a script outside the project does not ask when nothing is scanned for
-    assert check_call(impl, {"bash": "bash /usr/local/bin/x.sh"}, cwd=root)["decision"] == "none"
+    assert CheckRunner.check_call(impl, {"bash": "bash /usr/local/bin/x.sh"}, cwd=root)["decision"] == "none"
 
 
 def test_shipped_rule_file_loads(impl, tmp_path):
     env, _ = load_corpus("gate_rules")
-    proc = run_check(impl, "--json", "--config", env=env, cwd=tmp_path)
+    proc = CheckRunner.run_check(impl, "--json", "--config", env=env, cwd=tmp_path)
     config = json.loads(proc.stdout)
     assert "error" not in config
     assert len(config["ruleIds"]) > 0

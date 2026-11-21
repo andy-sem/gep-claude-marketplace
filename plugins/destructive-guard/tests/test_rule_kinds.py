@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from testkit.check_cli import check_call
+from testkit.check_cli import CheckRunner
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def one(impl, tmp_path):
         path = tmp_path / f"rules-{next(counter)}.json"
         path.write_text(json.dumps({"rules": [rule]}))
         env = {"GATE_CHECKS": "none", "GATE_RULES_FILE": str(path)}
-        return lambda call: check_call(impl, call, env=env, cwd=tmp_path)
+        return lambda call: CheckRunner.check_call(impl, call, env=env, cwd=tmp_path)
 
     return with_rule
 

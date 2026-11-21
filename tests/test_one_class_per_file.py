@@ -1,6 +1,6 @@
 """Class refactor guard: one class per file, no module-level functions but `main`.
 
-Covers the shipped code of both plugins. `errors.py` holds exception classes only and
+Covers the shipped code of both plugins and `testkit/`. `errors.py` holds exception classes only and
 is exempt; `type` aliases are allowed; a module-level `main` is the CLI entry wrapper.
 """
 
@@ -14,6 +14,7 @@ REPO = Path(__file__).resolve().parent.parent
 PACKAGES = [
     REPO / "plugins/destructive-guard/lib/destructive_guard",
     REPO / "plugins/gated-dev-simple-workflow/scripts/gated_dev",
+    REPO / "testkit",
 ]
 
 

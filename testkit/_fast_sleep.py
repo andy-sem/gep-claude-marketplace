@@ -11,14 +11,25 @@ import sys
 import time
 
 
-def _sleep(seconds: float) -> None:
-    log = os.environ.get("GD_TEST_SLEEP_LOG")
-    if log:
-        with open(log, "a", encoding="utf-8") as handle:
-            handle.write(f"{round(seconds * 1000)}\n")
+class FastSleep:
+    """Patches time.sleep to log the delay instead of waiting, then runs a target script."""
+
+    target: str = ""
+
+    @staticmethod
+    def sleep(seconds: float) -> None:
+        log = os.environ.get("GD_TEST_SLEEP_LOG")
+        if log:
+            with open(log, "a", encoding="utf-8") as handle:
+                handle.write(f"{round(seconds * 1000)}\n")
+
+    @classmethod
+    def run(cls, argv: list[str]) -> None:
+        time.sleep = cls.sleep
+        cls.target = argv[0]
+        sys.argv = argv
+        runpy.run_path(cls.target, run_name="__main__")
 
 
-time.sleep = _sleep
-target = sys.argv[1]
-sys.argv = sys.argv[1:]
-runpy.run_path(target, run_name="__main__")
+if __name__ == "__main__":
+    FastSleep.run(sys.argv[1:])

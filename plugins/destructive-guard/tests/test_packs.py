@@ -8,7 +8,7 @@ import pytest
 from destructive_guard.errors import RulesError
 from destructive_guard.rules.rule_loader import RuleLoader
 from testkit import DG
-from testkit.hook import bash_input, decision, run_hook
+from testkit.hook import HookRunner
 
 FIXTURE = json.loads((DG / "tests" / "fixtures" / "rules.json").read_text())
 
@@ -68,12 +68,12 @@ def test_default_packs_is_base_and_destructive():
 
 def test_without_gate_rules_hook_loads_default_packs(impl, tmp_path):
     def run(command):
-        return run_hook(impl, bash_input(command, tmp_path), {"GATE_RULES": ""}, cwd=tmp_path).stdout
+        return HookRunner.run(impl, HookRunner.bash_input(command, tmp_path), {"GATE_RULES": ""}, cwd=tmp_path).stdout
 
-    asked = decision(run("terraform destroy"))
+    asked = HookRunner.decision(run("terraform destroy"))
     assert asked["permissionDecision"] == "ask"
     assert re.match(r"^terraform-destroy:", asked["permissionDecisionReason"])
-    assert re.match(r"^git-push-force:", decision(run("git push --force"))["permissionDecisionReason"])
+    assert re.match(r"^git-push-force:", HookRunner.decision(run("git push --force"))["permissionDecisionReason"])
     assert run("git push") == ""
     assert run("git status") == ""
     assert run("ls -la") == ""

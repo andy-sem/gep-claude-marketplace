@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from testkit.envs import clean_env
+from testkit.envs import IsolatedEnv
 
 
 def status(argv, file_path, env=None, tool="Read"):
@@ -15,7 +15,7 @@ def status(argv, file_path, env=None, tool="Read"):
         input=json.dumps({"tool_name": tool, "tool_input": {"file_path": file_path}}),
         capture_output=True,
         text=True,
-        env=clean_env(env or {}),
+        env=IsolatedEnv.clean(env or {}),
         check=False,
     )
     return proc.returncode

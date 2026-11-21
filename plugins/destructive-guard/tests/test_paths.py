@@ -3,11 +3,11 @@
 import os
 
 from destructive_guard.paths import ProjectDir
-from testkit.projects import temp_project
+from testkit.projects import TempProject
 
 
 def make_project(tmp_path):
-    root = temp_project(tmp_path, {})
+    root = TempProject.temp_project(tmp_path, {})
     sub = root / "apps" / "web"
     sub.mkdir(parents=True)
     return root, sub
