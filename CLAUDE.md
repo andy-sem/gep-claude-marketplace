@@ -29,6 +29,7 @@ The two plugins are independent and installable on their own:
 - Optional **Jev** classifier (`lib/destructive_guard/jev/`, prompts in `jev/*.json`, off by default). With Jev on, its confident answer wins; rules decide in the uncertain band, on errors and when Jev is off. Fail-closed cases always ask and are never sent to Jev.
 - `skills/check` + `lib/check.py`: dry-run a command/MCP call through the gate, or print effective config (`/destructive-guard:check`).
 - The README is the user-facing reference for rules and configuration; keep it in sync with behaviour.
+- `formal/`: Lean 4 model of the planned lean gate (`SimpleGate.lean`, theses S1–S8; plan in `docs/plans/lean-gate.md`). Dev-only: ships as source but users never build it, and the plugin runs without Lean. Build with `elan` (`~/.elan`, toolchain pinned in `lean-toolchain`): `cd plugins/destructive-guard/formal && PATH="$HOME/.elan/bin:$PATH" lake build`; keep it free of errors and `sorry`. `.lake/` is gitignored.
 
 ### `gated-dev-simple-workflow` (`plugins/gated-dev-simple-workflow/`)
 

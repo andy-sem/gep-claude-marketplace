@@ -1,0 +1,5 @@
+name = "simple-gate"
+defaultTargets = ["SimpleGate"]
+
+[[lean_lib]]
+name = "SimpleGate"
