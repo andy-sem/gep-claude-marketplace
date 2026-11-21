@@ -17,6 +17,6 @@ if sys.version_info < (3, 14):
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from destructive_guard.gate_main import main
+from destructive_guard.hook import main
 
 sys.exit(main())

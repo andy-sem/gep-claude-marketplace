@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from destructive_guard.config import build_rules, read_config
+from destructive_guard.config import GateConfig
 from destructive_guard.engine.classifier import Classifier
 from testkit import DG
 from testkit.check_cli import check_call, run_check
@@ -52,8 +52,8 @@ def _params(name: str):
 
 @cache
 def _engine(env_items: tuple[tuple[str, str], ...]) -> tuple[dict, bool]:
-    config = read_config(dict(env_items), cwd=Path.cwd())
-    return build_rules(config), bool(config["strict"])
+    config = GateConfig.read_config(dict(env_items), cwd=Path.cwd())
+    return GateConfig.build_rules(config), bool(config["strict"])
 
 
 def hook_input(case: dict) -> dict:
@@ -157,7 +157,7 @@ def test_gate_engine_case(corpus_results, index, case):
 def test_corpus_env_builds(name, tmp_path):
     """The corpus env composes a non-empty rule set."""
     env, _ = load_corpus(name)
-    ids = [r["id"] for r in build_rules(read_config(env, cwd=tmp_path))["rules"]]
+    ids = [r["id"] for r in GateConfig.build_rules(GateConfig.read_config(env, cwd=tmp_path))["rules"]]
     assert ids
 
 

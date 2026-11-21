@@ -1,6 +1,6 @@
 {
   "name": "destructive-guard",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Deterministic PreToolUse approval gate, configured through env variables. By default asks before destructive commands on the local machine or cloud services; optional rule packs, an optional Jev classifier and a check skill to dry-run calls. Needs Python >= 3.14.",
   "author": {
     "name": "Gep"

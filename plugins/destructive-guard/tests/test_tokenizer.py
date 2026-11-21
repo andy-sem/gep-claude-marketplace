@@ -1,4 +1,4 @@
-"""Shell tokenizer and wrapper normalisation of destructive_guard.gate_engine.
+"""Shell tokenizer and wrapper normalisation of destructive_guard.shell.tokenizer and engine.normalizer.
 
 The two fixtures were generated once from the JS (`splitCommand`, `stripWrappers`,
 `nestedShellString`, `shellScriptIndex`) over every Bash command of the three case corpora plus the
