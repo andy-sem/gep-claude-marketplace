@@ -7,7 +7,7 @@ import pytest
 
 from testkit import DG
 
-# Byte copy of test/fixtures/rules.json (the shipped-rules stand-in the JS tests use).
+# The shipped-rules stand-in (a fixed rule file independent of packs/).
 SHIPPED = DG / "tests" / "fixtures" / "rules.json"
 
 

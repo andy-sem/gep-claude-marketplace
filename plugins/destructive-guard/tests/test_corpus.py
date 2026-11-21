@@ -11,7 +11,6 @@ import pytest
 from destructive_guard.config import build_rules, read_config
 from destructive_guard.gate_engine import classify
 from testkit import DG
-from testkit.bridge import bridge, call
 from testkit.check_cli import check_call, run_check
 from testkit.hook import decision, mcp_input, run_hook
 from testkit.impl import select_impl
@@ -156,11 +155,9 @@ def test_gate_engine_case(corpus_results, index, case):
 
 @pytest.mark.parametrize("name", CORPORA)
 def test_corpus_env_builds(name, tmp_path):
-    """The corpus env builds the same rules in Python as in JS (pack composition, before the engine is ported)."""
+    """The corpus env composes a non-empty rule set."""
     env, _ = load_corpus(name)
     ids = [r["id"] for r in build_rules(read_config(env, cwd=tmp_path))["rules"]]
-    js = bridge("config", "buildRules", call("config", "readConfig", env, {"cwd": str(tmp_path)}))
-    assert ids == [r["id"] for r in js["rules"]]
     assert ids
 
 

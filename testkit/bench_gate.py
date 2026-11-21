@@ -1,8 +1,7 @@
-"""Latency of a full hook call, JS (hooks/gate.sh) vs Python (testkit/_gate_py.sh).
+"""Latency of a full hook call (hooks/gate.sh on Python).
 
-Not a test: `uv run python -m testkit.bench_gate --n 200`. Runs the same mixed inputs
-(Bash allow, Bash ask, script scan, MCP) through both wrappers with the default packs and
-prints p50/p95 per implementation, calls interleaved so both see the same machine load.
+Not a test: `uv run python -m testkit.bench_gate --n 200`. Runs mixed inputs
+(Bash allow, Bash ask, script scan, MCP) with the default packs and prints p50/p95.
 """
 
 import argparse
@@ -43,23 +42,15 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=200)
     n = ap.parse_args().n
     python = require_new_python(clean_env())
-    wrappers = {
-        "js": (["bash", str(DG / "hooks" / "gate.sh")], {}),
-        "py": (["bash", str(Path(__file__).resolve().parent / "_gate_py.sh")], {"GATE_INFRA_PYTHON": python}),
-    }
-    times: dict[str, list[float]] = {k: [] for k in wrappers}
+    argv = ["bash", str(DG / "hooks" / "gate.sh")]
+    times: list[float] = []
     with tempfile.TemporaryDirectory() as tmp:
         data = inputs(provision_project(Path(tmp)))
         for i in range(n):
-            payload = data[i % len(data)]
-            for name, (argv, extra) in wrappers.items():
-                t = time.perf_counter()
-                subprocess.run(argv, input=payload, capture_output=True, env=clean_env(extra), check=True)
-                times[name].append((time.perf_counter() - t) * 1000)
-    for name, ms in times.items():
-        print(f"{name}: n={len(ms)} p50={statistics.median(ms):.1f}ms p95={pct(ms, 0.95):.1f}ms")
-    delta = pct(times["py"], 0.95) - pct(times["js"], 0.95)
-    print(f"p95 py - js = {delta:+.1f}ms (budget +50ms)")
+            t = time.perf_counter()
+            subprocess.run(argv, input=data[i % len(data)], capture_output=True, env=clean_env({"GATE_INFRA_PYTHON": python}), check=True)
+            times.append((time.perf_counter() - t) * 1000)
+    print(f"py: n={len(times)} p50={statistics.median(times):.1f}ms p95={pct(times, 0.95):.1f}ms")
 
 
 if __name__ == "__main__":

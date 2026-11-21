@@ -1,4 +1,4 @@
-"""Call exports of the JS destructive-guard lib from Python tests (until the JS is removed)."""
+"""Call exports of the JS gated-dev scripts (module "gated-dev:<script>") from Python tests, until P12."""
 
 import json
 import re

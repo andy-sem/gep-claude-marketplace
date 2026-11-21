@@ -333,6 +333,6 @@ def test_watcher_command_passes_the_gate(tmp_path):
     state = "/abs/repo/.claude/worktrees/proj-1-x/docs/tickets/PROJ-1/state.json"
     command = documented.group(1).replace("${CLAUDE_PLUGIN_ROOT}", str(GD)).replace("<TICKET_DIR>/state.json", state)
     assert "<" not in command
-    gate = select_impl("destructive-guard", os.environ)
+    gate = select_impl("destructive-guard", {})
     for line in (command, f"cd /abs/repo && {command}"):
         assert check_call(gate, {"bash": line}, cwd=tmp_path)["decision"] == "none", line

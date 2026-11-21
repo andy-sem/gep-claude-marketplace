@@ -223,7 +223,7 @@ The Python package is built next to the JS; hooks keep calling JS until P9.
   `gate_main.main` (done-file protocol, `GATE_LOG`) and the `check` CLI. `GATE_HOOK_IMPL=py-direct` runs the hook
   contract tests on Python through the test-only `testkit/_gate_py.sh` until P9. Latency: Python p95 is 43 ms
   below JS (`docs/plans/python-port-p8-latency.md`).
-- **P9** (plan: `docs/plans/python-port-p9.md`) Cutover: `gate.sh` → D1a interpreter lookup, `GATE_INFRA_PYTHON`, skill and
+- **P9** (plan: `docs/plans/python-port-p9.md`) **done** (dogfood before merge still open). Cutover: `gate.sh` → D1a interpreter lookup, `GATE_INFRA_PYTHON`, skill and
   README updates, flip `impl` default to `py` for this plugin, delete
   `lib/*.mjs` and `test/*.test.mjs`, version bump. Dogfood in a real
   session and in the demo repo before merging.

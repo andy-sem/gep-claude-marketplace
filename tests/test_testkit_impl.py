@@ -17,9 +17,15 @@ def _fake(dir_path, name):
     return p
 
 
-@pytest.mark.parametrize("plugin", PLUGIN_NAMES)
-def test_default_is_js_for_both_plugins(plugin):
-    assert select_impl(plugin, {}).name == "js"
+def test_defaults():
+    assert select_impl("destructive-guard", {}).name == "py"
+    assert select_impl("gated-dev-simple-workflow", {}).name == "js"
+
+
+def test_destructive_guard_rejects_js():
+    with pytest.raises(ValueError, match="no JS implementation"):
+        select_impl("destructive-guard", {"GD_IMPL": "js"})
+    assert select_impl("gated-dev-simple-workflow", {"GD_IMPL": "js"}).name == "js"
 
 
 def test_gd_impl_overrides():
@@ -37,7 +43,7 @@ def test_unknown_plugin_raises():
 
 
 def test_js_entry_points_exist():
-    dg = select_impl("destructive-guard", {"GD_IMPL": "js"})
+    dg = select_impl("destructive-guard", {})
     gd = select_impl("gated-dev-simple-workflow", {"GD_IMPL": "js"})
     for argv in (dg.gate_hook(), dg.env_guard(), dg.check(), gd.launch(), gd.watch_pr(), gd.notify()):
         assert os.path.isfile(argv[-1]), argv
@@ -79,17 +85,13 @@ def test_empty_env_var_is_ignored(tmp_path):
 def test_js_env_without_node_raises(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", str(tmp_path))
     with pytest.raises(RuntimeError, match="node not found on PATH"):
-        select_impl("destructive-guard", {"GD_IMPL": "js"}).env()
+        select_impl("gated-dev-simple-workflow", {"GD_IMPL": "js"}).env()
 
 
 def test_impl_interpreter_fields():
-    js = select_impl("destructive-guard", {"GD_IMPL": "js"})
-    py = select_impl("destructive-guard", {"GD_IMPL": "py"})
-    assert js.interpreter_var == "GATE_INFRA_NODE"
+    py = select_impl("destructive-guard", {})
     assert py.interpreter_var == "GATE_INFRA_PYTHON"
-    assert js.unavailable_reason == "unparsable: node unavailable"
     assert py.unavailable_reason == "unparsable: python unavailable"
-    assert js.check_invocation("--config") == f'node "{DG}/lib/check.mjs" --config'
     assert py.check_invocation("--config") == f'python3 "{DG}/lib/check.py" --config'
 
 
@@ -120,25 +122,5 @@ def test_impl_watch_pr_fast_py_not_yet():
         gd.watch_pr(fast=True)
 
 
-def test_gate_hook_py_direct_uses_python_wrapper(monkeypatch):
-    py = select_impl("destructive-guard", {"GD_IMPL": "py"})
-    monkeypatch.delenv("GATE_HOOK_IMPL", raising=False)
-    assert py.gate_hook()[-1].endswith("hooks/gate.sh")
-    monkeypatch.setenv("GATE_HOOK_IMPL", "py-direct")
-    assert py.gate_hook()[-1].endswith("testkit/_gate_py.sh")
-    js = select_impl("destructive-guard", {"GD_IMPL": "js"})
-    assert js.gate_hook()[-1].endswith("hooks/gate.sh")
-
-
-def test_gate_py_wrapper_asks_without_python(monkeypatch):
-    import subprocess
-
-    from testkit.envs import clean_env
-
-    monkeypatch.setenv("GATE_HOOK_IMPL", "py-direct")
-    py = select_impl("destructive-guard", {"GD_IMPL": "py"})
-    proc = subprocess.run(
-        py.gate_hook(), input=b"{}", capture_output=True, env=clean_env({"GATE_INFRA_PYTHON": "/nope"}), check=False
-    )
-    assert proc.returncode == 0
-    assert b"unparsable: python unavailable" in proc.stdout
+def test_gate_hook_is_the_shipped_gate_sh():
+    assert select_impl("destructive-guard", {}).gate_hook()[-1].endswith("hooks/gate.sh")
