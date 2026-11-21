@@ -289,7 +289,7 @@ uv run pytest plugins/destructive-guard    # tests
 | `lib/check.py` | Dry-run CLI behind the `check` skill (same stub) |
 | `lib/destructive_guard/config.py` | Env → effective configuration, pack composition |
 | `lib/destructive_guard/gate_engine.py` | Shell parser, rule evaluation, `gate()` |
-| `lib/destructive_guard/gate_scripts.py` | Script collection and scanning |
+| `lib/destructive_guard/scripts/` | Script collection and scanning |
 | `lib/destructive_guard/gate_jev.py` | Jev configuration, prompts, redaction, request |
 | `lib/destructive_guard/check.py` | The dry-run behind `lib/check.py` |
 | `packs/*.json` | Built-in rule packs |

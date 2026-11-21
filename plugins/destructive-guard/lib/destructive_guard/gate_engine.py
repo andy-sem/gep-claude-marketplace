@@ -100,14 +100,14 @@ def gate(
         and (not result or env.get("GATE_JEV"))
     ):
         try:
-            from . import gate_scripts
+            from .scripts.project_paths import ProjectPaths
+            from .scripts.script_collector import ScriptCollector
+            from .scripts.script_scanner import ScriptScanner
 
             where = input["cwd"] if isinstance(input.get("cwd"), str) else (cwd if cwd is not None else os.getcwd())
-            collected = gate_scripts.collect_scripts(
-                command, rules, cwd=where, root=gate_scripts.find_project_root(where, env)
-            )
+            collected = ScriptCollector(rules, where, ProjectPaths.find_project_root(where, env)).collect(command)
             if not result:
-                result = gate_scripts.scan_scripts(collected, rules)
+                result = ScriptScanner(rules).scan_scripts(collected)
         except Exception as e:  # noqa: BLE001
             return Verdict.ask("gate-config", f"script scan failed: {e}")
     if trace is not None:
