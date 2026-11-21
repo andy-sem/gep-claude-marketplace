@@ -1,0 +1,1211 @@
+[
+ {
+  "fn": "slugify",
+  "input": "",
+  "expected": "work"
+ },
+ {
+  "fn": "slugify",
+  "input": "plain",
+  "expected": "plain"
+ },
+ {
+  "fn": "slugify",
+  "input": "It's a 'quote'",
+  "expected": "it-s-a-quote"
+ },
+ {
+  "fn": "slugify",
+  "input": "a\nb",
+  "expected": "a-b"
+ },
+ {
+  "fn": "slugify",
+  "input": "a\r\nb",
+  "expected": "a-b"
+ },
+ {
+  "fn": "slugify",
+  "input": "say \"hi\"",
+  "expected": "say-hi"
+ },
+ {
+  "fn": "slugify",
+  "input": "back\\slash",
+  "expected": "back-slash"
+ },
+ {
+  "fn": "slugify",
+  "input": "$(rm -rf /) `x`",
+  "expected": "rm-rf-x"
+ },
+ {
+  "fn": "slugify",
+  "input": "Ünïcode Tïtle",
+  "expected": "n-code-t-tle"
+ },
+ {
+  "fn": "slugify",
+  "input": "日本語のタイトル",
+  "expected": "work"
+ },
+ {
+  "fn": "slugify",
+  "input": "Fix: login (SSO) / MFA",
+  "expected": "fix-login-sso-mfa"
+ },
+ {
+  "fn": "slugify",
+  "input": "emoji 🚀 rocket",
+  "expected": "emoji-rocket"
+ },
+ {
+  "fn": "slugify",
+  "input": "İstanbul Ünite",
+  "expected": "i-stanbul-nite"
+ },
+ {
+  "fn": "slugify",
+  "input": "ß straße",
+  "expected": "stra-e"
+ },
+ {
+  "fn": "slugify",
+  "input": "Kelvin K sign",
+  "expected": "kelvin-k-sign"
+ },
+ {
+  "fn": "slugify",
+  "input": "  --Hello  World--  ",
+  "expected": "hello-world"
+ },
+ {
+  "fn": "slugify",
+  "input": "!!!",
+  "expected": "work"
+ },
+ {
+  "fn": "slugify",
+  "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ {
+  "fn": "slugify",
+  "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa b",
+  "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ {
+  "fn": "slugify",
+  "input": "Export reports as CSV with filters and pagination support",
+  "expected": "export-reports-as-csv-with-filters-and-p"
+ },
+ {
+  "fn": "slugify",
+  "input": "tab\tsep",
+  "expected": "tab-sep"
+ },
+ {
+  "fn": "slugify",
+  "input": "naïve café résumé",
+  "expected": "na-ve-caf-r-sum"
+ },
+ {
+  "fn": "slugify",
+  "input": "ΑΒΓ Greek ΣΊΣΥΦΟΣ",
+  "expected": "greek"
+ },
+ {
+  "fn": "slugify",
+  "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx y",
+  "expected": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ },
+ {
+  "fn": "slugify",
+  "input": "one two three four five six seven eight nine ten",
+  "expected": "one-two-three-four-five-six-seven-eight"
+ },
+ {
+  "fn": "slugify",
+  "input": "a.b,c:d(e)f/g_h-i",
+  "expected": "a-b-c-d-e-f-g-h-i"
+ },
+ {
+  "fn": "slugify",
+  "input": " nbsp ",
+  "expected": "nbsp"
+ },
+ {
+  "fn": "slugify",
+  "input": "line1\nline2",
+  "expected": "line1-line2"
+ },
+ {
+  "fn": "slugify",
+  "input": "'",
+  "expected": "work"
+ },
+ {
+  "fn": "slugify",
+  "input": "''",
+  "expected": "work"
+ },
+ {
+  "fn": "slugify",
+  "input": "x y z x y z x y z x y z x y z x y z x y z x y z x y z x y z ",
+  "expected": "x-y-z-x-y-z-x-y-z-x-y-z-x-y-z-x-y-z-x-y"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "",
+  "expected": ""
+ },
+ {
+  "fn": "shortSummary",
+  "input": "plain",
+  "expected": "plain"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "It's a 'quote'",
+  "expected": "It s a quote"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "a\nb",
+  "expected": "a b"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "a\r\nb",
+  "expected": "a b"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "say \"hi\"",
+  "expected": "say hi"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "back\\slash",
+  "expected": "back slash"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "$(rm -rf /) `x`",
+  "expected": "(rm -rf /) x"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "Ünïcode Tïtle",
+  "expected": "n code T tle"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "日本語のタイトル",
+  "expected": ""
+ },
+ {
+  "fn": "shortSummary",
+  "input": "Fix: login (SSO) / MFA",
+  "expected": "Fix: login (SSO) / MFA"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "emoji 🚀 rocket",
+  "expected": "emoji rocket"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "İstanbul Ünite",
+  "expected": "stanbul nite"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "ß straße",
+  "expected": "stra e"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "Kelvin K sign",
+  "expected": "Kelvin K sign"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "  --Hello  World--  ",
+  "expected": "--Hello World--"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "!!!",
+  "expected": ""
+ },
+ {
+  "fn": "shortSummary",
+  "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa b",
+  "expected": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "Export reports as CSV with filters and pagination support",
+  "expected": "Export reports as CSV with filters and"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "tab\tsep",
+  "expected": "tab sep"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "naïve café résumé",
+  "expected": "na ve caf r sum"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "ΑΒΓ Greek ΣΊΣΥΦΟΣ",
+  "expected": "Greek"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx y",
+  "expected": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "one two three four five six seven eight nine ten",
+  "expected": "one two three four five six seven eight"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "a.b,c:d(e)f/g_h-i",
+  "expected": "a.b,c:d(e)f/g_h-i"
+ },
+ {
+  "fn": "shortSummary",
+  "input": " nbsp ",
+  "expected": "nbsp"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "line1\nline2",
+  "expected": "line1 line2"
+ },
+ {
+  "fn": "shortSummary",
+  "input": "'",
+  "expected": ""
+ },
+ {
+  "fn": "shortSummary",
+  "input": "''",
+  "expected": ""
+ },
+ {
+  "fn": "shortSummary",
+  "input": "x y z x y z x y z x y z x y z x y z x y z x y z x y z x y z ",
+  "expected": "x y z x y z x y z x y z x y z x y z x y"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "",
+  "expected": "''"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "plain",
+  "expected": "'plain'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "It's a 'quote'",
+  "expected": "'It'\\''s a '\\''quote'\\'''"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "a\nb",
+  "expected": "'a\nb'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "a\r\nb",
+  "expected": "'a\r\nb'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "say \"hi\"",
+  "expected": "'say \"hi\"'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "back\\slash",
+  "expected": "'back\\slash'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "$(rm -rf /) `x`",
+  "expected": "'$(rm -rf /) `x`'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "Ünïcode Tïtle",
+  "expected": "'Ünïcode Tïtle'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "日本語のタイトル",
+  "expected": "'日本語のタイトル'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "Fix: login (SSO) / MFA",
+  "expected": "'Fix: login (SSO) / MFA'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "emoji 🚀 rocket",
+  "expected": "'emoji 🚀 rocket'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "İstanbul Ünite",
+  "expected": "'İstanbul Ünite'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "ß straße",
+  "expected": "'ß straße'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "Kelvin K sign",
+  "expected": "'Kelvin K sign'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "  --Hello  World--  ",
+  "expected": "'  --Hello  World--  '"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "!!!",
+  "expected": "'!!!'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "expected": "'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa b",
+  "expected": "'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa b'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "Export reports as CSV with filters and pagination support",
+  "expected": "'Export reports as CSV with filters and pagination support'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "tab\tsep",
+  "expected": "'tab\tsep'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "naïve café résumé",
+  "expected": "'naïve café résumé'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "ΑΒΓ Greek ΣΊΣΥΦΟΣ",
+  "expected": "'ΑΒΓ Greek ΣΊΣΥΦΟΣ'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx y",
+  "expected": "'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx y'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "one two three four five six seven eight nine ten",
+  "expected": "'one two three four five six seven eight nine ten'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "a.b,c:d(e)f/g_h-i",
+  "expected": "'a.b,c:d(e)f/g_h-i'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": " nbsp ",
+  "expected": "' nbsp '"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "line1\nline2",
+  "expected": "'line1\nline2'"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "'",
+  "expected": "''\\'''"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "''",
+  "expected": "''\\'''\\'''"
+ },
+ {
+  "fn": "shellQuote",
+  "input": "x y z x y z x y z x y z x y z x y z x y z x y z x y z x y z ",
+  "expected": "'x y z x y z x y z x y z x y z x y z x y z x y z x y z x y z '"
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "",
+  "expected": "\"\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "plain",
+  "expected": "\"plain\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "It's a 'quote'",
+  "expected": "\"It's a 'quote'\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "a\nb",
+  "expected": "\"a\nb\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "a\r\nb",
+  "expected": "\"a\r\nb\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "say \"hi\"",
+  "expected": "\"say \\\"hi\\\"\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "back\\slash",
+  "expected": "\"back\\\\slash\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "$(rm -rf /) `x`",
+  "expected": "\"$(rm -rf /) `x`\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "Ünïcode Tïtle",
+  "expected": "\"Ünïcode Tïtle\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "日本語のタイトル",
+  "expected": "\"日本語のタイトル\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "Fix: login (SSO) / MFA",
+  "expected": "\"Fix: login (SSO) / MFA\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "emoji 🚀 rocket",
+  "expected": "\"emoji 🚀 rocket\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "İstanbul Ünite",
+  "expected": "\"İstanbul Ünite\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "ß straße",
+  "expected": "\"ß straße\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "Kelvin K sign",
+  "expected": "\"Kelvin K sign\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "  --Hello  World--  ",
+  "expected": "\"  --Hello  World--  \""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "!!!",
+  "expected": "\"!!!\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "expected": "\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa b",
+  "expected": "\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa b\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "Export reports as CSV with filters and pagination support",
+  "expected": "\"Export reports as CSV with filters and pagination support\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "tab\tsep",
+  "expected": "\"tab\tsep\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "naïve café résumé",
+  "expected": "\"naïve café résumé\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "ΑΒΓ Greek ΣΊΣΥΦΟΣ",
+  "expected": "\"ΑΒΓ Greek ΣΊΣΥΦΟΣ\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx y",
+  "expected": "\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx y\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "one two three four five six seven eight nine ten",
+  "expected": "\"one two three four five six seven eight nine ten\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "a.b,c:d(e)f/g_h-i",
+  "expected": "\"a.b,c:d(e)f/g_h-i\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": " nbsp ",
+  "expected": "\" nbsp \""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "line1\nline2",
+  "expected": "\"line1\nline2\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "'",
+  "expected": "\"'\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "''",
+  "expected": "\"''\""
+ },
+ {
+  "fn": "appleScriptString",
+  "input": "x y z x y z x y z x y z x y z x y z x y z x y z x y z x y z ",
+  "expected": "\"x y z x y z x y z x y z x y z x y z x y z x y z x y z x y z \""
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": ""
+  },
+  "expected": "K-1"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": ""
+  },
+  "expected": "K-1 resume"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "plain"
+  },
+  "expected": "K-1 · plain"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "plain"
+  },
+  "expected": "K-1 resume · plain"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "It's a 'quote'"
+  },
+  "expected": "K-1 · It s a quote"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "It's a 'quote'"
+  },
+  "expected": "K-1 resume · It s a quote"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "a\nb"
+  },
+  "expected": "K-1 · a b"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "a\nb"
+  },
+  "expected": "K-1 resume · a b"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "a\r\nb"
+  },
+  "expected": "K-1 · a b"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "a\r\nb"
+  },
+  "expected": "K-1 resume · a b"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "say \"hi\""
+  },
+  "expected": "K-1 · say hi"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "say \"hi\""
+  },
+  "expected": "K-1 resume · say hi"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "back\\slash"
+  },
+  "expected": "K-1 · back slash"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "back\\slash"
+  },
+  "expected": "K-1 resume · back slash"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "$(rm -rf /) `x`"
+  },
+  "expected": "K-1 · (rm -rf /) x"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "$(rm -rf /) `x`"
+  },
+  "expected": "K-1 resume · (rm -rf /) x"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "Ünïcode Tïtle"
+  },
+  "expected": "K-1 · n code T tle"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "Ünïcode Tïtle"
+  },
+  "expected": "K-1 resume · n code T tle"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "日本語のタイトル"
+  },
+  "expected": "K-1"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "日本語のタイトル"
+  },
+  "expected": "K-1 resume"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "Fix: login (SSO) / MFA"
+  },
+  "expected": "K-1 · Fix: login (SSO) / MFA"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "Fix: login (SSO) / MFA"
+  },
+  "expected": "K-1 resume · Fix: login (SSO) / MFA"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "emoji 🚀 rocket"
+  },
+  "expected": "K-1 · emoji rocket"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "emoji 🚀 rocket"
+  },
+  "expected": "K-1 resume · emoji rocket"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "İstanbul Ünite"
+  },
+  "expected": "K-1 · stanbul nite"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "İstanbul Ünite"
+  },
+  "expected": "K-1 resume · stanbul nite"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "ß straße"
+  },
+  "expected": "K-1 · stra e"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "ß straße"
+  },
+  "expected": "K-1 resume · stra e"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "Kelvin K sign"
+  },
+  "expected": "K-1 · Kelvin K sign"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "Kelvin K sign"
+  },
+  "expected": "K-1 resume · Kelvin K sign"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "  --Hello  World--  "
+  },
+  "expected": "K-1 · --Hello World--"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "  --Hello  World--  "
+  },
+  "expected": "K-1 resume · --Hello World--"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "!!!"
+  },
+  "expected": "K-1"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "!!!"
+  },
+  "expected": "K-1 resume"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "expected": "K-1 · aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "expected": "K-1 resume · aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa b"
+  },
+  "expected": "K-1 · aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa b"
+  },
+  "expected": "K-1 resume · aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "Export reports as CSV with filters and pagination support"
+  },
+  "expected": "K-1 · Export reports as CSV with filters and"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "Export reports as CSV with filters and pagination support"
+  },
+  "expected": "K-1 resume · Export reports as CSV with filters and"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "tab\tsep"
+  },
+  "expected": "K-1 · tab sep"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "tab\tsep"
+  },
+  "expected": "K-1 resume · tab sep"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "naïve café résumé"
+  },
+  "expected": "K-1 · na ve caf r sum"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "naïve café résumé"
+  },
+  "expected": "K-1 resume · na ve caf r sum"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "ΑΒΓ Greek ΣΊΣΥΦΟΣ"
+  },
+  "expected": "K-1 · Greek"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "ΑΒΓ Greek ΣΊΣΥΦΟΣ"
+  },
+  "expected": "K-1 resume · Greek"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx y"
+  },
+  "expected": "K-1 · xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx y"
+  },
+  "expected": "K-1 resume · xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "one two three four five six seven eight nine ten"
+  },
+  "expected": "K-1 · one two three four five six seven eight"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "one two three four five six seven eight nine ten"
+  },
+  "expected": "K-1 resume · one two three four five six seven eight"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "a.b,c:d(e)f/g_h-i"
+  },
+  "expected": "K-1 · a.b,c:d(e)f/g_h-i"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "a.b,c:d(e)f/g_h-i"
+  },
+  "expected": "K-1 resume · a.b,c:d(e)f/g_h-i"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": " nbsp "
+  },
+  "expected": "K-1 · nbsp"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": " nbsp "
+  },
+  "expected": "K-1 resume · nbsp"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "line1\nline2"
+  },
+  "expected": "K-1 · line1 line2"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "line1\nline2"
+  },
+  "expected": "K-1 resume · line1 line2"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "'"
+  },
+  "expected": "K-1"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "'"
+  },
+  "expected": "K-1 resume"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "''"
+  },
+  "expected": "K-1"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "''"
+  },
+  "expected": "K-1 resume"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "summary": "x y z x y z x y z x y z x y z x y z x y z x y z x y z x y z "
+  },
+  "expected": "K-1 · x y z x y z x y z x y z x y z x y z x y"
+ },
+ {
+  "fn": "sessionName",
+  "input": {
+   "key": "K-1",
+   "args": [
+    "--resume"
+   ],
+   "summary": "x y z x y z x y z x y z x y z x y z x y z x y z x y z x y z "
+  },
+  "expected": "K-1 resume · x y z x y z x y z x y z x y z x y z x y"
+ }
+]
