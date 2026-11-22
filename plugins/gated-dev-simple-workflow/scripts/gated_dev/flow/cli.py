@@ -12,7 +12,6 @@ usage errors print `{"outcome": "usage"}` and exit 2; other failures print `{"ou
 and exit 1.
 """
 
-import inspect
 import json
 import os
 import sys
@@ -173,11 +172,19 @@ class FlowCli:
         merged.update({name: opts[name] for name in self.DEFAULTS if name in opts})
         return merged
 
-    def _open_session(self, *, root: str, key: str, config: Mapping, summary: str, remote_control: bool, dry_run: bool) -> dict:
-        """The launcher call. Passes `summary` once `launch_ticket` takes it (a seam for the F3 parameter)."""
-        extras = {"summary": summary} if summary and "summary" in inspect.signature(TicketLauncher.launch_ticket).parameters else {}
+    def _open_session(self, *, root: str, key: str, config: Mapping, parent: str, summary: str, remote_control: bool, dry_run: bool) -> dict:
+        """The launcher call: the summary names the ticket's worktree, the parent resolves `baseFromParent`."""
         return TicketLauncher.launch_ticket(
-            root=root, key=key, config=config, remote_control=remote_control, dry_run=dry_run, env=self.env, run=self.run, log=self.err, **extras
+            root=root,
+            key=key,
+            config=config,
+            remote_control=remote_control,
+            dry_run=dry_run,
+            summary=summary or None,
+            parent=parent,
+            env=self.env,
+            run=self.run,
+            log=self.err,
         )
 
     def execute(self, opts: Mapping) -> int:
@@ -271,7 +278,7 @@ class FlowCli:
                 raise FlowError(f"{key} is already in the flow of {state.parent} ({state.tickets[key]['status']}); --retry only frees skipped or aborted tickets")
             if project.find_run(key=key, config=config) is not None:
                 raise FlowError(f"{key} already has a run; open it with /ticket {key} --resume")
-            return self._open_session(root=root, key=key, config=config, summary=summary, remote_control=opts["remoteControl"], dry_run=opts["dryRun"])
+            return self._open_session(root=root, key=key, config=config, parent=state.parent, summary=summary, remote_control=opts["remoteControl"], dry_run=opts["dryRun"])
 
         if opts["dryRun"]:
             state.load()  # reads only: a dry run takes no lock and writes nothing

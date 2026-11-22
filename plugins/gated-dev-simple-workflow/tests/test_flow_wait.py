@@ -359,7 +359,7 @@ class Cli:
         if launcher is not False:
             monkeypatch.setattr(TicketLauncher, "launch_ticket", staticmethod(launcher or self.launch))
 
-    def launch(self, *, root, key, config, remote_control=False, dry_run=False, env=None, run=None, log=None):
+    def launch(self, *, root, key, config, remote_control=False, dry_run=False, summary=None, parent=None, env=None, run=None, log=None):
         self.launches.append({"key": key, "dry_run": dry_run, "remote_control": remote_control})
         worktree = None if dry_run else {"path": str(self.repo.tmp / f"wt-{key}")}
         return {"key": key, "mode": "orca-worktree", "cwd": "/x", "title": f"{key}: s", "launched": not dry_run, "worktree": worktree}
@@ -437,16 +437,16 @@ def test_launch_dry_run_writes_nothing(repo, cli):
     assert not (repo.tmp / ".git" / "gated-dev").exists()
 
 
-def test_launch_passes_the_summary_once_the_launcher_takes_it(repo, monkeypatch):
+def test_launch_passes_the_summary_and_the_parent_to_the_launcher(repo, monkeypatch):
     seen = []
 
-    def with_summary(*, root, key, config, summary=None, remote_control=False, dry_run=False, env=None, run=None, log=None):
-        seen.append(summary)
+    def with_summary(*, root, key, config, summary=None, parent=None, remote_control=False, dry_run=False, env=None, run=None, log=None):
+        seen.append((summary, parent))
         return {"key": key, "mode": "main-checkout", "launched": True, "worktree": None}
 
     cli = Cli(repo, launcher=with_summary, monkeypatch=monkeypatch)
     assert cli.run("launch", "--parent", "PROJ-100", "PROJ-1", "--summary", "Add export")[0] == 0
-    assert seen == ["Add export"]
+    assert seen == [("Add export", "PROJ-100")]
     assert repo.saved().tickets["PROJ-1"]["worktree"] is None
 
 

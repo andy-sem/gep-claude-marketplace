@@ -26,9 +26,13 @@ class OrcaWorktrees:
             return False
         return True
 
-    def orca_worktree_args(self, *, key: str, title: str, base: str) -> list[str]:
-        """The arguments of `orca worktree create` for a new ticket."""
+    def orca_worktree_args(self, *, key: str, title: str, base: str, parent: str | None = None) -> list[str]:
+        """The arguments of `orca worktree create` for a new ticket.
+
+        `parent` is the launcher's Orca worktree id (ORCA_WORKTREE_ID): the new worktree becomes its child.
+        """
         slug = LaunchNaming.slugify(title)
+        lineage = ["--parent-worktree", f"worktree:{parent}"] if parent else []
         return [
             "worktree",
             "create",
@@ -42,6 +46,7 @@ class OrcaWorktrees:
             f"origin/{base}",
             "--setup",
             "skip",
+            *lineage,
             "--json",
         ]
 
@@ -52,13 +57,14 @@ class OrcaWorktrees:
         ticket: Mapping,
         config: Mapping,
         base: str,
+        parent: str | None = None,
         log: Callable[[str], None] = lambda line: None,
     ) -> dict:
         """Creates the ticket's worktree through Orca, copies the local Claude settings and the ticket file into it.
 
         Returns `{id, path, branch, selector}`.
         """
-        argv = self.orca_worktree_args(key=key, title=ticket["title"], base=base)
+        argv = self.orca_worktree_args(key=key, title=ticket["title"], base=base, parent=parent)
         stdout = self.run("orca", argv).stdout
         try:
             out = json.loads(stdout)
@@ -83,8 +89,9 @@ class OrcaWorktrees:
         if settings.exists():
             copy(settings, Path(wt_path) / ".claude" / "settings.local.json", "settings.local.json")
         # The session reads the ticket from its own checkout; the base branch may not carry it.
+        # A tracker ticket has no file yet: the session's intake writes it there.
         ticket_target = Path(wt_path) / config["ticketsDir"] / key / "ticket.md"
-        if not ticket_target.exists():
+        if ticket.get("file") and not ticket_target.exists():
             copy(ticket["file"], ticket_target, "ticket.md")
         return {
             "id": wt_id,

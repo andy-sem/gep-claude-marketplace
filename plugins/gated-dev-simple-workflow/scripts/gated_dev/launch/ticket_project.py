@@ -252,6 +252,29 @@ class TicketProject:
         return runs[0] if runs else None
 
 
+    def base_from_parent(self, *, parent: str | None, config: Mapping) -> str | None | bool:
+        """The base `tracker.baseFromParent` gives a tracker ticket, as the session's intake finds it.
+
+        None when the setting is unset or no branch matches (the normal base rules apply); False
+        when it cannot be decided here (no parent known, several matches: question H3, or the
+        lookup failed), so the session has to decide.
+        """
+        pattern = (config.get("tracker") or {}).get("baseFromParent")
+        if not pattern:
+            return None
+        if not parent or not LaunchNaming.is_safe_key(parent):
+            return False
+        try:
+            out = self.run("git", ["-C", str(self.root), "ls-remote", "--heads", "origin", pattern.replace("{parent}", parent)]).stdout
+        except LaunchError:
+            return False
+        heads = re.findall(r"\srefs/heads/(\S+)$", str(out), re.MULTILINE)
+        if not heads:
+            return None
+        if len(heads) > 1 or not LaunchNaming._SAFE_REF.fullmatch(heads[0]):
+            return False
+        return heads[0]
+
     def resolve_base(self, *, ticket: Mapping, config: Mapping) -> str:
         """The branch a new ticket starts from.
 
