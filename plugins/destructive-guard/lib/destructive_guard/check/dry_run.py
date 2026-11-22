@@ -1,23 +1,25 @@
-"""The gate's dry run: what would it do with a call, and what is the effective configuration."""
+"""The gate's dry run: what would the hook do with a call, and what is the effective configuration.
+
+A call check asks the hook's own decision
+function (so it contacts Jev and costs one request); there is no rule engine to consult.
+"""
 
 import os
-import re
 from collections.abc import Mapping
 from typing import Any
 
 from ..config import GateConfig
-from ..errors import ConfigError, RulesError
-from ..gate.gate import Gate
+from ..errors import ConfigError, JevConfigError
+from ..hook import GateHook
+from ..jev.config import JevConfig
+from ..session import SessionCheck
 
 
 class GateDryRun:
-    """Answers for one environment and working directory without running anything."""
+    """Answers for one environment without running anything."""
 
-    JEV_VARS = re.compile(r"^(GATE_JEV|TYPESAFE_API_KEY)")
-
-    def __init__(self, env: Mapping[str, str], cwd: str | None = None) -> None:
+    def __init__(self, env: Mapping[str, str]) -> None:
         self.env = env
-        self.cwd = cwd
 
     @staticmethod
     def _reject_constant(name: str) -> Any:
@@ -30,90 +32,58 @@ class GateDryRun:
 
     def _jev_summary(self) -> dict[str, Any]:
         """Jev settings for display; never includes the API key itself."""
-        toggle = self.env.get("GATE_JEV")
-        if not toggle or toggle.strip() in ("", "0"):
-            return {"enabled": False}
         try:
-            from ..jev.config import JevConfig
-
             cfg = JevConfig.read(self.env)
-            if not cfg:
-                return {"enabled": False}
-            rest = {k: v for k, v in cfg.items() if k not in ("apiKey", "prompt")}
-            for k in ("allowThreshold", "escalateThreshold"):
-                if k in rest:
-                    rest[k] = GateDryRun._num(rest[k])
-            prompt = cfg["prompt"]
-            return {
-                "enabled": True,
-                **rest,
-                "apiKey": "[set]" if cfg.get("apiKey") else "[missing]",
-                "prompt": (self.env.get("GATE_JEV_PROMPT") or "").strip() or "destructive",
-                "question": prompt["question"],
-                "ask": prompt["ask"],
-                "safe": prompt["safe"],
-            }
-        except Exception as e:  # noqa: BLE001
-            return {"enabled": True, "error": f"gate-config: {e}"}
+        except JevConfigError as e:
+            return {"apiKey": "[missing]" if e.kind == "noKey" else "[set]", "error": str(e)}
+        prompt = cfg["prompt"]
+        return {
+            "url": cfg["url"],
+            "model": cfg["model"],
+            "escalateThreshold": GateDryRun._num(cfg["escalateThreshold"]),
+            "timeoutMs": cfg["timeoutMs"],
+            "apiKey": "[set]",
+            "prompt": (self.env.get("GATE_JEV_PROMPT") or "").strip() or "destructive",
+            "question": prompt["question"],
+            "ask": prompt["ask"],
+        }
 
     def effective_config(self) -> dict[str, Any]:
-        """Effective configuration plus the loaded rule ids, or the config error the hook would answer with."""
+        """The gate settings, the Jev settings (key redacted) and the session warning, if any."""
         out: dict[str, Any] = {}
         try:
-            config = GateConfig.read_config(self.env)
-            out.update(config)
-            if config["enabled"]:
-                rules = GateConfig.build_rules(config)
-                out["ruleIds"] = [r["id"] for r in (rules.get("rules") or []) if r.get("id")]
-        except (ConfigError, RulesError) as e:
-            out["error"] = f"gate-config: {e}"
+            out.update(GateConfig.read(self.env))
+        except ConfigError as e:
+            out["error"] = str(e)
         out["jev"] = self._jev_summary()
+        out["sessionWarning"] = SessionCheck.message(self.env)
         return out
 
-    @staticmethod
-    def _answer(result: dict | None) -> dict[str, Any]:
-        """{decision, reason, source}: source is the rule id or the gate's own tag (script, unparsable,
-        gate-config, jev) taken from the reason prefix."""
-        if not result:
-            return {"decision": "none", "reason": None, "source": None}
-        reason = result["reason"]
-        i = reason.find(": ")
-        return {"decision": result["decision"], "reason": reason, "source": reason[:i] if i > 0 else reason}
-
-    def check_call(self, call: Mapping[str, Any], *, jev: bool = False) -> dict[str, Any]:
-        """The gate's answer for one call. Never executes it."""
-        bash = call["mode"] == "bash"
-        if bash:
-            hook_input: dict[str, Any] = {"tool_name": "Bash", "tool_input": {"command": call["command"]}}
+    def check_call(self, call: Mapping[str, Any]) -> dict[str, Any]:
+        """The hook's answer for one call: {tool, command|input, decision, reason, warning, risk}."""
+        if call["mode"] == "bash":
+            hook_call: dict[str, Any] = {"tool": "Bash", "command": call["command"]}
             target: dict[str, Any] = {"tool": "Bash", "command": call["command"]}
         else:
-            hook_input = {"tool_name": call["tool"], "tool_input": call["input"]}
+            hook_call = {"tool": call["tool"], "input": call["input"]}
             target = {"tool": call["tool"], "input": call["input"]}
-        if self.cwd:
-            hook_input["cwd"] = self.cwd
-        gate_env = self.env if jev else {k: v for k, v in self.env.items() if not GateDryRun.JEV_VARS.match(k)}
-
         try:
-            config = GateConfig.read_config(self.env, cwd=self.cwd or os.getcwd())
+            gate = GateConfig.read(self.env, cwd=os.getcwd())
         except ConfigError as e:
-            return {**target, **GateDryRun._answer({"decision": "ask", "reason": f"gate-config: {e}"}), "rule": None}
-        if not config["enabled"]:
-            return {**target, "decision": "none", "reason": "gate disabled (GATE_ENABLED=0)", "source": None, "rule": None}
+            return {**target, "decision": "none", "reason": None, "warning": f"misconfigured: {e}", "risk": None}
+        if not gate["enabled"]:
+            return {**target, "decision": "none", "reason": "gate disabled (GATE_ENABLED=0)", "warning": None, "risk": None}
         try:
-            rules = GateConfig.build_rules(config)
-        except (ConfigError, RulesError) as e:
-            return {**target, **GateDryRun._answer({"decision": "ask", "reason": f"gate-config: {e}"}), "rule": None}
-        trace: dict = {}
-        result = Gate(rules, gate_env, self.cwd).gate(hook_input, strict=config["strict"], trace=trace)
-        jev_info = self._jev_summary()
-        in_scope = (
-            ("bash" if bash else "mcp") in jev_info["scope"]
-            if jev_info["enabled"] and not jev_info.get("error")
-            else False
-        )
+            cfg = JevConfig.read(self.env)
+        except JevConfigError as e:
+            return {**target, "decision": "none", "reason": None, "warning": f"misconfigured: {e}", "risk": None}
+        record: dict[str, Any] = {}
+        out = GateHook.decide(hook_call, cfg, record)
         return {
             **target,
-            **GateDryRun._answer(result),
-            "rule": GateDryRun._answer(trace["rule"]) if trace.get("rule") else None,
-            "jev": "consulted" if jev else "would be consulted (pass --jev)" if in_scope else "off",
+            "decision": out.decision,
+            "reason": out.reason,
+            "warning": out.message(),
+            "risk": record.get("risk"),
+            "threshold": cfg["escalateThreshold"],
         }

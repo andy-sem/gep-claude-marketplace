@@ -29,8 +29,6 @@ class CheckRunner:
     def check_call(cls, impl: Impl, call: dict, env: Mapping[str, str] = {}, cwd: Path | None = None) -> dict:
         """`call` is {"bash": cmd} or {"mcp": tool, "input": {...}}; returns the parsed --json result."""
         args = ["--json"]
-        if cwd is not None:
-            args += ["--cwd", str(cwd)]
         if "bash" in call:
             args += ["--", call["bash"]]
         else:

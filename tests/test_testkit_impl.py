@@ -69,7 +69,6 @@ def test_empty_env_var_is_ignored(tmp_path):
 def test_impl_interpreter_fields():
     py = Impl.select("destructive-guard", {})
     assert py.interpreter_var == "GATE_INFRA_PYTHON"
-    assert py.unavailable_reason == "unparsable: python unavailable"
     assert py.check_invocation("--config") == f'python3 "{DG}/lib/check.py" --config'
 
 

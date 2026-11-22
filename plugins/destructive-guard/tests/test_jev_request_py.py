@@ -1,8 +1,7 @@
-"""Jev request and Jev layer, in-process (Python twin of test_jev_http.py).
+"""Jev request and the hook's decision, in-process (Python twin of test_jev_http.py).
 
-Drives `JevClient.ask_jev` / `run_jev` from destructive_guard.jev.decider against the local JevMock server (real
-HTTP) or a fake opener. Every row of test_jev_http.py has its counterpart here; the rule result and the
-call are built by hand as the hook would build them.
+Drives `JevClient.ask_jev` and `GateHook.decide` against the local JevMock server (real HTTP) or a fake
+opener. The call is built by hand as the hook would build it.
 """
 
 import json
@@ -11,9 +10,9 @@ import urllib.error
 
 import pytest
 
+from destructive_guard.hook import GateHook
 from destructive_guard.jev.client import JevClient
 from destructive_guard.jev.config import JevConfig
-from destructive_guard.jev.decider import JevDecider
 from destructive_guard.jev.prompt import JevPrompt
 from destructive_guard.jev.request import JevRequest
 from testkit.jev_mock import JevMock
@@ -26,12 +25,8 @@ SAFE = JevMock.probs(0, 1, 0, 0)
 RISKY = JevMock.probs(0, 0, 0, 1)
 READ_ONLY = JevMock.probs(0.01, 0.97, 0.01, 0.01)
 
-TF_RULE = {"decision": "ask", "reason": "terraform: apply"}
-DB_RULE = {"decision": "ask", "reason": "dbhost-mcp: execute_sql"}
-
-
-def bash(command, scripts=None):
-    return {"tool": "Bash", "command": command, "scripts": scripts or []}
+def bash(command):
+    return {"tool": "Bash", "command": command}
 
 
 def mcp(tool, tool_input=None):
@@ -40,28 +35,22 @@ def mcp(tool, tool_input=None):
 
 @pytest.fixture
 def jev_env(jev, tmp_path):
-    log = tmp_path / "audit.jsonl"
     return {
-        "GATE_JEV": "1",
         "TYPESAFE_API_KEY": "key-123",
         "GATE_JEV_URL": jev.url,
         "GATE_JEV_PROMPT": "cloud-change",
-        "GATE_JEV_LOG": str(log),
         "GATE_JEV_TIMEOUT_MS": "5000",
     }
 
 
 @pytest.fixture
 def go(jev, jev_env, tmp_path):
-    """run_jev(call, rule_result, **env) -> (final, audit records)."""
-    log = tmp_path / "audit.jsonl"
+    """decide(call, **env) -> (HookOut, the record GATE_LOG would get)."""
 
-    def run(call, rule_result=None, **env):
-        log.unlink(missing_ok=True)
+    def run(call, **env):
         cfg = JevConfig.read({**jev_env, **env}, cwd=tmp_path)
-        final = JevDecider.run_jev(call, rule_result, cfg)
-        records = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
-        return final, records
+        record: dict = {}
+        return GateHook.decide(call, cfg, record), record
 
     return run
 
@@ -100,66 +89,65 @@ def test_request_shape(jev, jev_env, tmp_path):
 
 def test_error_has_latency(jev, go):
     jev.answer(status=500)
-    _, [record] = go(bash("ls"))
-    assert record["outcome"] == "fallback: http 500"
+    out, record = go(bash("ls"))
+    assert out.reason == "jev-unavailable: http 500"
     assert isinstance(record["latencyMs"], int)
 
 
 def test_usage_null_when_absent(jev, go):
     jev.answer(kind="raw", body={"answers": {"cloud_change": {"type": "choice", "probabilities": READ_ONLY}}})
-    _, [record] = go(bash("ls"))
+    _, record = go(bash("ls"))
     assert record["probabilities"] == READ_ONLY
     assert record["usage"] is None
 
 
 def test_non_retryable_http_error(jev, go):
     jev.answer(status=401)
-    _, [record] = go(bash("ls"))
-    assert record["outcome"] == "fallback: http 401"
+    out, _ = go(bash("ls"))
+    assert out.reason == "jev-unavailable: http 401"
     assert jev.hits == 1
 
 
 def test_retries_429_then_succeeds(jev, go):
-    p = JevMock.probs(0.97, 0.01, 0.01, 0.01)
-    jev.sequence({"status": 429, "retry_after": "0"}, {"probs": p})
-    final, [record] = go(bash("terraform apply"), TF_RULE)
+    jev.sequence({"status": 429, "retry_after": "0"}, {"probs": SAFE})
+    out, record = go(bash("terraform apply"))
     assert jev.hits == 2
-    assert record["probabilities"] == p
-    assert record["decision"] == "pass"
-    assert final is None  # the ok answer lifts the tf rule ask
+    assert record["probabilities"] == SAFE
+    assert out.decision == "none"
+    assert out.warning is None
 
 
 def test_retry_after_over_budget_gives_up(jev, go):
     jev.answer(status=529, retry_after="10")
-    _, [record] = go(bash("ls"), GATE_JEV_TIMEOUT_MS="200")
-    assert record["outcome"] == "fallback: http 529"
+    out, _ = go(bash("ls"), GATE_JEV_TIMEOUT_MS="200")
+    assert out.reason == "jev-unavailable: http 529"
     assert jev.hits == 1
 
 
 def test_hang_times_out(jev, go):
     jev.answer(kind="hang")
     started = time.monotonic()
-    _, [record] = go(bash("ls"), GATE_JEV_TIMEOUT_MS="50")
-    assert record["outcome"] == "fallback: timeout"
+    out, _ = go(bash("ls"), GATE_JEV_TIMEOUT_MS="50")
+    assert out.reason == "jev-unavailable: timeout after 50 ms"
     assert time.monotonic() - started < 5
 
 
 def test_network_failure(go):
-    _, [record] = go(bash("ls"), GATE_JEV_URL=DOWN)
-    assert record["outcome"] == "fallback: network"
+    out, _ = go(bash("ls"), GATE_JEV_URL=DOWN)
+    assert out.reason == "jev-unavailable: network error"
 
 
 def test_malformed_bodies(jev, go):
     jev.answer(kind="malformed")
-    assert go(bash("ls"))[1][0]["outcome"] == "fallback: malformed"
+    assert go(bash("ls"))[0].reason == "jev-unavailable: malformed answer"
     jev.answer(kind="raw", body={"answers": {}})
-    assert go(bash("ls"))[1][0]["outcome"] == "fallback: malformed"
+    assert go(bash("ls"))[0].reason == "jev-unavailable: malformed answer"
 
 
 def test_malformed_answer_shapes_never_crash(jev, go):
     for body in [[], {"answers": []}, {"answers": {"cloud_change": {"type": "choice"}}}, {"answers": {"cloud_change": 3}}]:
         jev.answer(kind="raw", body=body)
-        assert go(bash("ls"))[1][0]["outcome"] == "fallback: malformed", body
+        assert go(bash("ls"))[0].reason == "jev-unavailable: malformed answer", body
 
 
 def test_retry_budget_covers_sleeps():
@@ -178,7 +166,7 @@ def test_retry_budget_covers_sleeps():
         raise urllib.error.HTTPError(req.full_url, 429, "busy", {"retry-after": "2"}, None)
 
     cfg = {"apiKey": "k", "url": "https://x.test/", "model": "m", "timeoutMs": 5000, "prompt": JevPrompt.builtin_prompt("cloud-change")}
-    r = JevClient(sleep=sleep).ask_jev({"tool": "Bash", "command": "ls", "scripts": [], "notes": []}, cfg, opener=opener, clock=clock)
+    r = JevClient(sleep=sleep).ask_jev({"tool": "Bash", "command": "ls", "notes": []}, cfg, opener=opener, clock=clock)
     assert r["error"] == "http 429"
     assert slept == [2.0, 2.0]  # a third wait of 2 s would end past the 5 s budget
     assert r["latencyMs"] == 4000
@@ -203,7 +191,7 @@ def test_ask_jev_never_raises(error):
         raise error
 
     cfg = {"apiKey": "k", "url": "https://x.test/", "model": "m", "timeoutMs": 500, "prompt": JevPrompt.builtin_prompt("cloud-change")}
-    r = JevClient().ask_jev({"tool": "Bash", "command": "ls", "scripts": [], "notes": []}, cfg, opener=opener)
+    r = JevClient().ask_jev({"tool": "Bash", "command": "ls", "notes": []}, cfg, opener=opener)
     assert set(r) == {"error", "latencyMs"}
     assert r["error"] in {"network", "timeout", "http 500"}
 
@@ -218,7 +206,7 @@ def test_retry_delay_forms():
 
 
 # ---------------------------------------------------------------------------
-# run_jev
+# GateHook.decide
 # ---------------------------------------------------------------------------
 
 
@@ -227,63 +215,48 @@ def test_retry_delay_forms():
     [({"status": 500}, {}), ({}, {"GATE_JEV_URL": DOWN})],
     ids=["http-500", "network"],
 )
-def test_failures_keep_rule_result_for_bash_and_mcp(jev, go, answer, env):
+def test_failures_ask_for_bash_and_mcp(jev, go, answer, env):
     jev.answer(SAFE, **answer)
-    for call, rule in [(bash("terraform apply"), TF_RULE), (mcp(DBHOST_SQL, {"query": "SELECT 1"}), DB_RULE)]:
-        final, [record] = go(call, rule, **env)
-        assert final == rule
-        assert record["outcome"].startswith("fallback: ")
-    for call in [bash("git status"), mcp(ISSUE_EDIT, {"issueIdOrKey": "PROJ-1"})]:
-        final, [record] = go(call, None, **env)
-        assert final is None
-        assert record["outcome"].startswith("fallback: ")
-
-
-def test_can_lift_0_mcp(jev, go):
-    jev.answer(SAFE)
-    assert go(mcp(DBHOST_SQL, {"a": 1}), DB_RULE, GATE_JEV_CAN_LIFT="0")[0] == DB_RULE
-    assert go(mcp(ISSUE_EDIT, {"a": 1}), None, GATE_JEV_CAN_LIFT="0")[0] is None
-    assert go(mcp(DBHOST_SQL, {"a": 1}), DB_RULE)[0] is None
-    jev.answer(RISKY)
-    added, _ = go(mcp(ISSUE_EDIT, {"a": 1}), None, GATE_JEV_CAN_LIFT="0")
-    assert added["decision"] == "ask"
-    assert added["reason"].startswith("jev: ")
+    for call in [bash("git status"), mcp(DBHOST_SQL, {"query": "SELECT 1"}), mcp(ISSUE_EDIT, {"issueIdOrKey": "PROJ-1"})]:
+        out, _ = go(call, **env)
+        assert out.decision == "ask"
+        assert out.reason.startswith("jev-unavailable: ")
+        assert out.warning.jev_unavailable
 
 
 def test_env_reference_never_sent(jev, go):
-    rule = {"decision": "ask", "reason": "env: cat .env"}
     jev.answer(SAFE)
-    final, [record] = go(bash("cat .env"), rule)
+    out, record = go(bash("cat .env"))
     assert jev.hits == 0
-    assert final == rule
-    assert record["outcome"] == "skipped: .env reference"
+    assert out.decision == "none"
+    assert out.warning == "envReference"
     assert record["command"] is None
+    out, _ = go(mcp(DBHOST_SQL, {"path": "apps/web/.env.local"}))
+    assert (out.decision, out.warning, jev.hits) == ("none", "envReference", 0)
 
 
-def test_no_rule_opinion_asks_for_bash_and_mcp(jev, go):
+def test_risky_answer_asks_for_bash_and_mcp(jev, go):
     jev.answer(JevMock.probs(0, 0.05, 0.05, 0.9))
     for call in [bash("rm -rf x"), mcp("mcp__x__y")]:
-        final, _ = go(call, None)
-        assert final == {"decision": "ask", "reason": "jev: destructive p=0.90 risk=0.95"}
+        out, _ = go(call)
+        assert (out.decision, out.reason) == ("ask", "jev: destructive p=0.90 risk=0.95")
 
 
-def test_undecided_keeps_rule_result(jev, go):
+def test_uncertain_answer_gives_no_decision(jev, go):
     jev.answer(JevMock.probs(0.04, 0.9, 0.04, 0.02))
-    final, [record] = go(bash("terraform apply"), TF_RULE)
+    out, record = go(bash("terraform apply"))
     assert jev.hits == 1
-    assert final == TF_RULE
-    assert record["jev"] is None
-    assert record["decision"] == "ask"
+    assert (out.decision, out.warning) == ("none", None)
+    assert record["risk"] == pytest.approx(0.06)
 
 
-def test_bash_payload_exact_scripts_and_no_notes(jev, go):
+def test_bash_payload_is_the_redacted_text_only(jev, go):
     jev.answer(READ_ONLY)
-    scripts = [{"path": "infra/cloud/apply.sh", "content": "terraform apply\nTOKEN=abcdef\n", "size": 29, "truncated": False}]
-    go(bash("bash infra/cloud/apply.sh --apply", scripts))
+    go(bash("bash infra/cloud/apply.sh --apply TOKEN=abcdef"))
     state = jev.bodies[0]["state"]
     assert state["tool"] == "Bash"
-    assert state["command"] == "bash infra/cloud/apply.sh --apply"
-    assert state["scripts"] == [{"path": "infra/cloud/apply.sh", "content": "terraform apply\nTOKEN=[REDACTED]\n"}]
+    assert state["command"] == "bash infra/cloud/apply.sh --apply TOKEN=[REDACTED]"
+    assert "scripts" not in state
     assert state["notes"] == []
 
 
@@ -301,42 +274,3 @@ def test_mcp_payload_input_and_cut_note(jev, go):
     assert len(state["input"]) == 8000
     full = len(json.dumps(text, separators=(",", ":")))
     assert state["notes"] == [f"input cut to 8000 of {full} characters"]
-
-
-# ---------------------------------------------------------------------------
-# audit log
-# ---------------------------------------------------------------------------
-
-
-def test_audit_log_redacted_records(jev, jev_env, tmp_path):
-    log = tmp_path / "audit.jsonl"
-    cfg = JevConfig.read(jev_env, cwd=tmp_path)
-    jev.answer(JevMock.probs(0.01, 0.98, 0.005, 0.005), usage={"input_tokens": 1000})
-    JevDecider.run_jev(bash("TOPSECRET_X=supersecret123 node a.mjs", [{"path": "a.mjs", "content": "x"}]), None, cfg)
-    JevDecider.run_jev(bash("cat .env"), None, cfg)
-    JevDecider.run_jev(mcp(DBHOST_SQL, {"password": "supersecret123", "q": 1}), DB_RULE, cfg)
-    jev.answer(status=401)
-    JevDecider.run_jev(bash("terraform apply"), TF_RULE, cfg)
-    text = log.read_text()
-    assert "supersecret123" not in text, text
-    lines = [json.loads(line) for line in text.strip().split("\n")]
-    assert len(lines) == 4
-    assert lines[0]["tool"] == "Bash"
-    assert lines[0]["command"] == "TOPSECRET_X=[REDACTED] node a.mjs"
-    assert lines[0]["scripts"] == ["a.mjs"]
-    assert lines[0]["decision"] == "pass"
-    assert lines[0]["rule"] is None
-    assert lines[0]["usage"] == {"input_tokens": 1000}
-    assert isinstance(lines[0]["latencyMs"], int)
-    assert lines[0]["probabilities"]["read_only"] == 0.98
-    assert lines[0]["ts"].endswith("Z")
-    assert lines[1]["command"] is None
-    assert lines[1]["outcome"].startswith("skipped")
-    assert lines[1]["latencyMs"] == 0
-    assert lines[2]["tool"] == DBHOST_SQL
-    assert lines[2]["input"] == '{"password":"[REDACTED]","q":1}'
-    assert lines[2]["rule"].startswith("dbhost-mcp:")
-    assert lines[2]["decision"] == "pass"
-    assert lines[3]["outcome"] == "fallback: http 401"
-    assert lines[3]["rule"].startswith("terraform:")
-    assert isinstance(lines[3]["latencyMs"], int)

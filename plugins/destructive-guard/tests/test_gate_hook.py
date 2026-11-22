@@ -1,4 +1,4 @@
-"""Contract: hooks/gate.sh without Jev (port of gate-hook.test.mjs, non-Jev part)."""
+"""Contract: hooks/gate.sh with the Jev-only hook against a local Jev mock."""
 
 import json
 import re
@@ -7,28 +7,27 @@ import pytest
 
 from testkit import DG, REPO
 from testkit.hook import HookRunner
-from testkit.projects import TempProject
+from testkit.jev_mock import JevMock
 
 HERE = DG / "tests"
+RISKY = JevMock.probs(0.1, 0.1, 0.6, 0.2)
+SAFE = JevMock.probs(0.01, 0.97, 0.01, 0.01)
+ASK_PREFIX = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":'
 
 
 @pytest.fixture
-def run(impl, tf_rules):
-    def go(stdin, env=None):
-        return HookRunner.run(impl, stdin, {"GATE_RULES": str(tf_rules), "CLAUDE_PROJECT_DIR": str(REPO)}, env or {})
+def run(impl, jev):
+    """Runs the hook against the mock; `answer` is a probabilities dict or {"kind": ..., "status": ...}."""
+
+    def go(stdin, answer=SAFE, env=None, cwd=None):
+        if "kind" in answer or "status" in answer:
+            jev.answer(**answer)
+        else:
+            jev.answer(answer)
+        key = {"TYPESAFE_API_KEY": "test-key", "GATE_JEV_URL": jev.url, "GATE_JEV_PROMPT": "cloud-change"}
+        return HookRunner.run(impl, stdin, key, env or {}, cwd=cwd)
 
     return go
-
-
-@pytest.fixture
-def run_shipped(run, shipped_rules):
-    return lambda command, cwd: run(HookRunner.bash_input(command, cwd), {"GATE_RULES": str(shipped_rules)})
-
-
-def _ask(stdout: str) -> dict:
-    o = HookRunner.decision(stdout)
-    assert o["permissionDecision"] == "ask"
-    return o
 
 
 def _fake_engine(tmp_path, name, body):
@@ -38,93 +37,72 @@ def _fake_engine(tmp_path, name, body):
     return str(p)
 
 
-def test_gated_command_asks(run):
-    r = run(HookRunner.bash_input("terraform apply", HERE))
+def test_risky_call_asks_with_jev_reason(run):
+    r = run(HookRunner.bash_input("terraform apply", HERE), RISKY)
     assert r.status == 0
-    assert _ask(r.stdout)["permissionDecisionReason"].startswith("tf:")
-
-
-def test_git_status_passes(run):
-    r = run(HookRunner.bash_input("git status", HERE))
-    assert r.status == 0
-    assert r.stdout == ""
-
-
-def test_non_json_stdin_asks_unparsable(run):
-    r = run("not json")
-    assert r.status == 0
-    assert _ask(r.stdout)["permissionDecisionReason"].startswith("unparsable")
-
-
-def test_invalid_rules_file_asks_gate_config(run, bad_rules):
-    r = run(HookRunner.bash_input("git status", HERE), {"GATE_RULES": str(bad_rules)})
-    assert r.status == 0
-    assert _ask(r.stdout)["permissionDecisionReason"].startswith("gate-config")
-
-
-def test_interpreter_unavailable_asks(run, impl):
-    r = run(HookRunner.bash_input("git status", HERE), {impl.interpreter_var: "/nonexistent"})
-    assert r.status == 0
-    assert _ask(r.stdout)["permissionDecisionReason"] == impl.unavailable_reason
-
-
-def test_engine_partial_json_then_nonzero_gives_fixed_ask(run, impl, tmp_path):
-    fake = _fake_engine(tmp_path, "partial.sh", """printf '{"hookSpecificOutput":{"permi'; exit 4""")
-    r = run(HookRunner.bash_input("git status", HERE), {impl.interpreter_var: fake})
-    assert _ask(r.stdout)["permissionDecisionReason"] == "gate-config: engine failed"
-
-
-def test_engine_exit_0_without_running_asks(run, impl, tmp_path):
-    fake = _fake_engine(tmp_path, "noop.sh", "exit 0")
-    r = run(HookRunner.bash_input("git status", HERE), {impl.interpreter_var: fake})
-    assert _ask(r.stdout)["permissionDecisionReason"] == "gate-config: engine failed"
-
-
-def test_empty_stdin_asks(run):
-    _ask(run("").stdout)
-
-
-def test_script_scan_terraform_script_asks(run_shipped, tmp_path):
-    root = TempProject.temp_project(tmp_path, {"infra/cloud/apply.sh": "#!/bin/bash\nterraform -chdir=environments/dev apply dev.tfplan\n"})
-    o = _ask(run_shipped("bash infra/cloud/apply.sh --apply", root).stdout)
-    assert o["permissionDecisionReason"] == "script: infra/cloud/apply.sh runs terraform"
-
-
-def test_script_scan_provision_script_importing_cloudctl_asks(run_shipped, tmp_path):
-    o = _ask(run_shipped("node scripts/provision-cloud-app-dev.mjs", TempProject.provision_project(tmp_path)).stdout)
-    assert re.match(r"^script: scripts/provision-cloud-app-dev\.mjs ", o["permissionDecisionReason"])
-
-
-def test_script_scan_cloudflare_only_script_passes(run_shipped, tmp_path):
-    root = TempProject.temp_project(
-        tmp_path,
-        {"scripts/cf.mjs": 'await fetch("https://api.cloudflare.com/client/v4/x")\nspawn("wrangler", ["deploy"])\n'},
+    assert r.stdout == (
+        ASK_PREFIX + '"jev: cloud_or_data_change p=0.60 risk=0.80"}}'
     )
-    assert run_shipped("node scripts/cf.mjs", root).stdout == ""
 
 
-@pytest.mark.parametrize(
-    "command",
-    ["terraform -chdir=infra/cloud/environments/dev apply dev.tfplan", "terraform destroy", "tofu import a b"],
-)
-def test_terraform_rule_asks(run_shipped, command):
-    assert _ask(run_shipped(command, REPO).stdout)["permissionDecisionReason"].startswith("terraform:")
+def test_safe_call_gives_no_output(run):
+    r = run(HookRunner.bash_input("git status", HERE), SAFE)
+    assert (r.status, r.stdout) == (0, "")
 
 
-@pytest.mark.parametrize(
-    "command",
-    [
-        "terraform plan",
-        "terraform fmt",
-        "terraform validate",
-        "cloudctl sql instances create --help",
-        "pnpm test:hooks",
-        "node scripts/deploy-cloud-app-dev.test.mjs",
-        "git push --force",
-    ],
-)
-def test_fallback_passes(run_shipped, command):
-    assert run_shipped(command, REPO).stdout == ""
+def test_jev_down_asks_with_a_warning(run):
+    r = run(HookRunner.bash_input("git status", HERE), {"status": 503})
+    assert r.stdout == (
+        ASK_PREFIX + '"jev-unavailable: http 503"},"systemMessage":"destructive-guard: Jev returned http 503; '
+        'asking you instead. GATE_ENABLED=0 turns the gate off."}'
+    )
+
+
+def test_env_call_is_not_sent_and_warns(run, jev):
+    r = run(HookRunner.bash_input("cat .env", HERE), RISKY)
+    assert json.loads(r.stdout) == {
+        "systemMessage": "destructive-guard: call mentions a .env file and was not sent to Jev; Claude Code's permissions apply"
+    }
+    assert jev.hits == 0
+
+
+def test_no_key_is_silent_per_call(impl):
+    r = HookRunner.run(impl, HookRunner.bash_input("rm -rf /", HERE))
+    assert (r.status, r.stdout) == (0, "")
+
+
+@pytest.mark.parametrize("stdin", ["not json", "", "null", '"x"', '{"tool_input": {}}', '{"tool_name": 3}'])
+def test_unreadable_input_asks_even_without_a_key(impl, stdin):
+    r = HookRunner.run(impl, stdin)
+    out = json.loads(r.stdout)
+    assert out["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert out["hookSpecificOutput"]["permissionDecisionReason"] == "plugin-fault: bad hook input"
+    assert "could not read the hook input" in out["systemMessage"]
+
+
+@pytest.mark.parametrize("stdin", ['{"tool_name":"Read","tool_input":{"file_path":"/x"}}', '{"tool_name":"Bash","tool_input":{}}'])
+def test_calls_that_need_no_decision_give_no_output(run, jev, stdin):
+    assert run(stdin, RISKY).stdout == ""
+    assert jev.hits == 0
+
+
+def test_interpreter_unavailable_asks(impl):
+    r = HookRunner.run(impl, HookRunner.bash_input("git status", HERE), {impl.interpreter_var: "/nonexistent"})
+    out = json.loads(r.stdout)
+    assert out["hookSpecificOutput"]["permissionDecisionReason"] == "plugin-fault: no Python >= 3.14 found (set GATE_INFRA_PYTHON)"
+    assert out["systemMessage"].startswith("destructive-guard: no Python >= 3.14 found")
+
+
+def test_engine_partial_json_then_nonzero_gives_fixed_ask(impl, tmp_path):
+    fake = _fake_engine(tmp_path, "partial.sh", """printf '{"hookSpecificOutput":{"permi'; exit 4""")
+    r = HookRunner.run(impl, HookRunner.bash_input("git status", HERE), {impl.interpreter_var: fake})
+    out = json.loads(r.stdout)
+    assert out["hookSpecificOutput"]["permissionDecisionReason"] == "plugin-fault: internal error: engine exit 4"
+
+
+def test_engine_exit_0_without_output_is_no_decision(impl, tmp_path):
+    fake = _fake_engine(tmp_path, "noop.sh", "exit 0")
+    assert HookRunner.run(impl, HookRunner.bash_input("git status", HERE), {impl.interpreter_var: fake}).stdout == ""
 
 
 def test_hook_registered_for_bash_and_mcp_only():
@@ -138,19 +116,10 @@ def test_hook_registered_for_bash_and_mcp_only():
     )
 
 
-# --- review focus: exact bytes and non-UTF-8 input ---------------------------
-
-
-def test_ask_output_exact_bytes(impl, tmp_path):
-    engine = HookRunner.run(impl, HookRunner.bash_input("git push -f", tmp_path), cwd=tmp_path)
-    assert engine.status == 0
-    assert engine.stdout == (
-        '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask",'
-        '"permissionDecisionReason":"git-push-force: gated invocation"}}'
-    )
-    assert engine.stdout == HookRunner.ASK_TEMPLATE.format("git-push-force: gated invocation")
-    wrapper = HookRunner.run(impl, HookRunner.bash_input("git status", tmp_path), {impl.interpreter_var: "/nonexistent"}, cwd=tmp_path)
-    assert wrapper.stdout == HookRunner.ASK_TEMPLATE.format(impl.unavailable_reason)
+def test_session_start_registered():
+    hooks = json.loads((DG / "hooks" / "hooks.json").read_text())["hooks"]
+    [entry] = hooks["SessionStart"]
+    assert re.search(r"\$\{CLAUDE_PLUGIN_ROOT\}/hooks/session-start\.sh", entry["hooks"][0]["command"])
 
 
 def _raw_bash(command: bytes, cwd) -> bytes:
@@ -158,9 +127,12 @@ def _raw_bash(command: bytes, cwd) -> bytes:
     return head.replace(b"@@", command)
 
 
-def test_non_utf8_stdin_decides_normally(impl, tmp_path):
-    r = HookRunner.run(impl, _raw_bash(b"rm -rf \xff", tmp_path), cwd=tmp_path)
-    assert r.stdout == HookRunner.ASK_TEMPLATE.format("rm-recursive-force: gated invocation")
-    assert HookRunner.run(impl, _raw_bash(b"ls \xff", tmp_path), cwd=tmp_path).stdout == ""
-    r = HookRunner.run(impl, _raw_bash("rm -rf Für".encode(), tmp_path), cwd=tmp_path)
-    assert HookRunner.decision(r.stdout)["permissionDecision"] == "ask"
+def test_non_utf8_stdin_is_decided_normally(run, jev, tmp_path):
+    r = run(_raw_bash(b"rm -rf \xff", tmp_path), RISKY)
+    assert json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert jev.bodies[0]["state"]["command"] == "rm -rf �"
+    assert run(_raw_bash(b"ls \xff", tmp_path), SAFE).stdout == ""
+
+
+def test_hook_does_not_depend_on_the_working_directory(run):
+    assert run(HookRunner.bash_input("terraform apply", REPO), RISKY, cwd=HERE).stdout.startswith(ASK_PREFIX)

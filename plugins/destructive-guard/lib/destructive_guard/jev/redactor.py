@@ -87,11 +87,6 @@ class Redactor:
         )
 
     @classmethod
-    def redact_script(cls, text: str) -> str:
-        """Script and file contents: `.env` lines removed, then the shared rules. The call is never skipped."""
-        return cls._redact_text(cls._drop_env_lines(text))
-
-    @classmethod
     def _redact_sql_literals(cls, sql: str) -> str:
         """Single-quoted literals (with '' escapes) and dollar-quoted bodies hold data, not structure:
         Jev needs the statement kind, not the values."""
