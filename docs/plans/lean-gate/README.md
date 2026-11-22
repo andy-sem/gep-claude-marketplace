@@ -1,10 +1,16 @@
 # Lean gate: `destructive-guard` 1.0, "Jev decides; if Jev cannot, a person does"
 
-> **Status: detailed plan.** The first version of this plan (2026-11-21, commit
+> **Status: detailed plan, decisions answered.** The first version of this plan (2026-11-21, commit
 > `78ee774`, deleted in `e64fcdb`, restored here) was a proposal: only L0's Lean
-> model was built, L1–L5 never started because D1, D2 and D4 were never answered.
-> This version keeps that design and adds the implementation detail. **L1 does
-> not start until D1, D2 and D4 are confirmed** (see [Decisions](#decisions)).
+> model was built, L1–L5 never started because the decisions were never answered.
+> This version keeps that design and adds the implementation detail. **D1, D2, D4
+> and D12 were answered on 2026-11-22, so L1 is no longer blocked by decisions**
+> (see [Decisions](#decisions)).
+>
+> **Changed 2026-11-22 (D1, D2, D4, D12):** D1 and D2 confirmed as proposed. D4:
+> scripts a command runs stay sent to Jev, so the shell parser and the script
+> scanner stay. D12: bad hook input, no Python and internal errors ask, with the
+> error as the reason, instead of giving no decision.
 >
 > **Changed 2026-11-22 (D11):** when Jev is configured but does not answer
 > (timeout, HTTP error, network error, malformed answer), the hook warns **and
@@ -20,7 +26,7 @@ README (goal, decisions, risks) before starting any package.
 | --- | --- | --- | --- |
 | 1 | [L0: Lean model + Claude Code assumptions](L0-lean-model.md) | – | – |
 | 2 | [LJ0: tests against the real Jev, CI job](LJ0-live-jev-tests.md) | – (parallel to L0) | – |
-| 3 | [L1: Jev-only hook, session warning, conformance + live hook tests](L1-jev-only-hook.md) | L0, LJ0 | D1, D2, D4, D12 |
+| 3 | [L1: Jev-only hook, session warning, conformance + live hook tests](L1-jev-only-hook.md) | L0, LJ0 | – |
 | 4 | [L2: delete the rule gate](L2-delete-rule-gate.md) | L1 | – |
 | 5 | [L3: model ↔ code traceability](L3-traceability.md) | L0, L1 | – |
 | 6 | [L4: `check` skill on Jev](L4-check-skill.md) | L1, L2 | – |
@@ -44,14 +50,17 @@ The gate behaves exactly like the Lean model in
    (`systemMessage`) **and** `ask`, so a person decides the call (D11).
 3. Jev misconfigured (no key, bad URL or prompt): no decision, silent per call,
    one warning at session start (D3).
-4. A call that mentions `.env`, unreadable hook input, no suitable Python, an
-   internal error: no decision plus a warning. Claude Code's own permissions
-   apply (D12 is open on whether these should ask too).
+4. A call that mentions `.env`: not sent to Jev, no decision, plus a warning.
+   Claude Code's own permissions apply.
+5. A plugin fault (unreadable hook input, no suitable Python, an internal
+   error): `ask` with the error as the reason, plus a warning, whether or not a
+   Jev key is set (D12). `gate.sh` asks by itself when it finds no Python.
 
 The plugin never prints `allow` or `deny` (S1), so it can only add prompts (S5).
 Everything that exists only for rules or for fail-closed asks is deleted: rule
-packs, the shell parser, the script scanner, strict mode, Jev's "lift" path,
-the done-file protocol.
+packs, the rule engine, strict mode, Jev's "lift" path, the done-file protocol.
+The shell parser and the script scanner stay: scripts a command runs are still
+sent to Jev (D4).
 
 **Spec:** theses S1–S10 in `SimpleGate.lean`. Where code and model disagree, fix
 the model first, then the code.
@@ -60,10 +69,10 @@ the model first, then the code.
 
 | # | Question | Status | Answer used by this plan |
 | --- | --- | --- | --- |
-| D1 | Adopt the design? Drops the fail-closed guarantee; without a Jev key the plugin only blocks `.env` files (plus a one-time session warning). | **open** | Yes. The README says it plainly. |
-| D2 | Is "Jev off" its own state? | **open** | No. `GATE_JEV` is removed. Jev is on whenever the gate is enabled; no `TYPESAFE_API_KEY` = misconfigured. `GATE_ENABLED=0` is the only off switch. |
+| D1 | Adopt the design? Drops the fail-closed guarantee; without a Jev key the plugin only blocks `.env` files (plus a one-time session warning). | **confirmed 2026-11-22: yes** | Yes. The README says it plainly. |
+| D2 | Is "Jev off" its own state? | **confirmed 2026-11-22: yes, remove** | No. `GATE_JEV` is removed. Jev is on whenever the gate is enabled; no `TYPESAFE_API_KEY` = misconfigured. `GATE_ENABLED=0` is the only off switch. |
 | D3 | Warn on every call when misconfigured? | confirmed 2026-11-21 | No. A `SessionStart` hook warns once; at `PreToolUse` misconfigured = no decision, no warning. Runtime failures (timeout, HTTP, malformed), `.env` skips and bad input warn per call. |
-| D4 | Keep sending scripts a command runs to Jev? | **open** | No. Needs the shell parser. Documented blind spot: `bash cleanup.sh` is judged by its text only. |
+| D4 | Stop sending scripts a command runs to Jev? (proposed: yes) | **answered 2026-11-22: no, keep sending scripts** | Keep sending. The shell parser and the script scanner stay, and `redact_script` stays. No blind spot for scripts. |
 | D5 | `/destructive-guard:check` without rules | confirmed 2026-11-21 | Kept. `--config` prints the Jev config (key redacted) and the session warnings; a call check always contacts Jev (`--jev` removed) and prints `ask`/`none` with the risk, or the warning. |
 | D6 | gated-dev planner `## Gated operations` table | explained 2026-11-21, no answer | Option b: column `Gate`, filled from `check` only when `.claude/gated-dev.json` has `"dryRunGate": true` (each check costs a Jev request and sends the command); otherwise `unknown`. |
 | D7 | Claude Code assumptions in the model | explained 2026-11-21, no answer | Verified in L0 against the hooks docs and a throwaway hook; results recorded in the model's assumptions section with links and the Claude Code version. |
@@ -71,7 +80,7 @@ the model first, then the code.
 | D9 | MCP input that mentions `.env` (new) | proposed | Follow the model: skip the call (no request, `envReference` warning), the same as Bash. Today's code instead drops the `.env` lines from MCP input and sends the rest. |
 | D10 | Noise during a Jev outage (new) | proposed | With D11 every gated call prompts while Jev is down; that is intended. The `systemMessage` can be rate-limited to once a minute via a state file in `$TMPDIR` if it is too noisy in the L6 trial (the ask reason still names the cause on every prompt). The way out of a long outage is `GATE_ENABLED=0`, which the warning mentions. |
 | D11 | Jev configured but unavailable | **confirmed 2026-11-22** | Warning **and** ask. Reason `jev-unavailable: timeout after 1500 ms` (or `http 503`, `network`, `malformed answer`). Applies to calls that were sent; `.env` calls are never sent, so they are not "unavailable". |
-| D12 | Bad hook input, no Python, internal error while Jev is configured (new) | **open** | Proposed: keep no decision + warning (these are plugin faults, not Jev faults; asking would also hit users without a key). Alternative: ask whenever `TYPESAFE_API_KEY` is set, consistent with D11. `gate.sh` can read the variable without Python. |
+| D12 | Bad hook input, no Python, internal error (new) | **answered 2026-11-22: ask** | Ask, with the error as the reason, always (with or without `TYPESAFE_API_KEY`). Warning plus `ask`, like D11. `gate.sh` asks by itself when no Python is found. `S1` and `S5` still hold. |
 
 ## Current → target
 
@@ -82,13 +91,13 @@ the model first, then the code.
 | Jev uncertain band | rule result stands | no decision |
 | Jev down / timeout / HTTP / network / malformed | rule result stands, silent | **ask** + warning (D11) |
 | Jev misconfigured (no key, bad URL, bad prompt) | `ask gate-config:` on every call | no decision, silent per call; one warning at session start |
-| Python missing / too old | `ask unparsable: python unavailable` | no decision + warning |
-| Engine exception | `ask gate-config: internal error` | no decision + warning |
-| Bad hook stdin | `ask unparsable:` | no decision + warning |
+| Python missing / too old | `ask unparsable: python unavailable` | **ask** + warning, reason names the error (D12); `gate.sh` asks by itself |
+| Engine exception | `ask gate-config: internal error` | **ask** + warning, reason names the error (D12) |
+| Bad hook stdin | `ask unparsable:` | **ask** + warning, reason names the error (D12) |
 | `.env` in a Bash call | not sent, rule result stands | not sent, no decision + warning |
 | `.env` in an MCP call | `.env` lines dropped, rest sent | not sent, no decision + warning (D9) |
-| Scripts a command runs | collected via the shell parser, sent to Jev | not collected (D4) |
-| `gate.sh` | done-file, asks on any failure | prints the engine's stdout or a warning; never asks itself |
+| Scripts a command runs | collected via the shell parser, sent to Jev | same (D4): the parser and the scanner stay |
+| `gate.sh` | done-file, asks on any failure | prints the engine's stdout; asks with a warning on a plugin fault (no Python, engine exit ≠ 0); never allows or denies |
 | `env-guard.sh` | blocks `.env*` for Read/Edit/Write | unchanged |
 
 ## Target layout
@@ -97,7 +106,7 @@ the model first, then the code.
 plugins/destructive-guard/
   hooks/hooks.json            PreToolUse Bash|mcp__.* → gate.sh; Read|Edit|Write → env-guard.sh;
                               SessionStart → session-start.sh (new)
-  hooks/gate.sh               interpreter lookup, run gate_main.py, else warning JSON
+  hooks/gate.sh               interpreter lookup, run gate_main.py, else ask JSON (plugin fault, D12)
   hooks/session-start.sh      interpreter lookup, run session_main.py, else warning JSON (new)
   hooks/env-guard.sh          unchanged
   lib/gate_main.py            unchanged stub → destructive_guard.hook
@@ -106,7 +115,9 @@ plugins/destructive-guard/
   lib/destructive_guard/
     config.py                 GateConfig: GATE_ENABLED, GATE_ENV_GUARD, GATE_LOG only
     paths.py                  unchanged
-    errors.py                 ConfigError, JevConfigError, UsageError (RulesError, UnparsableError go)
+    shell/                    unchanged: the parser stays (D4)
+    scripts/                  unchanged: the script scanner stays (D4)
+    errors.py                 ConfigError, JevConfigError, UsageError (RulesError goes; UnparsableError stays if the parser raises it)
     outcome.py                new: Down (enum), HookOut (decision + warning) and its JSON rendering
     hook.py                   GateHook: the model's `hook` function
     session.py                new: SessionCheck: the model's `sessionStart` function
@@ -114,22 +125,22 @@ plugins/destructive-guard/
     jev/config.py             JevConfig: key, URL, model, timeout, escalate, prompt
     jev/judge.py              new (replaces decider.py): the model's `judge` function
     jev/client.py             unchanged
-    jev/request.py            no scripts/problems; MCP .env check
+    jev/request.py            scripts and problems kept (D4); MCP .env check
     jev/prompt.py             `safe` becomes optional
-    jev/redactor.py           redact_script removed
+    jev/redactor.py           unchanged: redact_script stays (D4)
     check/{cli,dry_run,report}.py   rewritten on the hook path
   jev/*.json                  unchanged
   formal/SimpleGate.lean      updated in L0
   skills/check/SKILL.md       rewritten in L4
 ```
 
-Deleted: `engine/`, `shell/`, `scripts/`, `rules/`, `gate/`, `verdict.py`,
+Deleted: `engine/`, `rules/`, `gate/`, `verdict.py`,
 `packs/`, `jev/decider.py`, `tests/cases/`, `tests/fixtures/`,
 `tests/PORTING.md`.
 
-Size: today `lib/destructive_guard` is ~4 400 lines. About 2 600 go
-(`engine` 663, `shell` 433, `scripts` 818, `rules` 361, `gate` 118, parts of
-`config.py`, `jev/`, `check/`); the new modules add ~400.
+Size: today `lib/destructive_guard` is ~4 400 lines. About 1 350 go
+(`engine` 663, `rules` 361, `gate` 118, parts of `config.py`, `jev/`, `check/`);
+`shell` (433) and `scripts` (818) stay. The new modules add ~400.
 
 ## Environment variables after the change
 
@@ -155,5 +166,8 @@ Size: today `lib/destructive_guard` is ~4 400 lines. About 2 600 go
   after waiting out the timeout budget. Unattended agents stop at the first
   call; that is the intended trade-off. The warning names `GATE_ENABLED=0` as
   the way out.
-- **Blind spots.** Scripts (D4), `.env`-mentioning calls, and (unless D12
-  changes it) plugin faults are judged only by Claude Code's own permissions.
+- **Broken install = prompts.** Bad hook input, no Python and internal errors
+  ask on every Bash/MCP call, with the error as the reason (D12). The way out
+  is `GATE_ENABLED=0`, which the warning names.
+- **Blind spots.** `.env`-mentioning calls are judged only by Claude Code's own
+  permissions. Scripts are covered (D4).

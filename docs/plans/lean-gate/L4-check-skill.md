@@ -7,9 +7,9 @@
   "[set]"|"[missing]"}, sessionWarnings: [...]}`. `check_call()` builds the
   same hook input and calls the hook's decision function in-process (not
   `gate.sh`), returning `{decision, reason, risk, top, warning}`.
-- `check/cli.py`: options `--json`, `--config`, `--mcp`; remove `--jev` and
-  `--cwd` (no scripts are read any more). Passing `--jev` gives a usage error
-  that says it is no longer needed.
+- `check/cli.py`: options `--json`, `--config`, `--mcp`, `--cwd`; remove `--jev`
+  (Jev is always on). `--cwd` stays: the script scanner reads the scripts from
+  it (D4). Passing `--jev` gives a usage error that says it is no longer needed.
 - `check/report.py`: text output
 
   ```text
