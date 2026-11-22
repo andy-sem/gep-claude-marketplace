@@ -32,7 +32,7 @@ from the orchestrator, recommended option first, except H4.
 | H3 | Any stage raises `NEEDS_DECISION` (§4) | Question, options, trade-offs, recommendation | An option or free text |
 | H4 | A gated tool call | The permission prompt with the exact call and the gate's reason | Allow · Deny |
 | H5 | Review loop limit (2 fix rounds) with critical or important findings open | Remaining findings | Accept as is · One more round · Take over manually |
-| H6 | Verification still fails after 2 dev fix attempts, or an infrastructure blocker | Failing command and output excerpt | Retry · Skip this check (listed in the PR) · Abort |
+| H6 | Verification still fails after 2 dev fix attempts on the top tier (§5b), or an infrastructure blocker | Failing command and output excerpt | Retry · Skip this check (listed in the PR) · Abort |
 | H7 | Subagent failure (crash, empty result, missing file) after 1 automatic retry, or a scope-check failure | Error summary | Retry · Abort |
 
 Approving the plan also authorises the run's normal actions afterwards: local
@@ -73,7 +73,8 @@ recommendation: <label> - <why>
 The orchestrator asks H1/H3, records the answer in `state.json` and
 `decisions.md`, and runs the same stage again with the answer under
 `DECISIONS:`. Output with both a result and this block counts as needing a
-decision. A dev question starting with `verification failed: ` is H6.
+decision. A dev question starting with `verification failed: ` is H6 (after
+promotion, §5b); one starting with `tier too low: ` promotes the dev tier.
 
 ## 5. Stages
 
@@ -84,7 +85,7 @@ Every file lives in `<ticketsDir>/<KEY>/` in the ticket worktree.
 | kickoff | orchestrator | `ticket.md`, config | worktree, `state.json`, `decisions.md` | worktree exists, setup ran |
 | spec | spec agent (read-only) | `ticket.md`, repo docs, code | `spec.md` (goal, context, in/out of scope, testable acceptance criteria, assumptions, open questions tagged blocking/non-blocking) | no blocking questions left |
 | plan | planner (read-only) | `spec.md`, `decisions.md`, repo | `plan.md` (steps with files and checks, gated operations table, verification, risks) | **H2 approval**; then `ticket.md`, `spec.md`, `plan.md`, `decisions.md` are committed |
-| dev | dev agent (all tools) | `plan.md`, `spec.md`, `decisions.md` | one commit per step (`Plan-Step: N`), `dev-report.md` | steps done, verification passes (2 fix attempts, then H6) |
+| dev | `ticket-dev-godzilla` / `-workhorse` / `-pawn` (all tools), tier per §5b | `plan.md`, `spec.md`, `decisions.md` | one commit per step (`Plan-Step: N`), `dev-report.md` | steps done, verification passes (2 fix attempts, then promotion or H6) |
 | review | reviewer (read-only) | diff vs base, `spec.md`, `plan.md`, `dev-report.md` | `review.md`: critical / important / minor findings, `VERDICT: PASS|CHANGES_REQUIRED` | PASS, or H5 after 2 fix rounds |
 | complete | orchestrator | `plan.md`, `review.md`, `state.json` | push, PR | PR open, stage `done` |
 | done | orchestrator + `watch_pr.py` (background) | the PR | `watch` heartbeat in `state.json` | feedback → `addressing_review`, merged → `merged`, closed → stop |
@@ -94,7 +95,7 @@ Every file lives in `<ticketsDir>/<KEY>/` in the ticket worktree.
 Read-only stages may change only the ticket directory; the orchestrator checks
 `git status --porcelain` after them (scope check → H7). Review fix rounds run
 the dev agent with `MODE=fix-review` (critical and important only, commits
-with `Review-Fix: <n>`). Minor findings go into the PR. The reviewer runs on a
+with `Review-Fix: <n>`; tier per §5b). Minor findings go into the PR. The reviewer runs on a
 stronger model when the diff touches `riskPaths`.
 
 With a `tracker` (details in `jira.md`), the orchestrator runs these steps at
@@ -132,6 +133,46 @@ kept. Closing the session stops the watch; `--resume` restarts it. With a
 `tracker` the issue stays In Review during feedback rounds; each round only
 posts its comment.
 
+### 5b. Dev tiers
+
+Three dev agents share one contract and differ in weight: `ticket-dev-godzilla`
+(opus, heavy), `ticket-dev-workhorse` (sonnet, normal), `ticket-dev-pawn`
+(haiku, mechanical steps spelled out in the plan). The planner advises in a
+`## Dev tier` section of `plan.md`. The orchestrator decides at H2, shows the
+choice in the H2 summary and records it in `state.json` (`devTier`,
+`devTierReason`). Rules, in order:
+
+1. config `devTier` other than `auto` wins;
+2. a tier the developer names in the H2 free text wins;
+3. never `pawn` when the plan has gated operations, the diff will touch
+   `riskPaths`, or a step is marked as a risk;
+4. otherwise the planner's tier; without one, `workhorse`.
+
+| Dev run | Tier |
+| --- | --- |
+| `MODE=implement` | `devTier` |
+| `MODE=fix-review`, round 1 | `devTier` |
+| `MODE=fix-review`, round 2 and later | one tier up |
+| `MODE=fix-pr` | per round from `pr-feedback-<n>.md`: `pawn` when every `change` item is mechanical, else `devTier`; at least `workhorse` when an item touches `riskPaths` |
+
+Models come from `models.devGodzilla` / `devWorkhorse` / `devPawn`
+(defaults `opus` / `sonnet` / `haiku`), the fixed tier from `devTier`.
+
+A tier out of its depth is promoted automatically, once per tier, in every dev
+run, before the developer is asked:
+
+| Agent result | Action |
+| --- | --- |
+| `NEEDS_DECISION` with `tier too low: <reason>` | Re-run the stage one tier up; no H-point |
+| `tier too low:` from `godzilla` | H3 |
+| `verification failed: ...` from `pawn` or `workhorse` | Re-run one tier up, continuing from the `Plan-Step:` trailers |
+| `verification failed: ...` after a promotion, or from `godzilla` | H6 |
+| Any other `NEEDS_DECISION` | H3; the tier does not change |
+| Crash, no marker | 1 retry on the same tier, then H7 |
+
+Each promotion is appended to `state.devTierHistory` and to `state.warnings`
+with `stage: "dev-tier"`; the PR lists it nowhere under "Skipped checks".
+
 ## 6. Hosts
 
 | Host | Detected by | Worktree created with | Removed with |
@@ -163,8 +204,11 @@ hint; launched sessions carry `TICKET_FLOW_KEY` and are already named.
   "stage": "spec | plan | awaiting_plan_approval | dev | review | complete | done | addressing_review | merged | aborted",
   "abortedFrom": "dev",
   "reviewRound": 0,
+  "devTier": "godzilla | workhorse | pawn",
+  "devTierReason": "planner: 6 steps, one schema change already decided",
+  "devTierHistory": [{ "from": "pawn", "to": "workhorse", "reason": "tier too low: step 3 needs a choice", "stage": "dev", "at": "ISO-8601" }],
   "decisions": [{ "stage": "plan", "question": "...", "answer": "...", "at": "ISO-8601" }],
-  "warnings": [{ "stage": "dev", "command": "...", "reason": "...", "at": "ISO-8601" }],
+  "warnings": [{ "stage": "dev | dev-tier", "command": "...", "reason": "...", "at": "ISO-8601" }],
   "prUrl": null,
   "lastAddressedCommentAt": "ISO-8601 (newest PR feedback handled)",
   "watch": { "pid": 123, "startedAt": "ISO-8601", "heartbeatAt": "ISO-8601" },
