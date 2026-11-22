@@ -1,6 +1,6 @@
 # L1: Jev-only hook, session warning, conformance tests
 
-> Part of the [lean gate plan](README.md). Depends on: L0 (theses to test against), LJ0 (`testkit/live_jev.py`). Not blocked: D1, D2, D4 and D12 were answered on 2026-11-22.
+> Part of the [lean gate plan](README.md). Depends on: L0 (theses to test against), LJ0 (`testkit/live_jev.py`). Not blocked: D1, D2, D4 (final: no parser, no scripts) and D12 were answered on 2026-11-22.
 
 ## `outcome.py`
 
@@ -79,11 +79,13 @@ as `decider.py`, moved here). `decider.py` is deleted in L2.
 
 ## `jev/request.py`
 
-- `build_state(call)`: Bash → `{tool, command, scripts, notes}` (scripts and
-  problems as today, D4); MCP → first
-  `Redactor.references_env_file(json.dumps(input))` → `None` (D9), else as today.
-- Keep `scripts_payload`, `problem_notes`, `MAX_SCRIPTS_BYTES` and
-  `redact_script` (D4).
+- `build_state(call)`: Bash → `{tool, command, notes}` (no `scripts`; the
+  command text goes to Jev as it is, redacted, nothing is parsed, D4); MCP →
+  first `Redactor.references_env_file(json.dumps(input))` → `None` (D9), else
+  as today.
+- Remove `scripts_payload`, `problem_notes`, `MAX_SCRIPTS_BYTES`. The hook no
+  longer imports `shell/`, `scripts/` or `redact_script`; their deletion is L2.
+  There is no parse-error case and no `unparsable:` ask.
 
 ## `hook.py` (the model's `hook`)
 
@@ -112,8 +114,6 @@ main(stdin, env):
 - `GATE_DONE_FILE` handling removed.
 - A non-Bash, non-MCP tool (should not happen given the matcher) gives no
   output and no request.
-- Shell parse errors are not in D12's list. The old `unparsable:` ask has no
-  decided replacement yet: stop and ask before coding this path.
 
 ## `log.py` (`GATE_LOG`, replaces `GATE_JEV_LOG`)
 
