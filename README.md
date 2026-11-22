@@ -19,11 +19,12 @@ The two plugins are independent: install either one alone. Together, the
 gate protects every session and the workflow treats each gate prompt as a
 checkpoint, never as something to work around.
 
-### destructive-guard
+### Destructive Guard: ask before risky commands
 
-A safety net for every Claude Code session, whether a person or an agent is
-driving. Before a Bash command or an MCP tool call runs, a `PreToolUse` hook
-sends the call (with secrets redacted) to **Jev**, a risk classifier. When Jev
+Plugin `destructive-guard`. A safety net for every Claude Code session,
+whether a person or an agent is driving. Before a Bash command or an MCP tool
+call runs, a `PreToolUse` hook sends the call (with secrets redacted) to
+**Jev**, a risk classifier. When Jev
 judges that the call could delete, overwrite or irreversibly change data or
 resources, locally or in a remote service, Claude Code **asks you first**.
 
@@ -45,10 +46,10 @@ resources, locally or in a remote service, Claude Code **asks you first**.
 Full description, diagrams and configuration:
 [plugins/destructive-guard/README.md](plugins/destructive-guard/README.md).
 
-### gated-dev-simple-workflow
+### Gated Dev Workflow: from ticket to pull request
 
-A ticket-to-PR pipeline. `/ticket <KEY>` takes one ticket (a Markdown file,
-or a Jira issue) and drives it through **spec → plan → dev → review → PR**,
+Plugin `gated-dev-simple-workflow`. A ticket-to-PR pipeline. `/ticket <KEY>`
+takes one ticket (a Markdown file, or a Jira issue) and drives it through **spec → plan → dev → review → PR**,
 with one subagent per stage, in a git worktree of its own (plain git, Orca or
 iTerm2).
 
