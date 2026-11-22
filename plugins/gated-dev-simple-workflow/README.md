@@ -618,8 +618,9 @@ real team project) is still to do.
 ### Dev tiers (0.13, November 2026)
 
 The single dev agent became three tiers, so cheap work does not run
-on the strongest model and hard work does not run on the weakest. Binding
-decisions:
+on the strongest model and hard work does not run on the weakest. Built in
+six work packages (config, three agents, planner advice, pipeline spec,
+orchestrator, docs and release). Binding decisions:
 
 - **Three agents, one contract.** `ticket-dev-godzilla` (opus, high),
   `ticket-dev-workhorse` (sonnet, high) and `ticket-dev-pawn` (haiku, medium)
@@ -644,6 +645,44 @@ decisions:
   round uses `pawn` for purely mechanical feedback.
 - **Left out: O1.** A tier per plan step is an open question and not part of
   this version.
+
+The manual check (a docs ticket → `pawn`, a normal feature → `workhorse`, a
+decided schema change → `godzilla`, forced promotions, wording-only PR
+feedback → `pawn`, and pawn on haiku keeping the dev contract) is still to
+do in the demo repo. If pawn breaks the contract, the first fix is a tighter
+"Your level" section, not a different model.
+
+### Planned: ticket modes (not built)
+
+Planned in eight work packages (the plan, `docs/plans/ticket-modes.md`, is
+in git history), not part of this version. Every ticket would run in one of three modes instead of the
+full pipeline:
+
+| Mode | Stages | Session model | For |
+| --- | --- | --- | --- |
+| `heavy` | spec → plan → dev → review | opus | Unclear or cross-cutting tickets, schema, auth, security, infra, new dependencies |
+| `medium` | plan → dev → review | sonnet | Clear tickets of normal size |
+| `light` | plan → dev | sonnet | Small, well-specified changes in one area |
+
+- **Decided once, at kickoff,** after the ticket is read, by the first rule
+  that applies: `--mode`, config `mode`, `heavy` for anything on the
+  escalation list, `riskPaths`, open questions or several areas, `light` only
+  for a small change in one area, else `medium`; when unsure, the heavier one.
+  Recorded in `state.json`, not asked.
+- **Raised, never lowered.** The planner (`## Mode` in `plan.md`), the
+  developer at H2, or a diff touching `riskPaths` can raise the mode; a raise
+  to `heavy` before H2 runs the spec stage and plans again.
+- **Session model.** Launched sessions start on the mode's model
+  (`claude --model`). A hand-started session weaker than its mode asks:
+  restart on the stronger model, or continue (decided 2026-11-22).
+- **Without a spec** the plan carries `## Acceptance criteria`.
+- **Unchanged in every mode:** plan approval (H2), the escalation list, gate
+  handling, H6/H7, commit, PR and PR watch. Light mode gets no review just
+  because the plan has gated operations (decided 2026-11-22).
+- **With dev tiers** the mode bounds the tier: heavy → at least `workhorse`,
+  light → at most `workhorse`.
+- **Open:** whether `modes.light.session` may use haiku (default stays
+  sonnet).
 
 ### Lean gate follow-up
 
