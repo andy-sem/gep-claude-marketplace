@@ -179,7 +179,8 @@ When it is asked:
    stage with nothing of kickoff left undone.
 2. After a raise (§5 rule 4). The stage to re-enter is set before the
    question: `spec` for a raise to heavy, `awaiting_plan_approval` for R2 and
-   R3 to medium, `review` for R4.
+   R3 to medium, `review` for R4 after dev, `addressing_review` for R4 in a
+   PR feedback round (§8).
 3. On `--resume` in a session weaker than the recorded mode's, unless a
    **Continue here** for that mode is already recorded in `state.decisions`.
 
