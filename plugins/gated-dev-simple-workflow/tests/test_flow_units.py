@@ -384,3 +384,16 @@ def test_runs_this_flow_did_not_launch_are_listed_not_picked(tmp_path):
     report = repo.observer().observe(state, config=CONFIG, candidates=["PROJ-1", "PROJ-7", "PROJ-8", "PROJ-9"])
     assert report["foreign"] == ["PROJ-7"]
     assert report["slotsUsed"] == 0  # PROJ-1 is gone; foreign runs hold no flow slot
+
+
+def test_add_launched_stores_the_mode_and_an_old_file_without_it_loads(tmp_path):
+    state = FlowState(directory=tmp_path, parent="PROJ-100")
+    state.add_launched("PROJ-1", summary="s", reason="r", mode="medium")
+    state.add_launched("PROJ-2", summary="s", reason="r")
+    assert (state.tickets["PROJ-1"]["mode"], state.tickets["PROJ-2"]["mode"]) == ("medium", None)
+    del state.tickets["PROJ-2"]["mode"]
+    state.save()
+    again = FlowState(directory=tmp_path, parent="PROJ-100")
+    assert again.load() is True
+    assert again.tickets["PROJ-1"]["mode"] == "medium"
+    assert "mode" not in again.tickets["PROJ-2"]

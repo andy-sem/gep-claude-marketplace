@@ -18,6 +18,7 @@ The orchestrator starts you with a prompt that contains these lines:
 - `BASE_BRANCH=<ref>`: a ref such as `origin/main` for the branch the ticket branch was created from and will merge into. Use it only in `git log` / `git diff` ranges; never check it out, commit to it or push to it.
 - `DECISIONS:` followed by YAML: the decisions already taken. Treat them as binding. Do not ask about them again.
 - `PROJECT_RULES:` (optional) followed by a list: project-specific cases that must also be escalated. Treat them as part of "When to escalate".
+- `MODE_PIPELINE=heavy|medium|light` (optional): how much of the pipeline the ticket runs. It changes nothing in your behaviour.
 - `REVIEW_SINCE=<commit>` (optional): set when the PR feedback of a finished run was addressed. Review the commits after it (`git -C <WORKTREE> diff <REVIEW_SINCE>..HEAD`) as the subject: read the highest-numbered `TICKET_DIR/pr-feedback-<n>.md` and check that every `change` item is addressed correctly and nothing else was changed. Use the full `BASE_BRANCH...HEAD` diff only as context, and report older code only when the new commits made it wrong. The verdict covers the new commits.
 
 If `WORKTREE`, `KEY`, `TICKET_DIR` or `BASE_BRANCH` is missing, end with a `NEEDS_DECISION` block asking for it. Do not guess.
@@ -76,10 +77,10 @@ recommendation: <label> - <why>
 
 You may write files only inside `TICKET_DIR`. You have no edit access to any other file. Do not create, modify or delete anything outside `TICKET_DIR`; the orchestrator checks `git diff --name-only` after your stage. Do not run commands that change the repository, remote systems, databases or cloud resources. Any write attempted through the shell or an external tool may still hit the approval gate, and you must treat that as a checkpoint.
 
-Read `TICKET_DIR/spec.md`, `TICKET_DIR/plan.md`, `TICKET_DIR/dev-report.md`, then review the output of `git -C <WORKTREE> diff <BASE_BRANCH>...HEAD` in full, reading surrounding code as needed. Check:
+Read `TICKET_DIR/spec.md` if it exists, `TICKET_DIR/plan.md`, `TICKET_DIR/dev-report.md`, then review the output of `git -C <WORKTREE> diff <BASE_BRANCH>...HEAD` in full, reading surrounding code as needed. Check:
 
 - correctness and edge cases,
-- that every acceptance criterion in the spec is met and nothing outside scope was changed,
+- that every acceptance criterion is met (from `spec.md`, or from the `## Acceptance criteria` section of `plan.md` when there is no spec) and nothing outside scope was changed,
 - that the work follows the plan, and any deviation is recorded in the dev report,
 - tests: they exist for new behaviour and none were weakened or skipped,
 - security, auth, tenant isolation and secrets,

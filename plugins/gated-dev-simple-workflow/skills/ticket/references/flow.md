@@ -14,7 +14,8 @@ Done by the driver on Jira data; the deterministic part (state, runs, `gh`) is `
    - an `is blocked by` link points to an issue that is not Done. An issue whose PR this flow saw merged counts as Done even when Jira has not caught up (the `merged` status in the flow state).
 3. **Judgement**, on what is left, in query order. Drop a ticket whose description names an unfinished dependency, or that needs a person (a meeting, a purchase, a contract). Apply `flow.pickRules`. Take the first ticket left.
 4. **Nothing left.** Report the reason, the most useful blocker first (for example "PROJ-3 blocked by PROJ-1 (In Progress)"). The reason is shown to the developer; the flow state records the reason of a launch only.
-5. **Launch.** `flow.py launch --parent PARENT KEY --summary "<summary>" --reason "<why>"`. The reason is a short sentence ("first ready subtask by rank; no blockers").
+5. **Mode.** After the pick, decide the subtask's mode from the issue just read with [modes.md section 4](modes.md#4-decision-rules-d2) (config `mode` other than `auto` is used as is; `modeRules` apply). Take the heavier mode when unsure.
+6. **Launch.** `flow.py launch --parent PARENT KEY --summary "<summary>" --reason "<pick reason>; mode <mode>: <reason>" --mode <mode>`. The driver never launches without `--mode`. The pick reason is a short sentence ("first ready subtask by rank; no blockers").
 
 ## Slots
 

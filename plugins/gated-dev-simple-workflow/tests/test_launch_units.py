@@ -66,6 +66,42 @@ def test_build_shell_command_rejects_other_args_relative_cwd_bad_remote_control(
         TerminalCommands.build_shell_command(**opts)
 
 
+@pytest.mark.parametrize(
+    ("model", "flag"),
+    [("opus", "--model opus "), ("haiku", "--model haiku "), ("claude-sonnet-4-5", "--model claude-sonnet-4-5 "), ("claude-opus-4.1-x", "--model claude-opus-4.1-x "), (None, "")],
+)
+def test_build_shell_command_puts_the_model_before_the_name(model, flag):
+    assert (
+        TerminalCommands.build_shell_command(cwd="/x", key="K-1", model=model)
+        == f"""cd '/x' && TICKET_FLOW_KEY=K-1 claude {flag}--name "K-1" "/ticket K-1\""""
+    )
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["", "gpt-4", "Opus", "claude-", "claude-Opus", "opus ", "opus --dangerously-skip-permissions", "claude-x y", "'opus'", '"opus"', "claude-x'", "$(whoami)", "claude-$(id)", "opus;rm", "claude-x;rm -rf /", "opus\\n", "opus\nx", "claude-x\n", "`id`", 1, True],
+)
+def test_build_shell_command_rejects_unsafe_models(model):
+    with pytest.raises(LaunchError, match="Invalid model"):
+        TerminalCommands.build_shell_command(cwd="/x", key="K-1", model=model)
+
+
+def test_build_shell_command_passes_the_mode_in_the_ticket_prompt():
+    assert (
+        TerminalCommands.build_shell_command(cwd="/x", key="K-1", args=["--mode", "heavy"], model="opus")
+        == """cd '/x' && TICKET_FLOW_KEY=K-1 claude --model opus --name "K-1" "/ticket K-1 --mode heavy\""""
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [["--mode"], ["--mode", "auto"], ["--mode", "heavy now"], ["--mode", "$(id)"], ["--mode", '"x"'], ["heavy"], ["--mode", "light", "--mode"]],
+)
+def test_build_shell_command_rejects_a_mode_without_a_mode_name(args):
+    with pytest.raises(LaunchError, match="not allowed|--mode needs"):
+        TerminalCommands.build_shell_command(cwd="/x", key="K-1", args=args)
+
+
 def test_short_summary_strips_unsafe_characters_and_cuts_at_a_word_boundary():
     assert LaunchNaming.short_summary('Say "hi" $(rm -rf /) `x` \\ !') == "Say hi (rm -rf /) x"
     assert LaunchNaming.short_summary(None) == ""
@@ -191,6 +227,51 @@ def test_read_config_defaults_overrides_and_invalid_content(tmp_path):
             cfg(f"bad{n}", config=bad)
 
 
+MODE_DEFAULTS = {"heavy": {"session": "opus"}, "medium": {"session": "sonnet"}, "light": {"session": "sonnet"}}
+
+
+def test_read_config_mode_defaults_and_overrides(tmp_path):
+    d = TicketProject(project(tmp_path / "d")).read_config()
+    assert (d["mode"], d["modes"], d["modeRules"]) == ("auto", MODE_DEFAULTS, [])
+    for n, mode in enumerate(("auto", "heavy", "medium", "light")):
+        assert TicketProject(project(tmp_path / f"m{n}", config={"mode": mode})).read_config()["mode"] == mode
+    config = {"modes": {"light": {"session": "opus"}, "heavy": {"session": "claude-opus-4-5"}}, "modeRules": ["billing is medium"]}
+    c = TicketProject(project(tmp_path / "c", config=config)).read_config()
+    assert c["modes"] == {"heavy": {"session": "claude-opus-4-5"}, "medium": {"session": "sonnet"}, "light": {"session": "opus"}}
+    assert c["modeRules"] == ["billing is medium"]
+    assert TicketProject(project(tmp_path / "e", config={"modes": {"light": {}}})).read_config()["modes"] == MODE_DEFAULTS
+    assert MODE_DEFAULTS == TicketProject.MODE_DEFAULTS
+
+
+@pytest.mark.parametrize(
+    ("bad", "message"),
+    [
+        ({"mode": "huge"}, "mode must be"),
+        ({"mode": None}, "mode must be"),
+        ({"modes": []}, "modes must be an object"),
+        ({"modes": {"huge": {"session": "opus"}}}, 'unknown mode "huge"'),
+        ({"modes": {"light": "haiku"}}, "modes.light must be an object"),
+        ({"modes": {"light": {"model": "haiku"}}}, 'unknown key "model"'),
+        ({"modes": {"light": {"session": 3}}}, "session must be"),
+        ({"modes": {"light": {"session": "opus 4"}}}, "session must be"),
+        ({"modes": {"light": {"session": "opus;ls"}}}, "session must be"),
+        ({"modes": {"light": {"session": "claude-x'y"}}}, "session must be"),
+        ({"modes": {"light": {"session": "gpt"}}}, "session must be"),
+        ({"modeRules": "billing"}, "modeRules must be"),
+        ({"modeRules": ["ok", ""]}, "modeRules must be"),
+        ({"modeRules": [1]}, "modeRules must be"),
+    ],
+)
+def test_read_config_mode_invalid(tmp_path, bad, message):
+    with pytest.raises(LaunchError, match=message):
+        TicketProject(project(tmp_path, config=bad)).read_config()
+
+
+def test_is_model_accepts_aliases_and_ids_only():
+    assert all(LaunchNaming.is_model(m) for m in ("opus", "sonnet", "haiku", "claude-opus-4-5", "claude-sonnet-4.5"))
+    assert not any(LaunchNaming.is_model(m) for m in ("", "gpt", "Opus", "claude-", "claude-A", "a b", "opus;x", 'x"', None, 3))
+
+
 TRACKER_DEFAULTS = {
     "type": "jira",
     "site": None,
@@ -283,6 +364,48 @@ def test_launch_ticket_with_tracker_and_no_ticket_md_starts_in_the_main_checkout
     assert plan["mode"] == "main-checkout"
     assert plan["summary"] == "Fix it"
     assert plan["note"] is None
+
+
+
+@pytest.mark.parametrize("mode", ["heavy", "medium", "light"])
+@pytest.mark.parametrize("session", ["haiku", "claude-haiku-5-5"])
+def test_read_config_rejects_haiku_as_a_session_model(tmp_path, mode, session):
+    root = project(tmp_path, config={"modes": {mode: {"session": session}}})
+    with pytest.raises(LaunchError, match=rf"modes\.{mode}\.session must not be haiku.*sonnet or opus"):
+        TicketProject(root).read_config()
+
+
+@pytest.mark.parametrize("mode", ["heavy", "medium", "light"])
+@pytest.mark.parametrize("session", ["sonnet", "opus", "claude-opus-5-5"])
+def test_read_config_accepts_sonnet_and_opus_as_a_session_model(tmp_path, mode, session):
+    root = project(tmp_path, config={"modes": {mode: {"session": session}}})
+    assert TicketProject(root).read_config()["modes"][mode] == {"session": session}
+
+
+def test_launch_ticket_with_a_ticket_mode_starts_the_modes_session_model(tmp_path):
+    from gated_dev.completed_run import CompletedRun
+    from gated_dev.launch.launcher import TicketLauncher
+
+    def fake_run(file, argv):
+        return CompletedRun("", "")
+
+    env = {"TERM_PROGRAM": "iTerm.app"}
+    root = project(tmp_path, config={"modes": {"light": {"session": "claude-sonnet-5-5"}}}, tickets={"PROJ-1": "# Fix it\n"})
+    config = TicketProject(root).read_config()
+    for mode, model in [("heavy", "opus"), ("medium", "sonnet"), ("light", "claude-sonnet-5-5")]:
+        plan = TicketLauncher.launch_ticket(root=root, key="PROJ-1", config=config, dry_run=True, ticket_mode=mode, env=env, run=fake_run)
+        assert (plan["ticketMode"], plan["model"]) == (mode, model)
+        assert plan["command"].endswith(f'claude --model {model} --name "PROJ-1 · Fix it" "/ticket PROJ-1 --mode {mode}"')
+    plain = TicketLauncher.launch_ticket(root=root, key="PROJ-1", config=config, dry_run=True, env=env, run=fake_run)
+    assert (plain["ticketMode"], plain["model"]) == (None, None)
+    assert "--model" not in plain["command"] and "--mode" not in plain["command"]
+    for bad in ("auto", "heavy; rm", ""):
+        with pytest.raises(LaunchError, match="mode must be"):
+            TicketLauncher.launch_ticket(root=root, key="PROJ-1", config=config, dry_run=True, ticket_mode=bad, env=env, run=fake_run)
+    # A config that slipped past validation still cannot put its session value on the shell line.
+    hostile = {**config, "modes": {**config["modes"], "light": {"session": "opus; rm -rf ~"}}}
+    with pytest.raises(LaunchError, match="Invalid model"):
+        TicketLauncher.launch_ticket(root=root, key="PROJ-1", config=hostile, dry_run=True, ticket_mode="light", env=env, run=fake_run)
 
 
 FLOW_DEFAULTS = {
@@ -426,15 +549,20 @@ def test_list_ticket_keys_lists_ticket_dirs_whose_key_matches(tmp_path):
 
 def test_parse_args_keys_or_all_flags_errors():
     assert LaunchCli.parse_args(["-n", "--remote-control", "A-1", "B-2"]) == {
-        "keys": ["A-1", "B-2"], "all": False, "dryRun": True, "remoteControl": True, "cwd": None, "help": False,
+        "keys": ["A-1", "B-2"], "all": False, "dryRun": True, "remoteControl": True, "cwd": None, "mode": None, "help": False,
     }  # fmt: skip
     assert LaunchCli.parse_args(["--all", "--cwd", "/r"])["cwd"] == "/r"
+    assert LaunchCli.parse_args(["--mode", "light", "A-1"])["mode"] == "light"
     assert LaunchCli.parse_args(["--help"])["help"]
     for argv, message in [
         ([], "keys or --all"),
         (["--all", "A-1"], "keys or --all"),
         (["--force", "A-1"], "unknown option"),
         (["--cwd"], "needs a directory"),
+        (["--mode"], "--mode needs"),
+        (["--mode", "auto", "A-1"], "--mode needs"),
+        (["--mode", "Heavy", "A-1"], "--mode needs"),
+        (["--mode", "heavy;rm", "A-1"], "--mode needs"),
     ]:
         with pytest.raises(LaunchError, match=message):
             LaunchCli.parse_args(argv)

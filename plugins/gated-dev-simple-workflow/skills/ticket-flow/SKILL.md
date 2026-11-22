@@ -33,7 +33,7 @@ Rules that hold everywhere:
 6. Fill the free slots (section 2) until full or nothing is ready.
 7. End condition: nothing launched, nothing holds a slot and nothing waits for review: print the final report and end. With `--once`, print the report and end. Otherwise start the wait (section 3) and end the turn.
 
-`--dry-run`: steps 1 to 5 (the status call refreshes an existing state and creates none), then run the pick of section 2 and show the choice and the launch plan (`flow.py launch ... --dry-run`) without launching. Nothing else is saved.
+`--dry-run`: steps 1 to 5 (the status call refreshes an existing state and creates none), then run the pick of section 2 and show the choice, the mode and the launch plan (`flow.py launch ... --mode <mode> --dry-run`) without launching. Nothing else is saved.
 
 ## 2. Pick
 
@@ -42,7 +42,7 @@ Follow `references/flow.md`, "Pick". In short:
 1. Run the candidate query with `{parent}` replaced (all pages). Pass the keys of every candidate to `status` once as `--candidate KEY` (repeat the option); keys with a run this flow did not launch come back as `foreign` and are listed, not picked.
 2. Apply the hard filter and the judgement step, in query order. Take the first ticket left.
 3. Nothing left: say why (the most useful blocker first) and stop picking.
-4. Otherwise: `python3 -I "${CLAUDE_PLUGIN_ROOT}/scripts/flow.py" launch --parent PARENT KEY --summary "<summary>" --reason "<why>" [--remote-control]`. Add `--remote-control` when `flow.remoteControl` is true. It refuses a key that is already in the state or has a run, and records the ticket as `launched` only after the launcher succeeded. Print the key, the reason and the tab it opened.
+4. Otherwise decide the subtask's mode from the issue you just read, with the rules in [modes.md section 4](../ticket/references/modes.md#4-decision-rules-d2): rule 2 (config `mode` other than `auto`, used as is) and rules 3 to 6 with the config `riskPaths`, `escalationExtra` and `modeRules`. Take the heavier mode when unsure. Then launch: `python3 -I "${CLAUDE_PLUGIN_ROOT}/scripts/flow.py" launch --parent PARENT KEY --summary "<summary>" --reason "<pick reason>; mode <mode>: <reason>" --mode <mode> [--remote-control]`. Add `--remote-control` when `flow.remoteControl` is true. The driver never launches without `--mode`. It refuses a key that is already in the state or has a run, and records the ticket as `launched` only after the launcher succeeded. Print the key, the mode and its reason, and the tab it opened.
 5. A failed launch is reported and not retried in this pass, and the developer is notified (section 6). Go on while slots are free.
 
 ## 3. Wait
@@ -68,7 +68,7 @@ The developer decides at these points; the driver never decides for them:
 
 ## 5. Status
 
-`--status` makes no Jira call that writes: one `flow.py status --parent PARENT` call (it saves its observation unless another process holds the flow lock, and creates no state), then a table: key, status, stage, PR, reason; then `freeSlots` and the reason of `lastPick`. A flow that was never started prints that and nothing else.
+`--status` makes no Jira call that writes: one `flow.py status --parent PARENT` call (it saves its observation unless another process holds the flow lock, and creates no state), then a table: key, status, mode (`-` when unknown), stage, PR, reason; then `freeSlots` and the reason of `lastPick`. A flow that was never started prints that and nothing else.
 
 ## 6. Notifications
 

@@ -359,8 +359,8 @@ class Cli:
         if launcher is not False:
             monkeypatch.setattr(TicketLauncher, "launch_ticket", staticmethod(launcher or self.launch))
 
-    def launch(self, *, root, key, config, remote_control=False, dry_run=False, summary=None, parent=None, env=None, run=None, log=None):
-        self.launches.append({"key": key, "dry_run": dry_run, "remote_control": remote_control})
+    def launch(self, *, root, key, config, remote_control=False, dry_run=False, summary=None, parent=None, ticket_mode=None, env=None, run=None, log=None):
+        self.launches.append({"key": key, "dry_run": dry_run, "remote_control": remote_control, "ticket_mode": ticket_mode})
         worktree = None if dry_run else {"path": str(self.repo.tmp / f"wt-{key}")}
         return {"key": key, "mode": "orca-worktree", "cwd": "/x", "title": f"{key}: s", "launched": not dry_run, "worktree": worktree}
 
@@ -433,14 +433,14 @@ def test_launch_dry_run_writes_nothing(repo, cli):
     code, lines = cli.run("launch", "--parent", "PROJ-100", "PROJ-1", "--dry-run", "--remote-control")
     assert code == 0
     assert (lines[0]["dryRun"], lines[0]["launched"]) == (True, False)
-    assert cli.launches == [{"key": "PROJ-1", "dry_run": True, "remote_control": True}]
+    assert cli.launches == [{"key": "PROJ-1", "dry_run": True, "remote_control": True, "ticket_mode": None}]
     assert not (repo.tmp / ".git" / "gated-dev").exists()
 
 
 def test_launch_passes_the_summary_and_the_parent_to_the_launcher(repo, monkeypatch):
     seen = []
 
-    def with_summary(*, root, key, config, summary=None, parent=None, remote_control=False, dry_run=False, env=None, run=None, log=None):
+    def with_summary(*, root, key, config, summary=None, parent=None, ticket_mode=None, remote_control=False, dry_run=False, env=None, run=None, log=None):
         seen.append((summary, parent))
         return {"key": key, "mode": "main-checkout", "launched": True, "worktree": None}
 
@@ -448,6 +448,44 @@ def test_launch_passes_the_summary_and_the_parent_to_the_launcher(repo, monkeypa
     assert cli.run("launch", "--parent", "PROJ-100", "PROJ-1", "--summary", "Add export")[0] == 0
     assert seen == [("Add export", "PROJ-100")]
     assert repo.saved().tickets["PROJ-1"]["worktree"] is None
+
+
+def test_launch_mode_is_passed_to_the_launcher_and_stored(repo, cli):
+    code, lines = cli.run("launch", "--parent", "PROJ-100", "PROJ-1", "--mode", "light")
+    assert code == 0
+    assert cli.launches[0]["ticket_mode"] == "light"
+    assert repo.saved().tickets["PROJ-1"]["mode"] == "light"
+    assert lines[0]["mode"] == "orca-worktree"  # the launch path, not the pipeline mode
+
+
+def test_launch_without_mode_stores_none(repo, cli):
+    assert cli.run("launch", "--parent", "PROJ-100", "PROJ-1")[0] == 0
+    assert cli.launches[0]["ticket_mode"] is None
+    assert repo.saved().tickets["PROJ-1"]["mode"] is None
+
+
+def test_launch_rejects_an_invalid_mode(repo, cli):
+    code, lines = cli.run("launch", "--parent", "PROJ-100", "PROJ-1", "--mode", "huge")
+    assert code == 2
+    assert "mode must be one of" in lines[0]["message"]
+    assert cli.launches == []
+
+
+def test_mode_does_not_apply_to_other_commands(repo, cli):
+    assert cli.run("status", "--parent", "PROJ-100", "--mode", "light")[0] == 2
+
+
+def test_status_shows_the_mode_and_a_dash_for_unknown(repo, cli):
+    assert cli.run("launch", "--parent", "PROJ-100", "PROJ-1", "--mode", "heavy")[0] == 0
+    assert cli.run("launch", "--parent", "PROJ-100", "PROJ-2")[0] == 0
+    state = repo.state()
+    state.load()
+    del state.tickets["PROJ-2"]["mode"]  # a state file written before modes existed
+    state.save()
+    cli.out.clear()
+    code, lines = cli.run("status", "--parent", "PROJ-100")
+    assert code == 0
+    assert (lines[0]["tickets"]["PROJ-1"]["mode"], lines[0]["tickets"]["PROJ-2"]["mode"]) == ("heavy", "-")
 
 
 def test_status_of_a_new_flow_writes_nothing(repo, cli):

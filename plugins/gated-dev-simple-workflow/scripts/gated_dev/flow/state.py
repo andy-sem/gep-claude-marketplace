@@ -17,7 +17,7 @@ Clock = Callable[[], datetime]
 class FlowState:
     """`<git-common-dir>/gated-dev/flow/<PARENT>.json`, shared by every worktree.
 
-    `tickets` maps a key to `{status, summary, reason, launchedAt, worktree, stage, prUrl, relaunches,
+    `tickets` maps a key to `{status, summary, reason, launchedAt, worktree, mode (heavy, medium, light or None), stage, prUrl, relaunches,
     staleWarnedAt}` (skipped tickets: `{status, reason, at}`); `picks` keeps the last MAX_PICKS decisions.
     """
 
@@ -179,13 +179,14 @@ class FlowState:
         """Appends a decision (`key` None: nothing ready); only the last MAX_PICKS stay."""
         self.picks = [*self.picks, {"at": self.iso(self.now()), "key": key, "reason": reason}][-self.MAX_PICKS :]
 
-    def add_launched(self, key: str, *, summary: str, reason: str, worktree: str | None = None) -> dict:
+    def add_launched(self, key: str, *, summary: str, reason: str, worktree: str | None = None, mode: str | None = None) -> dict:
         ticket: dict[str, Any] = {
             "status": "launched",
             "summary": summary,
             "reason": reason,
             "launchedAt": self.iso(self.now()),
             "worktree": worktree,
+            "mode": mode,
             "stage": None,
             "prUrl": None,
             "relaunches": 0,
