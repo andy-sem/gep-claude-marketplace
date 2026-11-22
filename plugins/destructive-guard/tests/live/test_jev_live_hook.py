@@ -14,12 +14,12 @@ NONE_CALL = "git status"
 
 
 @pytest.fixture
-def run(impl, live_env, tmp_path):
+def run(live_env, tmp_path):
     def go(command, env=None, key=True, sends=True):
         if sends:
             LiveJev.count_request()
         base = {k: v for k, v in live_env.items() if key or k != "TYPESAFE_API_KEY"}
-        return HookRunner.run(impl, HookRunner.bash_input(command, tmp_path), base, env or {}, cwd=tmp_path)
+        return HookRunner.run(HookRunner.bash_input(command, tmp_path), base, env or {}, cwd=tmp_path)
 
     return go
 
@@ -51,12 +51,12 @@ def test_tiny_timeout_asks_with_timeout(run):
     assert "did not answer in time" in out["systemMessage"]
 
 
-def test_no_key_is_silent_and_sends_nothing(impl, live_env, run):
+def test_no_key_is_silent_and_sends_nothing(live_env, run):
     before = LiveJev.requests
     r = run(ASK_CALL, key=False, sends=False)
     assert (r.status, r.stdout) == (0, "")
     assert LiveJev.requests == before
-    session = HookRunner.run_session(impl, {k: v for k, v in live_env.items() if k != "TYPESAFE_API_KEY"})
+    session = HookRunner.run_session({k: v for k, v in live_env.items() if k != "TYPESAFE_API_KEY"})
     assert "TYPESAFE_API_KEY is not set" in json.loads(session.stdout)["systemMessage"]
 
 

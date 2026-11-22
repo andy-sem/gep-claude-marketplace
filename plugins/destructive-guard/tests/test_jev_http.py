@@ -39,7 +39,7 @@ class JevRun:
 
 
 @pytest.fixture
-def run_jev(impl, jev, tmp_path):
+def run_jev(jev, tmp_path):
     """Run the hook against the mock; the caller sets the mock answers. Requests and log lines are this run's only."""
     log_path = tmp_path / "gate.log"
 
@@ -54,7 +54,7 @@ def run_jev(impl, jev, tmp_path):
         }
         before = jev.hits
         started = time.monotonic()
-        r = HookRunner.run(impl, stdin, jev_env, env or {}, cwd=cwd)
+        r = HookRunner.run(stdin, jev_env, env or {}, cwd=cwd)
         seconds = time.monotonic() - started
         log = [json.loads(line) for line in log_path.read_text().splitlines()] if log_path.exists() else []
         return JevRun(
@@ -239,7 +239,7 @@ def test_secrets_are_redacted_before_sending(jev, run_jev):
         assert secret not in sent
 
 
-def test_audit_log_redacted_records(jev, impl, tmp_path):
+def test_audit_log_redacted_records(jev, tmp_path):
     """A Bash none, a skipped .env call, an MCP none with a secret, and an unavailable Jev, in one log."""
     log = tmp_path / "audit.jsonl"
     env = {
@@ -250,7 +250,7 @@ def test_audit_log_redacted_records(jev, impl, tmp_path):
     }
 
     def go(stdin):
-        return HookRunner.run(impl, stdin, env)
+        return HookRunner.run(stdin, env)
 
     jev.answer(JevMock.probs(0.01, 0.98, 0.005, 0.005), usage={"input_tokens": 1000})
     go(bash("TOPSECRET_X=supersecret123 node a.mjs"))
@@ -281,9 +281,9 @@ def test_audit_log_redacted_records(jev, impl, tmp_path):
     assert lines[3]["warning"] == "http"
 
 
-def test_misconfigured_calls_are_logged_as_such(impl, tmp_path):
+def test_misconfigured_calls_are_logged_as_such(tmp_path):
     log = tmp_path / "gate.log"
-    r = HookRunner.run(impl, bash("ls"), {"GATE_LOG": str(log)})
+    r = HookRunner.run(bash("ls"), {"GATE_LOG": str(log)})
     assert r.stdout == ""
     [line] = [json.loads(x) for x in log.read_text().splitlines()]
     assert line["misconfigured"] == "noKey"
@@ -309,9 +309,9 @@ def test_log_creates_missing_directories(jev, run_jev, tmp_path):
 
 
 @pytest.mark.parametrize("flag", ["GATE_ENV_GUARD", "GATE_ENABLED"])
-def test_bad_gate_flag_is_still_logged(impl, tmp_path, flag):
+def test_bad_gate_flag_is_still_logged(tmp_path, flag):
     log = tmp_path / "gate.log"
-    r = HookRunner.run(impl, bash("ls"), {"TYPESAFE_API_KEY": "k", "GATE_LOG": str(log), flag: "maybe"})
+    r = HookRunner.run(bash("ls"), {"TYPESAFE_API_KEY": "k", "GATE_LOG": str(log), flag: "maybe"})
     assert r.stdout == ""
     [line] = [json.loads(x) for x in log.read_text().splitlines()]
     assert line["tool"] == "Bash"

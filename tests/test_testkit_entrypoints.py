@@ -4,8 +4,7 @@ import subprocess
 
 import pytest
 
-from testkit import DG
-from testkit.impl import Impl
+from testkit.entrypoints import Entrypoints
 from testkit.pythons import Pythons
 
 
@@ -16,28 +15,17 @@ def _fake(dir_path, name):
     return p
 
 
-def test_defaults():
-    assert Impl.select("destructive-guard", {}).name == "py"
-    assert Impl.select("gated-dev-simple-workflow", {}).name == "py"
-
-
-def test_unknown_plugin_raises():
-    with pytest.raises(ValueError):
-        Impl.select("nope", {})
-
-
 def test_entry_points_exist():
-    dg = Impl.select("destructive-guard", {})
-    gd = Impl.select("gated-dev-simple-workflow", {})
+    dg = gd = Entrypoints
     for argv in (dg.gate_hook(), dg.env_guard(), dg.check(), gd.launch(), gd.watch_pr(), gd.notify()):
         assert os.path.isfile(argv[-1]), argv
 
 
 def test_py_argv_shapes():
-    dg = Impl.select("destructive-guard", {})
+    dg = Entrypoints
     assert dg.check()[1] == "-I"
     assert dg.check()[-1].endswith("lib/check.py")
-    gd = Impl.select("gated-dev-simple-workflow", {})
+    gd = Entrypoints
     assert gd.notify()[1].endswith("run-python.sh")
     assert gd.watch_pr()[-1].endswith("scripts/watch_pr.py")
 
@@ -66,12 +54,6 @@ def test_empty_env_var_is_ignored(tmp_path):
     assert Pythons.find_python({"GATE_INFRA_PYTHON": "", "PATH": str(tmp_path)}).endswith("python3")
 
 
-def test_impl_interpreter_fields():
-    py = Impl.select("destructive-guard", {})
-    assert py.interpreter_var == "GATE_INFRA_PYTHON"
-    assert py.check_invocation("--config") == f'python3 "{DG}/lib/check.py" --config'
-
-
 def test_require_new_python_rejects_old(tmp_path):
     from testkit.pythons import Pythons
 
@@ -84,8 +66,8 @@ def test_require_new_python_rejects_old(tmp_path):
         Pythons.require_new_python({"PATH": str(tmp_path / "none")})
 
 
-def test_impl_watch_pr_fast_py(tmp_path):
-    gd = Impl.select("gated-dev-simple-workflow", {})
+def test_watch_pr_fast_runner(tmp_path):
+    gd = Entrypoints
     argv = gd.watch_pr(fast=True)
     assert argv[1] == "-I"
     assert argv[2].endswith("testkit/_fast_sleep.py")
@@ -107,4 +89,4 @@ def test_impl_watch_pr_fast_py(tmp_path):
 
 
 def test_gate_hook_is_the_shipped_gate_sh():
-    assert Impl.select("destructive-guard", {}).gate_hook()[-1].endswith("hooks/gate.sh")
+    assert Entrypoints.gate_hook()[-1].endswith("hooks/gate.sh")
