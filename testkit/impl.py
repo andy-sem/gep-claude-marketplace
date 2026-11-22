@@ -24,10 +24,6 @@ class Impl:
     def interpreter_var(self) -> str:
         return "GATE_INFRA_PYTHON"
 
-    @property
-    def unavailable_reason(self) -> str:
-        return "unparsable: python unavailable"
-
     def check_invocation(self, args: str) -> str:
         """The check command line as the docs (skill, README) write it."""
         return f'python3 "{DG}/lib/check.py" {args}'
@@ -40,6 +36,9 @@ class Impl:
 
     def gate_hook(self) -> list[str]:
         return ["bash", str(DG / "hooks" / "gate.sh")]
+
+    def session_hook(self) -> list[str]:
+        return ["bash", str(DG / "hooks" / "session-start.sh")]
 
     def env_guard(self) -> list[str]:
         return ["bash", str(DG / "hooks" / "env-guard.sh")]

@@ -17,7 +17,7 @@ class TicketProject:
 
     DEFAULT_KEY_PATTERN = "^[A-Za-z][A-Za-z0-9._-]*$"
     CONFIG_KEYS = frozenset(
-        ("ticketsDir", "keyPattern", "baseBranch", "setupCommand", "formatCommand", "riskPaths", "escalationExtra", "models", "orchestratorRules", "tracker", "flow")
+        ("ticketsDir", "keyPattern", "baseBranch", "setupCommand", "formatCommand", "riskPaths", "escalationExtra", "models", "orchestratorRules", "tracker", "flow", "dryRunGate")
     )
     TRACKER_KEY_PATTERN = r"^[A-Z][A-Z0-9]*-\d+$"
     TRACKER_KEYS = frozenset(("type", "site", "statuses", "startFrom", "assign", "comments", "baseFromParent"))
@@ -84,7 +84,18 @@ class TicketProject:
         rules = raw.get("orchestratorRules")
         if rules is not None and (not isinstance(rules, str) or not rules or TicketProject._outside_repo(rules)):
             raise LaunchError(f"{file}: orchestratorRules must be a relative path inside the repo")
-        return {"ticketsDir": tickets_dir, "keyPattern": key_pattern, "baseBranch": base_branch, "orchestratorRules": rules, "tracker": tracker, "flow": flow}
+        dry_run_gate = raw.get("dryRunGate", False)
+        if not isinstance(dry_run_gate, bool):
+            raise LaunchError(f"{file}: dryRunGate must be true or false")
+        return {
+            "ticketsDir": tickets_dir,
+            "keyPattern": key_pattern,
+            "baseBranch": base_branch,
+            "orchestratorRules": rules,
+            "tracker": tracker,
+            "flow": flow,
+            "dryRunGate": dry_run_gate,
+        }
 
 
     @staticmethod

@@ -456,3 +456,10 @@ HELPER_FUNCS = {
 @pytest.mark.parametrize("row", HELPERS, ids=lambda r: f"{r['fn']}-{json.dumps(r['input'], ensure_ascii=True)[:30]}")
 def test_helpers_match_the_js_implementation(row):
     assert HELPER_FUNCS[row["fn"]](row["input"]) == row["expected"]
+
+
+def test_read_config_dry_run_gate(tmp_path):
+    assert TicketProject(project(tmp_path / "none")).read_config()["dryRunGate"] is False
+    assert TicketProject(project(tmp_path / "on", config={"dryRunGate": True})).read_config()["dryRunGate"] is True
+    with pytest.raises(LaunchError, match="dryRunGate must be true or false"):
+        TicketProject(project(tmp_path / "bad", config={"dryRunGate": "yes"})).read_config()

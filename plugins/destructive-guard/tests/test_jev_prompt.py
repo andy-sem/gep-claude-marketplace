@@ -10,12 +10,12 @@ import pytest
 
 from destructive_guard.errors import JevConfigError
 from destructive_guard.jev.config import JevConfig
-from destructive_guard.jev.decider import JevDecider
+from destructive_guard.jev.judge import JevJudge
 from destructive_guard.jev.prompt import JevPrompt
 from testkit import DG
-from testkit.check_cli import CheckRunner
+from testkit.hook import HookRunner
 
-BASE_ENV = {"GATE_JEV": "1", "TYPESAFE_API_KEY": "key-123"}
+BASE_ENV = {"TYPESAFE_API_KEY": "key-123"}
 JEV_DIR = DG / "jev"
 
 
@@ -25,7 +25,6 @@ def cfg_with(prompt):
         "url": "https://example.test/v1",
         "model": "m",
         "timeoutMs": 500,
-        "allowThreshold": 0.95,
         "escalateThreshold": 0.5,
         "prompt": prompt,
     }
@@ -80,25 +79,29 @@ def test_builtin_prompts_valid_and_generic(path):
     assert not re.search(r"jira|atlassian|chrome|cloudflare|wrangler|supabase|gcloud|google", text, re.IGNORECASE)
 
 
-def test_jev_decision_with_destructive_prompt():
+def test_judge_with_destructive_prompt():
     cfg = cfg_with(JevPrompt.builtin_prompt("destructive"))
-    assert JevDecider.jev_decision(d(0.1, 0.2, 0.7), cfg) == {"decision": "ask", "reason": "jev: destructive p=0.70 risk=0.70"}
-    assert JevDecider.jev_decision(d(0.02, 0.96, 0.02), cfg) == {
-        "decision": "pass",
-        "reason": "jev: reversible_change p=0.96 safe=0.98",
-    }
-    assert JevDecider.jev_decision(d(0.3, 0.3, 0.4), cfg) is None
+    out = JevJudge.judge({"probabilities": d(0.1, 0.2, 0.7)}, cfg)
+    assert (out.decision, out.reason) == ("ask", "jev: destructive p=0.70 risk=0.70")
+    assert JevJudge.judge({"probabilities": d(0.02, 0.96, 0.02)}, cfg).decision == "none"
+    assert JevJudge.judge({"probabilities": d(0.3, 0.3, 0.4)}, cfg).decision == "none"
 
 
-def test_ask_jev_sends_destructive_question(impl, jev, tmp_path):
+def test_safe_is_optional_but_validated_when_present():
+    without = {k: v for k, v in CUSTOM.items() if k != "safe"}
+    assert JevPrompt.validate_prompt(without) == without
+    with pytest.raises(JevConfigError, match="safe"):
+        JevPrompt.validate_prompt({**CUSTOM, "safe": []})
+
+
+def test_hook_sends_destructive_question(impl, jev, tmp_path):
     jev.answer(d(0.05, 0.05, 0.9), question="destructive")
-    env = {"GATE_JEV": "1", "TYPESAFE_API_KEY": "k", "GATE_JEV_URL": jev.url}
-    proc = CheckRunner.run_check(impl, "--json", "--jev", "--", "rm -rf ~/work", env=env, cwd=tmp_path)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    env = {"TYPESAFE_API_KEY": "k", "GATE_JEV_URL": jev.url}
+    r = HookRunner.run(impl, HookRunner.bash_input("rm -rf ~/work", tmp_path), env, cwd=tmp_path)
     [body] = jev.bodies
     assert list(body["questions"]) == ["destructive"]
     assert body["state"]["context"]["policy"] == JevPrompt.builtin_prompt("destructive")["context"]["policy"]
-    assert json.loads(proc.stdout)["source"] == "jev"
+    assert HookRunner.decision(r.stdout)["permissionDecisionReason"].startswith("jev: ")
 
 
 def test_prompt_env_selects_builtin_or_file(tmp_path):
@@ -109,18 +112,15 @@ def test_prompt_env_selects_builtin_or_file(tmp_path):
     assert JevPrompt.prompt_from_env({"GATE_JEV_PROMPT": str(path)}) == CUSTOM
 
 
-def test_relative_prompt_and_log_resolve_against_project_dir(tmp_path):
+def test_relative_prompt_resolves_against_project_dir(tmp_path):
     (tmp_path / "prompt.json").write_text(json.dumps(CUSTOM))
     env = {
         **BASE_ENV,
         "CLAUDE_PROJECT_DIR": str(tmp_path),
         "GATE_JEV_PROMPT": "./prompt.json",
-        "GATE_JEV_LOG": "jev.jsonl",
     }
     cfg = JevConfig.read(env)
     assert cfg["prompt"] == CUSTOM
-    assert cfg["logPath"] == str(tmp_path / "jev.jsonl")
-    assert JevConfig.read({**BASE_ENV, "GATE_JEV_LOG": "/abs/j.jsonl"})["logPath"] == "/abs/j.jsonl"
 
 
 def test_instructions_context_policy_override_prompt():

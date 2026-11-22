@@ -15,6 +15,7 @@ class EntryStubs:
     # (stub path, package module the stub imports)
     STUBS: ClassVar[list[tuple[Path, str]]] = [
         (DG / "lib" / "gate_main.py", "gate_main"),
+        (DG / "lib" / "session_main.py", "session_main"),
         (DG / "lib" / "check.py", "check"),
         (GD / "scripts" / "launch.py", "launch"),
         (GD / "scripts" / "watch_pr.py", "watch_pr"),

@@ -13,11 +13,6 @@ from .impl import Impl
 class HookRunner:
     """Builds hook inputs, runs the gate hook and reads its decision."""
 
-    ASK_TEMPLATE = (
-        '{{"hookSpecificOutput":{{"hookEventName":"PreToolUse","permissionDecision":"ask",'
-        '"permissionDecisionReason":"{}"}}}}'
-    )
-
     @staticmethod
     def bash_input(command: str, cwd: Path | str) -> str:
         return json.dumps({"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(cwd)})
@@ -39,7 +34,26 @@ class HookRunner:
             impl.gate_hook(),
             input=data,
             capture_output=True,
-            env=IsolatedEnv.clean(impl.env(), {"GATE_JEV": "", "GATE_JEV_LOG": ""}, *env),
+            env=IsolatedEnv.clean(impl.env(), *env),
+            cwd=cwd,
+            timeout=timeout,
+            check=False,
+        )
+        return HookResult(proc.returncode, proc.stdout.decode("utf-8", errors="replace"))
+
+    @staticmethod
+    def run_session(
+        impl: Impl,
+        *env: Mapping[str, str],
+        cwd: Path | str | None = None,
+        timeout: float = 30,
+    ) -> HookResult:
+        """The SessionStart hook (session-start.sh): no stdin that matters, a systemMessage or nothing."""
+        proc = subprocess.run(
+            impl.session_hook(),
+            input=b"{}",
+            capture_output=True,
+            env=IsolatedEnv.clean(impl.env(), *env),
             cwd=cwd,
             timeout=timeout,
             check=False,

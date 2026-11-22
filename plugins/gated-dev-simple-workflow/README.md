@@ -286,12 +286,14 @@ Each ends with `RESULT: OK <file>` or a `NEEDS_DECISION` block. A prompt or
 denial from an approval gate (for example the `destructive-guard` plugin) is
 treated as a checkpoint, never worked around.
 
-With `destructive-guard` installed and enabled, the planner dry-runs every
-call its steps need through the gate (`destructive-guard:check`) and lists
-the ones that will ask, with their rule IDs, in the plan's
-`## Gated operations` table; you see that table at plan approval. Without a
-gate the table lists the calls it expects to need approval, with
-`Rule ID: unknown`.
+The planner lists the calls its steps need that it judges likely to need
+approval in the plan's `## Gated operations` table (columns `Command`, `Gate`,
+`Reason`); you see that table at plan approval. `Gate` is `unknown` by
+default. With `"dryRunGate": true` in `.claude/gated-dev.json` and
+`destructive-guard` installed and enabled, the planner dry-runs each listed
+call through `destructive-guard:check` and writes the answer, for example
+`ask (risk 0.86)`. Each check is one request to the gate's risk classifier
+and sends the redacted command, which is why it is opt-in.
 
 ## Design decisions and history
 
@@ -309,8 +311,8 @@ Decisions made with the user while porting it:
   any gate prompt or denial as a checkpoint (`NEEDS_DECISION`), never as
   something to work around. Its only coupling is a contract: when the gate's
   `check` skill is installed, the planner dry-runs its calls through it.
-  Otherwise it writes `Rule ID: unknown`. No path into the other plugin is
-  hard-coded.
+  Otherwise (or without `dryRunGate`) it writes `Gate: unknown`. No path into
+  the other plugin is hard-coded.
 - **File-based, no issue tracker.** The ticket is
   `<ticketsDir>/<KEY>/ticket.md`, and the key is free-form. Agents have no
   tracker tools or tracker wording. A project that wants tracker steps adds
@@ -356,8 +358,8 @@ uses the same interpreter lookup as the gate (`GATE_INFRA_PYTHON`, then
 notifications are best-effort: with no suitable Python the hook stays
 silent. `jq` is no longer needed. `tests/PORTING.md` maps every old test to
 its Python replacement. An installed `destructive-guard` older than its
-Python version has no `lib/check.py`, so the planner writes `unknown` rule
-IDs.
+Python version has no `lib/check.py`, so the planner writes `unknown` in
+the `Gate` column.
 
 ### Class refactor (November 2026)
 
@@ -445,12 +447,13 @@ Known limits and open questions are in [Running a whole parent](#running-a-whole
 The manual acceptance run (a demo repo and a sandbox Jira project, never a
 real team project) is still to do.
 
-### Planned change in the gate
+### Lean gate follow-up
 
-If `destructive-guard` moves to the Jev-only design in
-`docs/plans/lean-gate.md`, it has no rule ids any more. The planner's
-`## Gated operations` table would then need another source (decision D6
-there).
+`destructive-guard` 1.0 decides with the Jev classifier only and has no rule
+ids. The `## Gated operations` table therefore has a `Gate` column instead of
+`Rule ID`, filled from `check` only when `dryRunGate` is true (decision D6 of
+the `destructive-guard` README, option b: a check costs a Jev request and sends the
+command).
 
 ## Requirements
 

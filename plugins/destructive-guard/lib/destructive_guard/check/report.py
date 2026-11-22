@@ -26,49 +26,45 @@ class CheckReport:
     @classmethod
     def format_check(cls, r: Mapping[str, Any]) -> str:
         what = f"Bash: {r['command']}" if r["tool"] == "Bash" else f"{r['tool']} {cls._compact(r['input'])}"
-        lines = [what]
-        if r["decision"] == "ask":
-            lines += ["decision: ask", f"source:   {r['source']}", f"reason:   {r['reason']}"]
+        reason, warning, risk = r.get("reason"), r.get("warning"), r.get("risk")
+        if r["decision"] == "ask" and reason and not reason.startswith("jev-unavailable"):
+            lines = [what, "decision: ask", f"reason:   {reason}"]
+        elif r["decision"] == "ask":
+            lines = [what, f"decision: ask ({reason})"]
+        elif warning and risk is None and not reason:
+            return "\n".join([what, f"decision: none \u2014 warning: {warning}"])
+        elif risk is not None:
+            limit = r.get("threshold")
+            tail = f" \u2264 {cls._js(limit)}" if limit is not None else ""
+            lines = [what, f"decision: none (risk {cls._js(round(risk, 2))}{tail})"]
         else:
-            lines.append("decision: none (the gate has no opinion; Claude Code's own permission rules decide)")
-        if r["reason"] and r["decision"] != "ask":
-            lines.append(f"reason:   {r['reason']}")
-        rule = r.get("rule")
-        if rule and rule["reason"] != r["reason"]:
-            lines.append(f"rules alone: {rule['decision']} ({rule['reason']})")
-        if r.get("jev"):
-            lines.append(f"jev:      {r['jev']}")
+            lines = [what, f"decision: none ({reason})" if reason else "decision: none"]
+        if warning:
+            lines.append(f"warning:  {warning}")
         return "\n".join(lines)
 
     @classmethod
     def format_config(cls, c: Mapping[str, Any]) -> str:
         lines: list[str] = []
         if c.get("error"):
-            lines.append(f"ERROR: {c['error']} (every gated call asks)")
+            lines.append(f"ERROR: {c['error']}")
         if "enabled" in c:
             lines += [
                 f"enabled:       {cls._js(c['enabled'])}",
-                f"packs:         {', '.join(c['packs']) or '(none)'}",
-                f"rules files:   {', '.join(c['rulesFiles']) or '(none)'}",
-                f"disabled ids:  {', '.join(c['disableRules']) or '(none)'}",
-                f"strict:        {cls._js(c['strict'])}",
                 f"env guard:     {cls._js(c['envGuard'])}",
                 f"log:           {c['log'] if c['log'] is not None else '(off)'}",
             ]
-            if "ruleIds" in c:
-                lines.append(f"rules ({len(c['ruleIds'])}): {', '.join(c['ruleIds'])}")
         j = c["jev"]
-        if not j["enabled"]:
-            lines.append("jev:           off")
-        elif j.get("error"):
-            lines.append(f"jev:           ERROR {j['error']}")
+        if j.get("error"):
+            lines.append(f"jev:           ERROR {j['error']} (api key {j['apiKey']})")
         else:
             lines += [
-                f"jev:           on ({j['url']}, model {j['model']}, api key {j['apiKey']})",
-                f"  prompt:      {j['prompt']} (question {j['question']}; ask {','.join(j['ask'])}; safe {','.join(j['safe'])})",
-                f"  scope:       {','.join(j['scope'])}   can lift: {cls._js(j['canLift'])}",
-                f"  thresholds:  allow {cls._js(j['allowThreshold'])}, escalate {cls._js(j['escalateThreshold'])}; timeout {cls._js(j['timeoutMs'])}ms",
+                f"jev:           {j['url']}, model {j['model']}, api key {j['apiKey']}",
+                f"  prompt:      {j['prompt']} (question {j['question']}; ask {','.join(j['ask'])})",
+                f"  thresholds:  escalate {cls._js(j['escalateThreshold'])}; timeout {cls._js(j['timeoutMs'])}ms",
             ]
+        if c.get("sessionWarning"):
+            lines.append(f"session warning: {c['sessionWarning']}")
         return "\n".join(lines)
 
     @staticmethod

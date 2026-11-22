@@ -74,4 +74,4 @@ test has a row and that every target exists.
 | watch-pr.test.mjs | main returns 2 with a usage line for a missing or relative --state | tests/test_watch_pr.py::test_main_exits_2_with_a_usage_line_for_missing_or_relative_state |
 | watch-pr.test.mjs | parsePrUrl and normalizePr | tests/test_watch_pr_units.py::test_parse_pr_url_and_normalize_pr |
 | watch-pr.test.mjs | a PR url that cannot be parsed counts as a failed poll | tests/test_watch_pr.py::test_pr_url_that_cannot_be_parsed_counts_as_a_failed_poll |
-| watch-pr.test.mjs | the watcher command passes destructive-guard with its defaults | tests/test_watch_pr.py::test_watcher_command_passes_the_gate |
+| watch-pr.test.mjs | the watcher command passes destructive-guard with its defaults | dropped: the gate no longer has deterministic rules (L2); L5 revisits it |

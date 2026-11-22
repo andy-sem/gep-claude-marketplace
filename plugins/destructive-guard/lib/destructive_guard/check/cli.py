@@ -1,11 +1,10 @@
-"""Dry run for destructive-guard (port of check.mjs): what would the gate do with a call, and what
-is the effective configuration? Used by the `check` skill. Builds the config exactly like the hook
-(GateConfig.read_config -> GateConfig.build_rules -> gate), never runs the call, and by default never contacts Jev
-(`--jev` opts in to a real request).
+"""Dry run for destructive-guard: what would the hook do with a call, and what is the effective
+configuration? Used by the `check` skill. Never runs the call; a call check sends the redacted call to
+Jev (one request).
 
-    check.py [--json] [--jev] [--cwd DIR] -- <command...>       a Bash command
-    check.py [--json] [--jev] --mcp <tool> [<json input>]       an MCP call
-    check.py [--json] --config                                  effective config
+    check.py [--json] -- <command...>       a Bash command
+    check.py [--json] --mcp <tool> [<json input>]       an MCP call
+    check.py [--json] --config                          effective config
 
 No call given -> --config. Exit code 0 on success (whatever the decision), 2 on usage errors.
 """
@@ -26,20 +25,16 @@ class CheckCli:
 
     @staticmethod
     def parse_args(argv: list[str]) -> dict[str, Any]:
-        opts: dict[str, Any] = {"json": False, "jev": False, "cwd": None, "mode": "config"}
+        opts: dict[str, Any] = {"json": False, "mode": "config"}
         args = list(argv)
         while args:
             a = args.pop(0)
             if a == "--json":
                 opts["json"] = True
             elif a == "--jev":
-                opts["jev"] = True
+                raise UsageError("--jev is no longer needed: a call check always asks Jev")
             elif a == "--config":
                 opts["mode"] = "config"
-            elif a == "--cwd":
-                if not args:
-                    raise UsageError("--cwd needs a directory")
-                opts["cwd"] = args.pop(0)
             elif a == "--mcp":
                 tool = args.pop(0) if args else None
                 if not tool or not tool.startswith("mcp__"):
@@ -72,7 +67,7 @@ class CheckCli:
         if opts["mode"] == "config":
             c = GateDryRun(env).effective_config()
             return 0, CheckReport._dump(c) if opts["json"] else CheckReport.format_config(c)
-        r = GateDryRun(env, opts["cwd"] or cwd).check_call(opts, jev=opts["jev"])
+        r = GateDryRun(env).check_call(opts)
         return 0, CheckReport._dump(r) if opts["json"] else CheckReport.format_check(r)
 
     @classmethod
