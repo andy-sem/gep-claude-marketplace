@@ -31,7 +31,9 @@ Delete:
   porting record goes with the code it recorded); `tests/test_testkit_contract.py`
   uses another variable than `GATE_CHECKS` in its examples;
   `tests/test_one_class_per_file.py` keeps working (check the listed dirs).
-- `testkit/`: delete `porting.py` only if `test_porting.py` no longer needs
+- `testkit/`: delete `legacy_gate.py` (L1 added it so the rule tests outlive the hook; its users
+  `test_corpus`, `test_packs`, `test_gate_engine`, `test_config`, `test_check` go or lose those rows);
+  delete `porting.py` only if `test_porting.py` no longer needs
   it for GD (it does: keep); delete `projects.py` if nothing imports it after
   the script tests are gone; `stubs.py` (its `STUBS` list now also has the
   workflow's `flow.py`) gains `session_main.py`, and `pyproject.toml`'s

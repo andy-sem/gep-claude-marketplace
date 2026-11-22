@@ -21,7 +21,6 @@ def live_env(tmp_path):
             "TYPESAFE_API_KEY": key,
             "GATE_JEV_TIMEOUT_MS": "10000",
             "GATE_LOG": str(tmp_path / "gate.log"),
-            "GATE_JEV_LOG": str(tmp_path / "jev.log"),
         }
     )
 

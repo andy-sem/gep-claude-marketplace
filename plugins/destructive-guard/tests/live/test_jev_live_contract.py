@@ -9,7 +9,7 @@ from testkit.live_jev import LiveJev
 
 pytestmark = pytest.mark.live_jev
 
-BASH = {"tool": "Bash", "command": "git status", "scripts": [], "problems": []}
+BASH = {"tool": "Bash", "command": "git status"}
 MCP = {"tool": "mcp__db__execute_sql", "input": {"query": "SELECT count(*) FROM orders"}}
 
 
@@ -41,7 +41,7 @@ def test_both_state_shapes_get_an_answer(live_env, call):
 
 def test_command_at_the_cap_is_accepted(live_env):
     command = ("echo " + "lorem ipsum " * 900)[:9000]
-    _cfg, state, result = LiveJev.raw({"tool": "Bash", "command": command, "scripts": [], "problems": []}, live_env)
+    _cfg, state, result = LiveJev.raw({"tool": "Bash", "command": command}, live_env)
     assert len(state["command"]) == 8000
     assert any("command cut" in n for n in state["notes"])
     assert "error" not in result, result

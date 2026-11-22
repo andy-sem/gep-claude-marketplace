@@ -15,7 +15,7 @@ ESCALATE = 0.5
 
 def call_of(case: dict) -> dict:
     if "bash" in case:
-        return {"tool": "Bash", "command": case["bash"], "scripts": [], "problems": []}
+        return {"tool": "Bash", "command": case["bash"]}
     return {"tool": case["mcp"], "input": case["input"]}
 
 

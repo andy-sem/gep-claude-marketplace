@@ -16,7 +16,7 @@ from destructive_guard.jev.redactor import Redactor
 from destructive_guard.jev.request import JevRequest
 from testkit.jev_mock import JevMock
 
-BASE_ENV = {"GATE_JEV": "1", "TYPESAFE_API_KEY": "key-123"}
+BASE_ENV = {"TYPESAFE_API_KEY": "key-123"}
 JEV_URL = "https://api.typesafe.ai/v1/systemone"
 # The JS `cfg` without `logPath`; the ported tests exercise the cloud-change preset.
 CFG = {
@@ -39,8 +39,8 @@ def answer(p):
     return {"answers": {"cloud_change": {"type": "choice", "probabilities": p}}}
 
 
-def bash_call(command, scripts=None):
-    return {"tool": "Bash", "command": command, "scripts": scripts or []}
+def bash_call(command):
+    return {"tool": "Bash", "command": command}
 
 
 def jev_config_error(env):
@@ -117,8 +117,12 @@ def read_jev_configs(*envs):
     return jev_many("read", *([e] for e in envs))
 
 
-def test_read_jev_config_null_when_off():
-    assert read_jev_configs({}, {"GATE_JEV": ""}, {"GATE_JEV": "0"}) == [None, None, None]
+def test_read_jev_config_has_no_off_state():
+    with pytest.raises(JevConfigError) as e:
+        JevConfig.read({})
+    assert e.value.kind == "noKey"
+    with pytest.raises(JevConfigError):
+        JevConfig.read({"TYPESAFE_API_KEY": "  "})
 
 
 def test_read_jev_config_defaults():
@@ -127,94 +131,50 @@ def test_read_jev_config_defaults():
         "apiKey": "key-123",
         "url": JEV_URL,
         "model": "jev-latest",
-        "allowThreshold": 0.95,
         "escalateThreshold": 0.5,
         "timeoutMs": 1500,
-        "logPath": None,
-        "scope": ["bash", "mcp"],
-        "canLift": True,
         "prompt": prompt,
     }
 
 
-def test_read_jev_config_scope_and_can_lift():
-    scopes = ["", "bash", " MCP ", "mcp, bash,mcp"]
-    lifts = ["", "1", "0"]
-    results = read_jev_configs(
-        *({**BASE_ENV, "GATE_JEV_SCOPE": v} for v in scopes),
-        *({**BASE_ENV, "GATE_JEV_CAN_LIFT": v} for v in lifts),
-    )
-    assert [c["scope"] for c in results[: len(scopes)]] == [["bash", "mcp"], ["bash"], ["mcp"], ["bash", "mcp"]]
-    assert [c["canLift"] for c in results[len(scopes) :]] == [True, True, False]
-    for bad in [
-        {"GATE_JEV_SCOPE": "bash,files"},
-        {"GATE_JEV_SCOPE": ","},
-        {"GATE_JEV_SCOPE": "none"},
-        {"GATE_JEV_CAN_LIFT": "yes"},
-        {"GATE_JEV_CAN_LIFT": "2"},
-    ]:
-        jev_config_error({**BASE_ENV, **bad})
-
-
 def test_read_jev_config_empty_optional_vars_are_unset():
     [c] = read_jev_configs(
-        {
-            **BASE_ENV,
-            "GATE_JEV_URL": "  ",
-            "GATE_JEV_MODEL": "",
-            "GATE_JEV_TIMEOUT_MS": "",
-            "GATE_JEV_ALLOW_THRESHOLD": "",
-            "GATE_JEV_ESCALATE_THRESHOLD": "",
-            "GATE_JEV_LOG": "",
-        }
+        {**BASE_ENV, "GATE_JEV_URL": "  ", "GATE_JEV_MODEL": "", "GATE_JEV_TIMEOUT_MS": "", "GATE_JEV_ESCALATE_THRESHOLD": ""}
     )
     assert c["url"] == JEV_URL
     assert c["model"] == "jev-latest"
     assert c["timeoutMs"] == 1500
-    assert c["allowThreshold"] == 0.95
     assert c["escalateThreshold"] == 0.5
-    assert c["logPath"] is None
 
 
 def test_read_jev_config_overrides():
     [c] = read_jev_configs(
-        {
-            **BASE_ENV,
-            "GATE_JEV_MODEL": "m",
-            "GATE_JEV_TIMEOUT_MS": "30000",
-            "GATE_JEV_ALLOW_THRESHOLD": "0.9",
-            "GATE_JEV_ESCALATE_THRESHOLD": "1",
-            "GATE_JEV_LOG": "/tmp/x.jsonl",
-        }
+        {**BASE_ENV, "GATE_JEV_MODEL": "m", "GATE_JEV_TIMEOUT_MS": "30000", "GATE_JEV_ESCALATE_THRESHOLD": "1"}
     )
-    assert c["model"] == "m"
-    assert c["timeoutMs"] == 30000
-    assert c["allowThreshold"] == 0.9
-    assert c["escalateThreshold"] == 1
-    assert c["logPath"] == "/tmp/x.jsonl"
+    assert (c["model"], c["timeoutMs"], c["escalateThreshold"]) == ("m", 30000, 1)
 
 
 @pytest.mark.parametrize(
-    "env",
+    ("env", "kind"),
     [
-        {"GATE_JEV": "yes", "TYPESAFE_API_KEY": "k"},
-        {"GATE_JEV": "1"},
-        {**BASE_ENV, "GATE_JEV_ALLOW_THRESHOLD": "1.5"},
-        {**BASE_ENV, "GATE_JEV_ALLOW_THRESHOLD": "-0.1"},
-        {**BASE_ENV, "GATE_JEV_ALLOW_THRESHOLD": "abc"},
-        {**BASE_ENV, "GATE_JEV_ESCALATE_THRESHOLD": "2"},
-        {**BASE_ENV, "GATE_JEV_ESCALATE_THRESHOLD": "abc"},
-        {**BASE_ENV, "GATE_JEV_TIMEOUT_MS": "0"},
-        {**BASE_ENV, "GATE_JEV_TIMEOUT_MS": "30001"},
-        {**BASE_ENV, "GATE_JEV_TIMEOUT_MS": "1.5"},
-        {**BASE_ENV, "GATE_JEV_TIMEOUT_MS": "abc"},
-        {**BASE_ENV, "GATE_JEV_URL": "not a url"},
-        {**BASE_ENV, "GATE_JEV_URL": "http://example.com"},
+        ({}, "noKey"),
+        ({**BASE_ENV, "GATE_JEV_ESCALATE_THRESHOLD": "2"}, "badValue"),
+        ({**BASE_ENV, "GATE_JEV_ESCALATE_THRESHOLD": "abc"}, "badValue"),
+        ({**BASE_ENV, "GATE_JEV_TIMEOUT_MS": "0"}, "badValue"),
+        ({**BASE_ENV, "GATE_JEV_TIMEOUT_MS": "30001"}, "badValue"),
+        ({**BASE_ENV, "GATE_JEV_TIMEOUT_MS": "1.5"}, "badValue"),
+        ({**BASE_ENV, "GATE_JEV_TIMEOUT_MS": "abc"}, "badValue"),
+        ({**BASE_ENV, "GATE_JEV_URL": "not a url"}, "badUrl"),
+        ({**BASE_ENV, "GATE_JEV_URL": "http://example.com"}, "badUrl"),
+        ({**BASE_ENV, "GATE_JEV_PROMPT": "nope"}, "badPrompt"),
+        ({**BASE_ENV, "GATE_JEV_PROMPT": "/no/such/prompt.json"}, "badPrompt"),
     ],
-    ids=json.dumps,
+    ids=lambda v: json.dumps(v) if isinstance(v, dict) else v,
 )
-def test_read_jev_config_rejects_invalid_input(env):
-    jev_config_error(env)
+def test_read_jev_config_rejects_invalid_input(env, kind):
+    with pytest.raises(JevConfigError) as e:
+        JevConfig.read(env)
+    assert e.value.kind == kind
 
 
 def test_read_jev_config_accepts_loopback_http_urls():
@@ -308,24 +268,17 @@ def build_states(*calls):
     return jev_many("build_state", *([c] for c in calls))
 
 
-def test_build_state_bash_payload_with_scripts_and_notes():
-    """The state runJev sends for the JS 'sends the Bash payload' row (scripts given directly)."""
-    [state] = build_states(
-        bash_call(
-            "bash infra/cloud/apply.sh --apply",
-            [
-                {"path": "infra/cloud/apply.sh", "content": "terraform apply\nTOKEN=abcdef\n"},
-                {"path": "lib/.env.sh", "content": "ok\ncat .env\nfoo\n"},
-            ],
-        )
-    )
-    assert state["tool"] == "Bash"
-    assert state["command"] == "bash infra/cloud/apply.sh --apply"
-    assert state["scripts"] == [
-        {"path": "infra/cloud/apply.sh", "content": "terraform apply\nTOKEN=[REDACTED]\n"},
-        {"path": "lib/.env.sh", "content": "ok\n[line removed: .env reference]\nfoo\n"},
-    ]
-    assert state["notes"] == []
+def test_build_state_bash_payload_is_the_redacted_command_only():
+    [state] = build_states(bash_call("bash infra/cloud/apply.sh --apply TOKEN=abcdef"))
+    assert state == {
+        "tool": "Bash",
+        "command": "bash infra/cloud/apply.sh --apply TOKEN=[REDACTED]",
+        "notes": [],
+    }
+
+
+def test_build_state_skips_env_references():
+    assert build_states(bash_call("cat .env"), {"tool": "mcp__x__y", "input": {"p": "a/.env.local"}}) == [None, None]
 
 
 def test_build_state_caps_command_and_notes_cut():
@@ -333,37 +286,6 @@ def test_build_state_caps_command_and_notes_cut():
     [state] = build_states(bash_call(command))
     assert len(state["command"]) == 8000
     assert state["notes"] == [f"command cut to 8000 of {len(command)} characters"]
-
-
-def test_build_state_caps_scripts_at_64_kb_total():
-    def big(n):
-        return {"path": f"f{n}.mjs", "content": "x" * 40000}
-
-    [state] = build_states(
-        bash_call(
-            "node f1.mjs",
-            [
-                big(1),
-                big(2),
-                {**big(3), "content": "y"},
-                {"path": "cut.mjs", "content": "z", "truncated": True, "size": 70000},
-            ],
-        )
-    )
-    assert [s["path"] for s in state["scripts"]] == ["f1.mjs", "f2.mjs"]
-    assert sum(len(s["content"].encode()) for s in state["scripts"]) == 65536
-    assert state["notes"] == [
-        "cut.mjs cut at 64 KB",
-        "scripts cut at 64 KB total: f2.mjs truncated; omitted: f3.mjs, cut.mjs",
-    ]
-
-
-def test_build_state_notes_file_cut_at_per_file_cap():
-    [state] = build_states(
-        bash_call("node a.mjs", [{"path": "a.mjs", "content": "x", "truncated": True, "size": 70000}])
-    )
-    assert state["notes"] == ["a.mjs cut at 64 KB"]
-    assert len(state["scripts"]) == 1
 
 
 # ---------------------------------------------------------------------------

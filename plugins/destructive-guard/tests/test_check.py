@@ -7,6 +7,7 @@ import pytest
 
 from testkit.check_cli import CheckRunner
 from testkit.hook import HookRunner
+from testkit.legacy_gate import LegacyGate
 from testkit.projects import TempProject
 
 
@@ -25,9 +26,8 @@ def test_parse_args_command_mcp_config_and_options(impl, tmp_path):
     assert check_json(impl, "--mcp", "mcp__x__y", cwd=tmp_path)["input"] == {}
     assert "packs" in check_json(impl, cwd=tmp_path)
     assert "packs" in check_json(impl, "--config", cwd=tmp_path)
-    o = check_json(impl, "--jev", "--cwd", str(tmp_path), "ls", cwd=tmp_path)
+    o = check_json(impl, "--cwd", str(tmp_path), "ls", cwd=tmp_path)
     assert o["command"] == "ls"
-    assert o["jev"] == "consulted"
 
 
 @pytest.mark.parametrize(
@@ -89,15 +89,12 @@ def test_check_call_config_errors_ask_gate_config(impl, tmp_path, env):
     assert r["source"] == "gate-config"
 
 
-def test_check_call_never_contacts_jev_without_flag(impl, tmp_path):
-    # An unreachable URL: a request would only change the timing, never the answer,
-    # so assert on the reported mode instead.
-    env = {"GATE_JEV": "1", "TYPESAFE_API_KEY": "k", "GATE_JEV_URL": "http://127.0.0.1:1/v1"}
+def test_check_never_contacts_jev_until_l4(impl, tmp_path):
+    # An unreachable URL: a request would only change the timing, never the answer.
+    env = {"TYPESAFE_API_KEY": "k", "GATE_JEV_URL": "http://127.0.0.1:1/v1"}
     r = CheckRunner.check_call(impl, {"bash": "git push -f"}, env=env, cwd=tmp_path)
     assert r["source"] == "git-push-force"
-    assert r["jev"] == "would be consulted (pass --jev)"
-    scoped = CheckRunner.check_call(impl, {"bash": "ls"}, env={**env, "GATE_JEV_SCOPE": "mcp"}, cwd=tmp_path)
-    assert scoped["jev"] == "off"
+    assert r["jev"] == "off"
 
 
 def test_effective_config_defaults_ids_redaction_errors(impl, tmp_path):
@@ -107,21 +104,20 @@ def test_effective_config_defaults_ids_redaction_errors(impl, tmp_path):
     assert "git-push-force" in c["ruleIds"]
     assert c["jev"] == {"enabled": False}
 
-    env = {"GATE_JEV": "1", "TYPESAFE_API_KEY": "sekret-123", "GATE_JEV_SCOPE": "bash"}
+    env = {"TYPESAFE_API_KEY": "sekret-123"}
     proc = CheckRunner.run_check(impl, "--json", "--config", env=env, cwd=tmp_path)
     j = json.loads(proc.stdout)
     assert j["jev"]["enabled"] is True
     assert j["jev"]["apiKey"] == "[set]"
-    assert j["jev"]["scope"] == ["bash"]
     assert j["jev"]["prompt"] == "destructive"
     assert "sekret-123" not in proc.stdout
 
     assert re.match(r"^gate-config: ", check_json(impl, "--config", env={"GATE_CHECKS": "nope"}, cwd=tmp_path)["error"])
-    assert "TYPESAFE_API_KEY" in check_json(impl, "--config", env={"GATE_JEV": "1"}, cwd=tmp_path)["jev"]["error"]
+    assert check_json(impl, "--config", env={"GATE_JEV_TIMEOUT_MS": "x", "TYPESAFE_API_KEY": "k"}, cwd=tmp_path)["jev"]["error"].startswith("gate-config: GATE_JEV_TIMEOUT_MS")
 
 
 def test_cli_text_and_json_output_key_never_printed(impl, tmp_path):
-    env = {"GATE_JEV": "1", "TYPESAFE_API_KEY": "sekret-123"}
+    env = {"TYPESAFE_API_KEY": "sekret-123"}
     text = CheckRunner.run_check(impl, "git push --force", env=env, cwd=tmp_path)
     assert text.returncode == 0
     assert re.search(r"decision: ask", text.stdout)
@@ -147,7 +143,7 @@ def test_cli_text_and_json_output_key_never_printed(impl, tmp_path):
 )
 def test_documented_invocations_pass_the_gate(impl, tmp_path, args):
     command = impl.check_invocation(args)
-    assert HookRunner.run(impl, HookRunner.bash_input(command, tmp_path), cwd=tmp_path).stdout == ""
+    assert LegacyGate.run(HookRunner.bash_input(command, tmp_path), cwd=tmp_path).stdout == ""
 
 
 def test_cwd_resolves_scripts_the_command_runs(impl, tmp_path):

@@ -29,32 +29,30 @@ class GateDryRun:
         return int(x) if isinstance(x, float) and x.is_integer() else x
 
     def _jev_summary(self) -> dict[str, Any]:
-        """Jev settings for display; never includes the API key itself."""
-        toggle = self.env.get("GATE_JEV")
-        if not toggle or toggle.strip() in ("", "0"):
-            return {"enabled": False}
-        try:
-            from ..jev.config import JevConfig
+        """Jev settings for display; never includes the API key itself. Without a key Jev is not configured.
+        (check still runs the 0.8 rules only; L4 rewrites it on the Jev hook path.)"""
+        from ..errors import JevConfigError
+        from ..jev.config import JevConfig
 
+        try:
             cfg = JevConfig.read(self.env)
-            if not cfg:
+        except JevConfigError as e:
+            if e.kind == "noKey":
                 return {"enabled": False}
-            rest = {k: v for k, v in cfg.items() if k not in ("apiKey", "prompt")}
-            for k in ("allowThreshold", "escalateThreshold"):
-                if k in rest:
-                    rest[k] = GateDryRun._num(rest[k])
-            prompt = cfg["prompt"]
-            return {
-                "enabled": True,
-                **rest,
-                "apiKey": "[set]" if cfg.get("apiKey") else "[missing]",
-                "prompt": (self.env.get("GATE_JEV_PROMPT") or "").strip() or "destructive",
-                "question": prompt["question"],
-                "ask": prompt["ask"],
-                "safe": prompt["safe"],
-            }
-        except Exception as e:  # noqa: BLE001
             return {"enabled": True, "error": f"gate-config: {e}"}
+        prompt = cfg["prompt"]
+        return {
+            "enabled": True,
+            "url": cfg["url"],
+            "model": cfg["model"],
+            "escalateThreshold": GateDryRun._num(cfg["escalateThreshold"]),
+            "timeoutMs": cfg["timeoutMs"],
+            "apiKey": "[set]",
+            "prompt": (self.env.get("GATE_JEV_PROMPT") or "").strip() or "destructive",
+            "question": prompt["question"],
+            "ask": prompt["ask"],
+            "safe": prompt["safe"],
+        }
 
     def effective_config(self) -> dict[str, Any]:
         """Effective configuration plus the loaded rule ids, or the config error the hook would answer with."""
@@ -91,7 +89,8 @@ class GateDryRun:
             target = {"tool": call["tool"], "input": call["input"]}
         if self.cwd:
             hook_input["cwd"] = self.cwd
-        gate_env = self.env if jev else {k: v for k, v in self.env.items() if not GateDryRun.JEV_VARS.match(k)}
+        # The rule gate never talks to Jev any more; `--jev` is accepted and ignored until L4.
+        gate_env = {k: v for k, v in self.env.items() if not GateDryRun.JEV_VARS.match(k)}
 
         try:
             config = GateConfig.read_config(self.env, cwd=self.cwd or os.getcwd())
@@ -105,15 +104,9 @@ class GateDryRun:
             return {**target, **GateDryRun._answer({"decision": "ask", "reason": f"gate-config: {e}"}), "rule": None}
         trace: dict = {}
         result = Gate(rules, gate_env, self.cwd).gate(hook_input, strict=config["strict"], trace=trace)
-        jev_info = self._jev_summary()
-        in_scope = (
-            ("bash" if bash else "mcp") in jev_info["scope"]
-            if jev_info["enabled"] and not jev_info.get("error")
-            else False
-        )
         return {
             **target,
             **GateDryRun._answer(result),
             "rule": GateDryRun._answer(trace["rule"]) if trace.get("rule") else None,
-            "jev": "consulted" if jev else "would be consulted (pass --jev)" if in_scope else "off",
+            "jev": "off",
         }
