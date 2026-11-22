@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from testkit.hook import HookRunner
-from testkit.live_jev import LiveJev
+from dg_testkit.hook import HookRunner
+from dg_testkit.live_jev import LiveJev
 
 pytestmark = pytest.mark.live_jev
 

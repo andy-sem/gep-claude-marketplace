@@ -7,11 +7,11 @@ import subprocess
 
 import pytest
 
-from testkit import DG
-from testkit.envs import IsolatedEnv
-from testkit.fakebin import FakeBin
-from testkit.hook import HookRunner
-from testkit.pythons import Pythons
+from dg_testkit import DG
+from dg_testkit.envs import IsolatedEnv
+from dg_testkit.fakebin import FakeBin
+from dg_testkit.hook import HookRunner
+from dg_testkit.pythons import Pythons
 
 GATE_SH = DG / "hooks" / "gate.sh"
 NO_PYTHON = "plugin-fault: no Python >= 3.14 found (set GATE_INFRA_PYTHON)"

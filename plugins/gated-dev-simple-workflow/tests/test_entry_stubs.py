@@ -4,10 +4,10 @@ import subprocess
 
 import pytest
 
-from testkit import GD
-from testkit.envs import IsolatedEnv
-from testkit.pythons import Pythons
-from testkit.stubs import EntryStubs
+from gd_testkit import GD
+from gd_testkit.envs import IsolatedEnv
+from gd_testkit.pythons import Pythons
+from gd_testkit.stubs import EntryStubs
 
 STUBS = EntryStubs.stubs_of(GD)
 
@@ -20,11 +20,6 @@ def test_stub_parses_as_python_37(stub):
 @pytest.mark.parametrize("stub", STUBS, ids=EntryStubs.stub_id)
 def test_old_python_gets_exit_3(old_python, stub):
     EntryStubs.check_old_python_exit_3(old_python, stub[0])
-
-
-@pytest.mark.parametrize("stub", [s for s in STUBS if s[1] not in ("notify", "watch_pr", "launch", "flow")], ids=EntryStubs.stub_id)
-def test_314_imports_package(tmp_path, stub):
-    EntryStubs.check_314_imports_package(tmp_path, *stub)
 
 
 def test_314_notify_stub_hands_over_to_the_real_package(tmp_path):

@@ -8,11 +8,11 @@ import subprocess
 import pytest
 
 from destructive_guard.session import SessionCheck
-from testkit import DG
-from testkit.envs import IsolatedEnv
-from testkit.fakebin import FakeBin
-from testkit.hook import HookRunner
-from testkit.jev_mock import JevMock
+from dg_testkit import DG
+from dg_testkit.envs import IsolatedEnv
+from dg_testkit.fakebin import FakeBin
+from dg_testkit.hook import HookRunner
+from dg_testkit.jev_mock import JevMock
 
 OK = {"TYPESAFE_API_KEY": "k"}
 TAIL = "destructive-guard only blocks .env files this session"

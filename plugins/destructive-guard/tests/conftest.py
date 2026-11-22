@@ -1,9 +1,9 @@
-"""Root conftest: fixtures shared by repo-level and plugin tests."""
+"""Fixtures of the destructive-guard tests."""
 
 import pytest
 
-from testkit.jev_mock import JevMock
-from testkit.pythons import Pythons
+from dg_testkit.jev_mock import JevMock
+from dg_testkit.pythons import Pythons
 
 
 @pytest.fixture

@@ -68,6 +68,8 @@ uv run pytest -m live_jev                                  # optional: tests aga
 
 `destructive-guard` needs Python >= 3.14 (standard library only; tests: `uv run pytest plugins/destructive-guard`). Keep existing tests green and add tests with every behaviour change. `gated-dev-simple-workflow` needs Python >= 3.14 too (launcher, PR watcher, notification hook; tests: `uv run pytest plugins/gated-dev-simple-workflow`); its skills and agents (Markdown) have none.
 
+All tests live in the plugin they test (`plugins/<name>/tests/`), each with its own `conftest.py` and helper package (`dg_testkit`, `gd_testkit`); the repo root has no tests. The two helper packages are copies where they overlap (`envs`, `fakebin`, `pythons`, `stubs`), so each plugin's tests run on their own.
+
 ## Adding or changing a plugin
 
 Every plugin lives in two places that must stay in sync:

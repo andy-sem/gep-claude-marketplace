@@ -12,10 +12,10 @@ from pathlib import Path
 
 import pytest
 
-from testkit.entrypoints import Entrypoints
-from testkit.envs import IsolatedEnv
-from testkit.fakebin import FakeBin
-from testkit.gitrepo import GitRepo
+from gd_testkit.entrypoints import Entrypoints
+from gd_testkit.envs import IsolatedEnv
+from gd_testkit.fakebin import FakeBin
+from gd_testkit.gitrepo import GitRepo
 
 ORCA = {"TERM_PROGRAM": "Orca"}
 ITERM = {"TERM_PROGRAM": "iTerm.app", "ITERM_SESSION_ID": "w0t1p0:ABC-123"}

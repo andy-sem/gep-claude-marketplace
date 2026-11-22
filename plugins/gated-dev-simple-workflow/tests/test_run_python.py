@@ -4,10 +4,10 @@ import os
 import shutil
 import subprocess
 
-from testkit import GD
-from testkit.envs import IsolatedEnv
-from testkit.fakebin import FakeBin
-from testkit.pythons import Pythons
+from gd_testkit import GD
+from gd_testkit.envs import IsolatedEnv
+from gd_testkit.fakebin import FakeBin
+from gd_testkit.pythons import Pythons
 
 RUN_PYTHON = GD / "hooks" / "run-python.sh"
 
