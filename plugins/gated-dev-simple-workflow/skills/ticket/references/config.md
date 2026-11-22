@@ -102,7 +102,7 @@ dev).
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `mode` | `auto` | `auto` (the session decides) or a fixed mode for every ticket. |
-| `modes.<mode>.session` | `heavy: opus`, `medium: sonnet`, `light: sonnet` | Session model the launcher starts for that mode: `opus`, `sonnet`, `haiku` or a `claude-...` model id. |
+| `modes.<mode>.session` | `heavy: opus`, `medium: sonnet`, `light: sonnet` | Session model the launcher starts for that mode: `opus`, `sonnet` or a `claude-...` model id. `haiku` and any `claude-...haiku...` id are rejected: the session is the orchestrator and needs sonnet or opus. |
 | `modeRules` | `[]` | Extra plain-language rules for the mode decision, like `flow.pickRules`. |
 
 Stage sets per mode are fixed, not configurable: a configurable stage list

@@ -235,9 +235,9 @@ def test_read_config_mode_defaults_and_overrides(tmp_path):
     assert (d["mode"], d["modes"], d["modeRules"]) == ("auto", MODE_DEFAULTS, [])
     for n, mode in enumerate(("auto", "heavy", "medium", "light")):
         assert TicketProject(project(tmp_path / f"m{n}", config={"mode": mode})).read_config()["mode"] == mode
-    config = {"modes": {"light": {"session": "haiku"}, "heavy": {"session": "claude-opus-4-5"}}, "modeRules": ["billing is medium"]}
+    config = {"modes": {"light": {"session": "opus"}, "heavy": {"session": "claude-opus-4-5"}}, "modeRules": ["billing is medium"]}
     c = TicketProject(project(tmp_path / "c", config=config)).read_config()
-    assert c["modes"] == {"heavy": {"session": "claude-opus-4-5"}, "medium": {"session": "sonnet"}, "light": {"session": "haiku"}}
+    assert c["modes"] == {"heavy": {"session": "claude-opus-4-5"}, "medium": {"session": "sonnet"}, "light": {"session": "opus"}}
     assert c["modeRules"] == ["billing is medium"]
     assert TicketProject(project(tmp_path / "e", config={"modes": {"light": {}}})).read_config()["modes"] == MODE_DEFAULTS
     assert MODE_DEFAULTS == TicketProject.MODE_DEFAULTS
@@ -367,6 +367,21 @@ def test_launch_ticket_with_tracker_and_no_ticket_md_starts_in_the_main_checkout
 
 
 
+@pytest.mark.parametrize("mode", ["heavy", "medium", "light"])
+@pytest.mark.parametrize("session", ["haiku", "claude-haiku-5-5"])
+def test_read_config_rejects_haiku_as_a_session_model(tmp_path, mode, session):
+    root = project(tmp_path, config={"modes": {mode: {"session": session}}})
+    with pytest.raises(LaunchError, match=rf"modes\.{mode}\.session must not be haiku.*sonnet or opus"):
+        TicketProject(root).read_config()
+
+
+@pytest.mark.parametrize("mode", ["heavy", "medium", "light"])
+@pytest.mark.parametrize("session", ["sonnet", "opus", "claude-opus-5-5"])
+def test_read_config_accepts_sonnet_and_opus_as_a_session_model(tmp_path, mode, session):
+    root = project(tmp_path, config={"modes": {mode: {"session": session}}})
+    assert TicketProject(root).read_config()["modes"][mode] == {"session": session}
+
+
 def test_launch_ticket_with_a_ticket_mode_starts_the_modes_session_model(tmp_path):
     from gated_dev.completed_run import CompletedRun
     from gated_dev.launch.launcher import TicketLauncher
@@ -375,9 +390,9 @@ def test_launch_ticket_with_a_ticket_mode_starts_the_modes_session_model(tmp_pat
         return CompletedRun("", "")
 
     env = {"TERM_PROGRAM": "iTerm.app"}
-    root = project(tmp_path, config={"modes": {"light": {"session": "haiku"}}}, tickets={"PROJ-1": "# Fix it\n"})
+    root = project(tmp_path, config={"modes": {"light": {"session": "claude-sonnet-5-5"}}}, tickets={"PROJ-1": "# Fix it\n"})
     config = TicketProject(root).read_config()
-    for mode, model in [("heavy", "opus"), ("medium", "sonnet"), ("light", "haiku")]:
+    for mode, model in [("heavy", "opus"), ("medium", "sonnet"), ("light", "claude-sonnet-5-5")]:
         plan = TicketLauncher.launch_ticket(root=root, key="PROJ-1", config=config, dry_run=True, ticket_mode=mode, env=env, run=fake_run)
         assert (plan["ticketMode"], plan["model"]) == (mode, model)
         assert plan["command"].endswith(f'claude --model {model} --name "PROJ-1 · Fix it" "/ticket PROJ-1 --mode {mode}"')

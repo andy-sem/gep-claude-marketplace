@@ -229,6 +229,6 @@ raises it first.
 
 ## 11. Open questions
 
-- **O1.** Session model for medium and light: Sonnet as asked; should a
+- **O1** (decided 2026-11-22: haiku forbidden as session model). Session model for medium and light: Sonnet as asked; should a
   project be able to put light on Haiku via `modes.light.session`? (The
   config allows it; the default stays Sonnet.)

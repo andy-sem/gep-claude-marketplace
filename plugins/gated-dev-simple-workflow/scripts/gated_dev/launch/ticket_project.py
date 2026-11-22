@@ -131,7 +131,11 @@ class TicketProject:
                     raise LaunchError(f'{file}: modes.{name} has unknown key "{k}"')
             if "session" in value:
                 if not LaunchNaming.is_model(value["session"]):
-                    raise LaunchError(f"{file}: modes.{name}.session must be opus, sonnet, haiku or a claude-... model id")
+                    raise LaunchError(f"{file}: modes.{name}.session must be opus, sonnet or a claude-... model id")
+                if "haiku" in value["session"].lower():
+                    raise LaunchError(
+                        f"{file}: modes.{name}.session must not be haiku: the session is the orchestrator and needs sonnet or opus"
+                    )
                 modes[name]["session"] = value["session"]
         return modes
 

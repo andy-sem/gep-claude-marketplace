@@ -546,10 +546,10 @@ def test_dry_run_shows_mode_and_model_per_key_without_mode_the_session_decides(d
 
 
 def test_config_modes_session_override_is_used(demo):
-    p = demo(config={"modes": {"light": {"session": "claude-haiku-4-5"}}})
+    p = demo(config={"modes": {"light": {"session": "claude-sonnet-4-5"}}})
     r = p.launch("--dry-run", "--mode", "light", "K-1", host=ITERM)
     assert r.status == 0, r.stderr
-    assert re.search(r'^  command: .* claude --model claude-haiku-4-5 --name .*"/ticket K-1 --mode light"$', r.stdout, re.MULTILINE)
+    assert re.search(r'^  command: .* claude --model claude-sonnet-4-5 --name .*"/ticket K-1 --mode light"$', r.stdout, re.MULTILINE)
 
 
 @pytest.mark.parametrize("argv", [["--mode"], ["--mode", "auto", "K-1"], ["--mode", "opus", "K-1"], ["--mode", "heavy;id", "K-1"]])
@@ -562,12 +562,12 @@ def test_bad_mode_values_are_refused_before_anything_runs(demo, argv):
 
 
 def test_resume_starts_on_the_recorded_modes_model(demo):
-    p = demo(tickets={}, config={"modes": {"medium": {"session": "haiku"}}})
+    p = demo(tickets={}, config={"modes": {"medium": {"session": "sonnet"}}})
     p.run_dir("k-1-do-it", "K-1/do-it", stage="dev", ticket="# Do it\n", mode="medium")
     r = p.launch("K-1", host=ORCA)
     assert r.status == 0, r.stderr
-    assert "  mode:    medium\n  model:   haiku\n" in r.stdout
-    assert re.search(r'claude --model haiku --name "K-1 resume · Do it" "/ticket K-1 --resume"$', arg_after(create_call(p), "--command"))
+    assert "  mode:    medium\n  model:   sonnet\n" in r.stdout
+    assert re.search(r'claude --model sonnet --name "K-1 resume · Do it" "/ticket K-1 --resume"$', arg_after(create_call(p), "--command"))
 
 
 def test_resume_of_a_run_without_a_mode_starts_without_model(demo):
