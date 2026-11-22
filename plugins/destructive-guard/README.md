@@ -46,6 +46,108 @@ allows. Install 3.14 with Homebrew (`brew install python@3.14`),
 if it is not first on `PATH` as `python3.14`/`python3`, set `GATE_INFRA_PYTHON`
 to its path.
 
+## How it works
+
+The plugin registers three hooks in `hooks/hooks.json`:
+
+| Hook | Matches | Job |
+| --- | --- | --- |
+| `PreToolUse` → `hooks/gate.sh` | `Bash`, `mcp__.*` | Ask Jev whether the call is risky; print `ask` or nothing |
+| `PreToolUse` → `hooks/env-guard.sh` | `Read`, `Edit`, `Write` | Block access to `.env` files |
+| `SessionStart` → `hooks/session-start.sh` | every session | Warn once when the configuration is invalid |
+
+### A Bash or MCP call
+
+`gate.sh` finds a Python >= 3.14 and runs the hook. The hook reads the tool
+call, redacts it and sends it to Jev, which returns a probability for each
+choice of the prompt (by default `read_only`, `reversible_change`,
+`destructive`). The **risk** is the sum of the probabilities of the "ask"
+choices. Above `GATE_JEV_ESCALATE_THRESHOLD` (default `0.5`) the hook prints
+`ask`; otherwise it prints nothing, and Claude Code's own permission rules and
+mode decide as if the plugin were not installed.
+
+```mermaid
+flowchart TD
+    A["Claude wants to run a Bash command or MCP tool"] --> B{"GATE_ENABLED?"}
+    B -->|0| N["No decision:<br/>Claude Code permissions apply"]
+    B -->|1| C{"Python >= 3.14 found?"}
+    C -->|no| F["ASK + warning<br/>plugin-fault"]
+    C -->|yes| D{"Hook input readable,<br/>no internal error?"}
+    D -->|no| F
+    D -->|yes| G{"Jev configured?<br/>key, URL, prompt valid"}
+    G -->|no| S["No decision, silent<br/>(warned once at session start)"]
+    G -->|yes| E{"Call mentions a .env file?"}
+    E -->|yes| W["Not sent to Jev.<br/>No decision + warning"]
+    E -->|no| H["Redact secrets, POST to Jev"]
+    H --> I{"Usable answer within<br/>GATE_JEV_TIMEOUT_MS?"}
+    I -->|no| U["ASK + warning<br/>jev-unavailable"]
+    I -->|yes| J{"risk > threshold?"}
+    J -->|yes| K["ASK<br/>jev: choice p=... risk=..."]
+    J -->|no| N
+```
+
+Every outcome is either **ask** or **no decision**; there is no path to
+`allow` or `deny`. A settings `deny` rule still wins over the hook's `ask`,
+and an `ask` prompts even for allow-listed commands and in bypass mode (see
+[Claude Code assumptions](#claude-code-assumptions)).
+
+### The exchange with Jev
+
+```mermaid
+sequenceDiagram
+    participant CC as Claude Code
+    participant G as gate hook
+    participant J as Jev API
+    CC->>G: PreToolUse JSON (tool name, input)
+    G->>G: redact credentials, env assignments,<br/>long hex/base64, SQL literals
+    G->>J: POST prompt + redacted call<br/>(Bearer TYPESAFE_API_KEY)
+    alt answer in time
+        J-->>G: probabilities per choice
+        G->>G: risk = sum of "ask" choices
+        G-->>CC: ask (risk above threshold) or nothing
+    else timeout / HTTP error / network / malformed
+        G-->>CC: ask + systemMessage warning
+    end
+    opt GATE_LOG set
+        G->>G: append one JSON line (redacted)
+    end
+```
+
+Retries on HTTP 429/529 happen inside the single timeout budget. Only the
+redacted call and the prompt leave the machine; see [What is sent](#what-is-sent).
+
+### Files: the `.env` guard
+
+`env-guard.sh` runs without Python. It looks only at the file name of a
+Read, Edit or Write: `.env`, `.env.*` and `*.env` are blocked, `.env.example`
+is allowed, and `GATE_ENV_GUARD=0` turns the guard off.
+
+```mermaid
+flowchart LR
+    A["Read / Edit / Write"] --> B{"GATE_ENABLED and<br/>GATE_ENV_GUARD on?"}
+    B -->|no| P["Pass through"]
+    B -->|yes| C{"File name is .env, .env.*<br/>or *.env, not .env.example?"}
+    C -->|yes| X["Blocked"]
+    C -->|no| P
+```
+
+### Session start
+
+Once per session the plugin checks its settings and shows at most one
+warning: no `TYPESAFE_API_KEY`, an invalid Jev variable, removed 0.8
+variables, an unwritable `GATE_LOG`, or no suitable Python. A misconfigured
+gate is then silent per call; it never asks just because a setting is wrong.
+
+```mermaid
+flowchart LR
+    S["SessionStart"] --> A{"GATE_ENABLED?"}
+    A -->|0| Q["Nothing"]
+    A -->|1| B["Read GATE_* and TYPESAFE_API_KEY"]
+    B --> C{"Anything wrong?"}
+    C -->|no| Q
+    C -->|yes| W["One systemMessage warning<br/>naming the setting to fix"]
+```
+
 ## What it does
 
 | Call | Result |
@@ -342,7 +444,7 @@ confident answer won and the rules decided the rest.
 ### Python port (0.8, November 2026)
 
 The engine was rewritten from JavaScript to Python, and the repo now contains
-no JavaScript at all (`tests/test_no_js.py`). Behaviour didn't change. How:
+no JavaScript at all. Behaviour didn't change. How:
 
 - **Runtime:** Python >= 3.14, standard library only, no venv for users.
   3.11 was considered and rejected; the cost is that most machines must
