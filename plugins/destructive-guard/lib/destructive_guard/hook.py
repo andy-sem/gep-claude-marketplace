@@ -101,9 +101,9 @@ class GateHook:
         log_path: str | None = None
         out: HookOut | None = None
         try:
+            log_path = GateConfig.log_path(env)
             try:
                 gate = GateConfig.read(env)
-                log_path = gate["log"]
                 if not gate["enabled"]:
                     return 0
                 setting_error: Exception | None = None

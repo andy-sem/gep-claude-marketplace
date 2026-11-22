@@ -91,3 +91,8 @@ def test_env_guard_switches(impl):
     assert guard(impl, "/p/.env", {"GATE_ENABLED": "false"}) == 0
     assert guard(impl, "/p/.env", {"GATE_ENV_GUARD": "1"}) == 2
     assert guard(impl, "/p/.env", {"GATE_ENV_GUARD": "maybe"}) == 2
+
+
+def test_log_path_survives_a_bad_flag():
+    env = {**CLEAN, "GATE_LOG": "/tmp/g.log", "GATE_ENV_GUARD": "maybe"}
+    assert GateConfig.log_path(env, cwd="/") == "/tmp/g.log"

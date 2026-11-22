@@ -292,6 +292,28 @@ def test_misconfigured_calls_are_logged_as_such(impl, tmp_path):
 
 def test_log_is_off_by_default_and_a_bad_path_does_not_fail_the_hook(jev, run_jev, tmp_path):
     jev.answer(RISKY)
-    r = run_jev(bash("ls"), {"GATE_LOG": str(tmp_path / "no" / "such" / "dir.log")})
+    blocker = tmp_path / "a-file"
+    blocker.write_text("")
+    r = run_jev(bash("ls"), {"GATE_LOG": str(blocker / "gate.log")})
     assert reason(r.stdout).startswith("jev: ")
     assert r.log == []
+
+
+def test_log_creates_missing_directories(jev, run_jev, tmp_path):
+    jev.answer(RISKY)
+    log = tmp_path / "no" / "such" / "dir" / "gate.log"
+    r = run_jev(bash("ls"), {"GATE_LOG": str(log)})
+    assert reason(r.stdout).startswith("jev: ")
+    [line] = [json.loads(x) for x in log.read_text().splitlines()]
+    assert line["decision"] == "ask"
+
+
+@pytest.mark.parametrize("flag", ["GATE_ENV_GUARD", "GATE_ENABLED"])
+def test_bad_gate_flag_is_still_logged(impl, tmp_path, flag):
+    log = tmp_path / "gate.log"
+    r = HookRunner.run(impl, bash("ls"), {"TYPESAFE_API_KEY": "k", "GATE_LOG": str(log), flag: "maybe"})
+    assert r.stdout == ""
+    [line] = [json.loads(x) for x in log.read_text().splitlines()]
+    assert line["tool"] == "Bash"
+    assert line["decision"] == "none"
+    assert line["misconfigured"] == "badValue"

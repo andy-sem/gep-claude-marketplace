@@ -41,8 +41,13 @@ class GateConfig:
     @classmethod
     def read(cls, env: Mapping[str, str], *, cwd: str | Path | None = None) -> dict[str, Any]:
         """env -> {enabled, envGuard, log}. Raises ConfigError for a value it does not understand."""
+        log = cls.log_path(env, cwd=cwd)
         enabled = cls._flag(env, "GATE_ENABLED", True)
         env_guard = cls._flag(env, "GATE_ENV_GUARD", True)
-        log_value = cls._value(env, "GATE_LOG")
-        log = None if log_value is None else ProjectDir.project_path(log_value, env, cwd if cwd is not None else os.getcwd())
         return {"enabled": enabled, "envGuard": env_guard, "log": log}
+
+    @classmethod
+    def log_path(cls, env: Mapping[str, str], *, cwd: str | Path | None = None) -> str | None:
+        """GATE_LOG as an absolute path, or None. Never raises ConfigError, so a bad flag is still logged."""
+        value = cls._value(env, "GATE_LOG")
+        return None if value is None else ProjectDir.project_path(value, env, cwd if cwd is not None else os.getcwd())
