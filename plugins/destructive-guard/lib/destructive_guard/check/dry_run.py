@@ -1,6 +1,6 @@
 """The gate's dry run: what would the hook do with a call, and what is the effective configuration.
 
-Interim shape until L4 rewrites `check` for the Jev hook: a call check asks the hook's own decision
+A call check asks the hook's own decision
 function (so it contacts Jev and costs one request); there is no rule engine to consult.
 """
 
@@ -85,4 +85,5 @@ class GateDryRun:
             "reason": out.reason,
             "warning": out.message(),
             "risk": record.get("risk"),
+            "threshold": cfg["escalateThreshold"],
         }
