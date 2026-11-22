@@ -3,6 +3,7 @@
 Status: draft, not started. Plugin: `gated-dev-simple-workflow` (0.12.5 → 0.13.0).
 Related: [dev-tiers.md](dev-tiers.md) (feature 2, independent; section 9 below
 says how the two fit together).
+Tasks: [ticket-modes/README.md](ticket-modes/README.md), one file per work package.
 
 ## 1. Goal
 
