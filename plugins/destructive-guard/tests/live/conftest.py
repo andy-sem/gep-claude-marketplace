@@ -4,8 +4,8 @@ import os
 
 import pytest
 
-from testkit.envs import IsolatedEnv
-from testkit.live_jev import LiveJev
+from dg_testkit.envs import IsolatedEnv
+from dg_testkit.live_jev import LiveJev
 
 
 @pytest.fixture

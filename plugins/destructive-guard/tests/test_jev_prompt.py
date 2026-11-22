@@ -12,8 +12,8 @@ from destructive_guard.errors import JevConfigError
 from destructive_guard.jev.config import JevConfig
 from destructive_guard.jev.judge import JevJudge
 from destructive_guard.jev.prompt import JevPrompt
-from testkit import DG
-from testkit.hook import HookRunner
+from dg_testkit import DG
+from dg_testkit.hook import HookRunner
 
 BASE_ENV = {"TYPESAFE_API_KEY": "key-123"}
 JEV_DIR = DG / "jev"
@@ -94,10 +94,10 @@ def test_safe_is_optional_but_validated_when_present():
         JevPrompt.validate_prompt({**CUSTOM, "safe": []})
 
 
-def test_hook_sends_destructive_question(impl, jev, tmp_path):
+def test_hook_sends_destructive_question(jev, tmp_path):
     jev.answer(d(0.05, 0.05, 0.9), question="destructive")
     env = {"TYPESAFE_API_KEY": "k", "GATE_JEV_URL": jev.url}
-    r = HookRunner.run(impl, HookRunner.bash_input("rm -rf ~/work", tmp_path), env, cwd=tmp_path)
+    r = HookRunner.run(HookRunner.bash_input("rm -rf ~/work", tmp_path), env, cwd=tmp_path)
     [body] = jev.bodies
     assert list(body["questions"]) == ["destructive"]
     assert body["state"]["context"]["policy"] == JevPrompt.builtin_prompt("destructive")["context"]["policy"]

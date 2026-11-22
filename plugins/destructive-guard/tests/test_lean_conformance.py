@@ -13,9 +13,9 @@ from itertools import product
 
 import pytest
 
-from testkit import DG
-from testkit.hook import HookRunner
-from testkit.jev_mock import JevMock
+from dg_testkit import DG
+from dg_testkit.hook import HookRunner
+from dg_testkit.jev_mock import JevMock
 
 ESCALATE = 500
 DOWN_URL = "http://127.0.0.1:1/v1/systemone"
@@ -119,7 +119,7 @@ def check_theses(out: Out, expected: tuple[str, str | None], sent: bool, answere
 
 
 @pytest.fixture
-def hook(impl, jev):
+def hook(jev):
     """run(setting, stdin, answer, env) -> Out; `answer` is mock kwargs."""
 
     def run(setting, stdin, answer=None, env=None):
@@ -132,7 +132,7 @@ def hook(impl, jev):
             base |= {"GATE_JEV_URL": jev.url}
         elif setting == "badUrl":
             base |= {"TYPESAFE_API_KEY": "test-key", "GATE_JEV_URL": "http://example.com"}
-        r = HookRunner.run(impl, stdin, base, env or {})
+        r = HookRunner.run(stdin, base, env or {})
         assert r.status == 0
         return read(r.stdout)
 
@@ -218,31 +218,31 @@ def test_bad_stdin_asks_whatever_the_setting(hook, jev, setting, stdin):
 
 
 @pytest.mark.parametrize("setting", ["on", "noKey"])
-def test_no_python_asks_whatever_the_setting(hook, impl, setting):
-    out = hook(setting, TOOLS["bash"], None, {impl.interpreter_var: "/nonexistent"})
+def test_no_python_asks_whatever_the_setting(hook, setting):
+    out = hook(setting, TOOLS["bash"], None, {"GATE_INFRA_PYTHON": "/nonexistent"})
     check_theses(out, model("on", "pythonMissing", ("answer", 0)), False, False)
     assert out.reason == "plugin-fault: no Python >= 3.14 found (set GATE_INFRA_PYTHON)"
 
 
 @pytest.mark.parametrize("setting", ["on", "noKey"])
-def test_python_below_3_14_asks(hook, impl, old_python, setting):
-    out = hook(setting, TOOLS["bash"], None, {impl.interpreter_var: old_python})
+def test_python_below_3_14_asks(hook, old_python, setting):
+    out = hook(setting, TOOLS["bash"], None, {"GATE_INFRA_PYTHON": old_python})
     assert (out.decision, out.warning) == ("ask", "pythonMissing")
 
 
 @pytest.mark.parametrize("setting", ["on", "noKey"])
-def test_engine_exit_1_with_partial_stdout_asks_and_drops_the_partial(hook, impl, tmp_path, setting):
+def test_engine_exit_1_with_partial_stdout_asks_and_drops_the_partial(hook, tmp_path, setting):
     fake = tmp_path / "partial.sh"
     fake.write_text("#!/bin/sh\nprintf '{\"hookSpecificOutput\":{\"permissionDecision\":\"all'\nexit 1\n")
     fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
-    out = hook(setting, TOOLS["bash"], None, {impl.interpreter_var: str(fake)})
+    out = hook(setting, TOOLS["bash"], None, {"GATE_INFRA_PYTHON": str(fake)})
     check_theses(out, model("on", "crash", ("answer", 0)), False, False)
     assert out.reason == "plugin-fault: internal error: engine exit 1"
     assert "allow" not in out.stdout
 
 
 @pytest.mark.parametrize("setting", ["on", "noKey"])
-def test_engine_exception_asks(hook, impl, tmp_path, setting):
+def test_engine_exception_asks(hook, tmp_path, setting):
     """An exception inside the hook (here: while reading the call) is an internal-error ask."""
     fake = tmp_path / "boom.sh"
     code = (
@@ -252,7 +252,7 @@ def test_engine_exception_asks(hook, impl, tmp_path, setting):
     )
     fake.write_text(f"#!/bin/sh\nexec {sys.executable} -I -c \"$CODE\"\n")
     fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
-    out = hook(setting, TOOLS["bash"], None, {impl.interpreter_var: str(fake), "CODE": code})
+    out = hook(setting, TOOLS["bash"], None, {"GATE_INFRA_PYTHON": str(fake), "CODE": code})
     check_theses(out, model("on", "crash", ("answer", 0)), False, False)
     assert out.reason == "plugin-fault: internal error: RuntimeError"
 
@@ -325,13 +325,13 @@ def test_example(name, hook):
         assert (out.decision, out.warning) == expected
 
 
-def test_example_session_start_misconfigured_no_key(impl):
-    r = HookRunner.run_session(impl)
+def test_example_session_start_misconfigured_no_key():
+    r = HookRunner.run_session()
     assert "TYPESAFE_API_KEY is not set" in json.loads(r.stdout)["systemMessage"]
 
 
-def test_example_session_start_on(impl):
-    assert HookRunner.run_session(impl, {"TYPESAFE_API_KEY": "k"}).stdout == ""
+def test_example_session_start_on():
+    assert HookRunner.run_session({"TYPESAFE_API_KEY": "k"}).stdout == ""
 
 
 EFFECTIVE_IDS = ["effective_ask_allow", "effective_ask_deny", "effective_none_allow"]

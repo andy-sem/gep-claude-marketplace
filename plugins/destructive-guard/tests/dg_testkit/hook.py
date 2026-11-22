@@ -5,9 +5,9 @@ import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 
+from .entrypoints import Entrypoints
 from .envs import IsolatedEnv
 from .hook_result import HookResult
-from .impl import Impl
 
 
 class HookRunner:
@@ -23,7 +23,6 @@ class HookRunner:
 
     @staticmethod
     def run(
-        impl: Impl,
         stdin: str | bytes,
         *env: Mapping[str, str],
         cwd: Path | str | None = None,
@@ -31,10 +30,10 @@ class HookRunner:
     ) -> HookResult:
         data = stdin.encode() if isinstance(stdin, str) else stdin
         proc = subprocess.run(
-            impl.gate_hook(),
+            Entrypoints.gate_hook(),
             input=data,
             capture_output=True,
-            env=IsolatedEnv.clean(impl.env(), *env),
+            env=IsolatedEnv.clean(Entrypoints.env(), *env),
             cwd=cwd,
             timeout=timeout,
             check=False,
@@ -43,17 +42,16 @@ class HookRunner:
 
     @staticmethod
     def run_session(
-        impl: Impl,
         *env: Mapping[str, str],
         cwd: Path | str | None = None,
         timeout: float = 30,
     ) -> HookResult:
         """The SessionStart hook (session-start.sh): no stdin that matters, a systemMessage or nothing."""
         proc = subprocess.run(
-            impl.session_hook(),
+            Entrypoints.session_hook(),
             input=b"{}",
             capture_output=True,
-            env=IsolatedEnv.clean(impl.env(), *env),
+            env=IsolatedEnv.clean(Entrypoints.env(), *env),
             cwd=cwd,
             timeout=timeout,
             check=False,

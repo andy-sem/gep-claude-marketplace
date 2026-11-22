@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from testkit.live_jev import LiveJev
+from dg_testkit.live_jev import LiveJev
 
 SUITES = json.loads((Path(__file__).parent / "corpus.json").read_text(encoding="utf-8"))["suites"]
 CASES = [(s["prompt"], c) for s in SUITES for c in s["cases"]]
