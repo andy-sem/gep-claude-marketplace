@@ -11,7 +11,7 @@ What ships:
 | Part | What it does |
 | --- | --- |
 | `/ticket` skill | The orchestrator. Runs in your main session, never writes product code, drives the stage agents and talks to you at stop points. |
-| Four stage agents | `ticket-spec`, `ticket-planner`, `ticket-dev`, `ticket-reviewer`: one subagent per stage, each writing one file. |
+| Stage agents | `ticket-spec`, `ticket-planner`, three dev tiers (`ticket-dev-godzilla`, `ticket-dev-workhorse`, `ticket-dev-pawn`) and `ticket-reviewer`: one subagent per stage, each writing one file (dev: commits and `dev-report.md`). |
 | `/ticket-flow` skill | Works through the subtasks of one Jira parent by launching a `/ticket` session for each. |
 | Launcher (`scripts/launch.py`) | Opens one Claude Code session per ticket in a new Orca or iTerm2 tab. |
 | PR watcher (`scripts/watch_pr.py`) | Polls the PR in the background and wakes the session on feedback, merge or close. |
@@ -38,11 +38,11 @@ flowchart TD
     P --> A{{"Plan approval<br/>always a stop point"}}
     A -->|"changes requested"| P
     A -->|"approved"| C["Commit ticket, spec, plan, decisions"]
-    C --> D["ticket-dev agent<br/>Plan-Step commits + dev-report.md"]
+    C --> D["ticket-dev-&lt;tier&gt; agent<br/>Plan-Step commits + dev-report.md"]
     D -->|"verification failed /<br/>blocker"| Q2(["You: Retry, Skip or Abort"])
     Q2 --> D
     D --> R["ticket-reviewer agent<br/>writes review.md"]
-    R -->|"CHANGES_REQUIRED<br/>(up to 2 rounds)"| F["ticket-dev MODE=fix-review<br/>Review-Fix commits"]
+    R -->|"CHANGES_REQUIRED<br/>(up to 2 rounds)"| F["ticket-dev-&lt;tier&gt; MODE=fix-review<br/>Review-Fix commits"]
     F --> R
     R -->|"still failing after 2 rounds"| Q3(["You: Accept, One more round,<br/>or Take over"])
     R -->|"PASS"| V["Complete: run plan's verification,<br/>push branch, open PR with gh"]
@@ -92,7 +92,7 @@ sequenceDiagram
     participant O as /ticket session
     participant W as watch_pr.py
     participant GH as GitHub PR
-    participant Dev as ticket-dev
+    participant Dev as ticket-dev-<tier>
     participant Rev as ticket-reviewer
     O->>W: start in background
     loop every minute
@@ -293,12 +293,20 @@ invalid file or an unknown key stops the run with a message. Example:
   "formatCommand": "prettier --write",
   "riskPaths": ["**/migrations/**", "src/auth/**"],
   "escalationExtra": ["any change to the public API of packages/sdk"],
-  "models": { "plan": "opus", "reviewRisk": "opus" }
+  "devTier": "auto",
+  "models": { "plan": "opus", "reviewRisk": "opus", "devWorkhorse": "sonnet" }
 }
 ```
 
 Regex backslashes are doubled in JSON (`\\d`, not `\d`). Every key, its
 default and the ticket file format: `skills/ticket/references/config.md`.
+
+`devTier` picks the developer tier: `auto` (default; the planner advises, the
+orchestrator decides at plan approval) or a fixed `godzilla`, `workhorse` or
+`pawn`. The dev model per tier is `models.devGodzilla` (default `opus`),
+`models.devWorkhorse` (`sonnet`) and `models.devPawn` (`haiku`). `models.dev`
+is gone: it stops the run with "`models.dev` was replaced by
+`models.devWorkhorse` (and `devGodzilla`, `devPawn`)".
 
 ### Project rules
 
@@ -426,8 +434,19 @@ stays silent.
 | --- | --- | --- |
 | `gated-dev-simple-workflow:ticket-spec` | 1. spec | `spec.md` |
 | `gated-dev-simple-workflow:ticket-planner` | 2. plan | `plan.md` |
-| `gated-dev-simple-workflow:ticket-dev` | 3. implement / fix | commits + `dev-report.md` |
+| `gated-dev-simple-workflow:ticket-dev-godzilla` | 3. implement / fix, heavy work | commits + `dev-report.md` |
+| `gated-dev-simple-workflow:ticket-dev-workhorse` | 3. implement / fix, the normal case | commits + `dev-report.md` |
+| `gated-dev-simple-workflow:ticket-dev-pawn` | 3. implement / fix, mechanical steps only | commits + `dev-report.md` |
 | `gated-dev-simple-workflow:ticket-reviewer` | 4. review | `review.md` |
+
+The three dev agents share one contract and differ in model, effort and
+latitude:
+
+| Tier | Model (default) | Effort | For |
+| --- | --- | --- | --- |
+| `godzilla` | `opus` | high | Heavy work: restructuring within the planned files, steps that leave the approach open. |
+| `workhorse` | `sonnet` | high | The normal case: the plan as written, small local choices. |
+| `pawn` | `haiku` | medium | Mechanical steps the plan spells out (copy, config, docs, renames, a test for a known case). |
 
 Each ends with `RESULT: OK <file>` or a `NEEDS_DECISION` block. A prompt or
 denial from an approval gate (for example the `destructive-guard` plugin) is
@@ -595,6 +614,36 @@ and release). Binding decisions:
 Known limits and open questions are in [Running a whole parent](#running-a-whole-parent).
 The manual acceptance run (a demo repo and a sandbox Jira project, never a
 real team project) is still to do.
+
+### Dev tiers (0.13, November 2026)
+
+The single dev agent became three tiers, so cheap work does not run
+on the strongest model and hard work does not run on the weakest. Binding
+decisions:
+
+- **Three agents, one contract.** `ticket-dev-godzilla` (opus, high),
+  `ticket-dev-workhorse` (sonnet, high) and `ticket-dev-pawn` (haiku, medium)
+  share trailers, report and escalation list; only "Your level" differs.
+  The old single agent is gone. `models.dev` is replaced by `models.devGodzilla`,
+  `devWorkhorse` and `devPawn` and is a config error.
+- **Choice.** The planner advises a tier in `plan.md` (`## Dev tier`); the
+  orchestrator decides at H2 by the first rule that applies: config
+  `devTier`, a tier the developer named, `workhorse` instead of `pawn` when
+  gated operations, `riskPaths` files or a marked risk are involved, the
+  planner's tier, `workhorse`. It is stored in `state.devTier`.
+- **Pawn runs on haiku (2026-11-22).** Pawn stops with `tier too low` when a
+  step needs a choice the plan does not make.
+- **Promotion (2026-11-22).** Automatic, all the way up, in every dev mode
+  (`implement`, `fix-review`, `fix-pr`), for `tier too low` and
+  `verification failed`; each tier is left at most once per run. From
+  `godzilla`, `verification failed` is H6 and `tier too low` is H3.
+- **Implementation choices.** A promotion applies to the current dev run only:
+  `devTier` stays as decided at H2, and every promotion is recorded in
+  `devTierHistory` and `warnings`. `--resume` in stage `dev` uses the highest
+  tier already reached. Fix-review round 2 and later run one tier up; a fix-pr
+  round uses `pawn` for purely mechanical feedback.
+- **Left out: O1.** A tier per plan step is an open question and not part of
+  this version.
 
 ### Lean gate follow-up
 

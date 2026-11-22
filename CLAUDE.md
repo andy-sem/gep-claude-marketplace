@@ -18,7 +18,7 @@ The two plugins are independent and installable on their own:
 | Plugin | What it is | Ships |
 | --- | --- | --- |
 | `destructive-guard` | `PreToolUse` approval gate decided by the Jev classifier. Installed once, globally; protects every session (human or agent). Configured **only through env variables**; needs `TYPESAFE_API_KEY` to do anything beyond the `.env` guard. | hooks, Jev client and prompts, Lean model, `check` skill |
-| `gated-dev-simple-workflow` | Ticket (file or Jira issue) → spec → plan → dev → review → PR pipeline (`/ticket`), and the subtasks of a Jira parent run in turn (`/ticket-flow`). Knows nothing about gate internals; works with or without the gate and treats any gate prompt or denial as a checkpoint, never something to work around. | `ticket` and `ticket-flow` skills, four stage agents, launcher, flow CLI, PR watcher, `Notification` hook |
+| `gated-dev-simple-workflow` | Ticket (file or Jira issue) → spec → plan → dev → review → PR pipeline (`/ticket`), and the subtasks of a Jira parent run in turn (`/ticket-flow`). Knows nothing about gate internals; works with or without the gate and treats any gate prompt or denial as a checkpoint, never something to work around. | `ticket` and `ticket-flow` skills, stage agents (spec, planner, three dev tiers, reviewer), launcher, flow CLI, PR watcher, `Notification` hook |
 
 ### `destructive-guard` (`plugins/destructive-guard/`)
 
@@ -36,7 +36,7 @@ The two plugins are independent and installable on their own:
 
 - `skills/ticket/SKILL.md` is the orchestrator: it runs in the main session, never writes product code, and drives one subagent per stage in a worktree per ticket (`git worktree`, Orca or iTerm2).
 - `skills/ticket-flow/SKILL.md` (`/ticket-flow PARENT`, needs `tracker`) is the driver for one Jira parent: it picks the next ready subtask, launches its `/ticket` session, waits and repeats. The deterministic part is `scripts/flow.py` + `scripts/gated_dev/flow/`; flow state lives in the git common dir; settings in the `flow` config key; the pick rules are in `skills/ticket/references/flow.md`. Jira writes stay in `/ticket`.
-- Agents in `agents/`: `ticket-spec` → `spec.md`, `ticket-planner` → `plan.md`, `ticket-dev` → commits + `dev-report.md`, `ticket-reviewer` → `review.md`. Each ends with `RESULT: OK <file>` or a `NEEDS_DECISION` block.
+- Agents in `agents/`: `ticket-spec` → `spec.md`, `ticket-planner` → `plan.md`, `ticket-dev-godzilla|workhorse|pawn` → commits + `dev-report.md`, `ticket-reviewer` → `review.md`. Each ends with `RESULT: OK <file>` or a `NEEDS_DECISION` block.
 - File-based: the ticket is `docs/tickets/<KEY>/ticket.md` by default, and stages read/write files next to it. Optional Jira tracker (`tracker` in `.claude/gated-dev.json`, behaviour in `skills/ticket/references/jira.md`): the orchestrator fetches the issue into `ticket.md` and moves it To Do → In Progress → In Review → Done using the session's own Jira tools. The stage agents stay tracker-free. Never name an MCP server or its tools in shipped files (`tests/test_no_named_mcp.py`).
 - Plan approval is always a stop point; after it the run commits, pushes and opens a PR with `gh`, then watches the PR (`scripts/watch_pr.py`, background): new feedback → follow-up round (`--address-review`, dev `MODE=fix-pr`, replies marked `<!-- gated-dev -->`), merge → notification and worktree removal (branch kept).
 - With `destructive-guard` enabled the planner dry-runs its calls through `destructive-guard:check` and lists the ones that will ask in the plan's `## Gated operations` table.
