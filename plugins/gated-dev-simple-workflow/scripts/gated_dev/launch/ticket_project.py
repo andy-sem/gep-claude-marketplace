@@ -265,9 +265,10 @@ class TicketProject:
 
 
     def find_run(self, *, key: str, config: Mapping) -> dict | None:
-        """The ticket's run: the worktree on a `<KEY>/*` branch, with the `stage` of its `state.json`.
+        """The ticket's run: the worktree on a `<KEY>/*` branch, with the `stage` and `mode` of its `state.json`.
 
-        The stage is None without one. Aborted runs are ignored. Returns None when there is no run;
+        The stage is None without one; the mode is None unless it is heavy, medium or light (a run
+        from before modes has none). Aborted runs are ignored. Returns None when there is no run;
         raises when several are left.
         """
         out = self.run("git", ["-C", str(self.root), "worktree", "list", "--porcelain"]).stdout
@@ -277,14 +278,17 @@ class TicketProject:
             branch = re.search(r"^branch refs/heads/(.+)$", block, re.MULTILINE)
             if not wt or not branch or not branch[1].startswith(f"{key}/"):
                 continue
-            stage = None
+            stage = mode = None
             try:
-                state = Path(wt[1]) / config["ticketsDir"] / key / "state.json"
-                stage = LaunchNaming._get(json.loads(state.read_text(encoding="utf-8")), "stage")
+                state = json.loads((Path(wt[1]) / config["ticketsDir"] / key / "state.json").read_text(encoding="utf-8"))
+                stage = LaunchNaming._get(state, "stage")
+                mode = LaunchNaming._get(state, "mode")
             except (OSError, ValueError):
                 pass
+            if mode not in TicketProject.MODE_NAMES:
+                mode = None
             if stage != "aborted":
-                runs.append({"path": wt[1], "branch": branch[1], "stage": stage})
+                runs.append({"path": wt[1], "branch": branch[1], "stage": stage, "mode": mode})
         if len(runs) > 1:
             raise LaunchError(f"{key}: several runs ({', '.join(r['branch'] for r in runs)}); open the one you want with /ticket {key} --resume")
         return runs[0] if runs else None

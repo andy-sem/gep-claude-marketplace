@@ -1,7 +1,7 @@
 # Task 02: launcher starts the session model and passes `--mode`
 
 Plan: [../ticket-modes.md](../ticket-modes.md) D4, §5.3, §5.4, §5.6, §5.7, §7.
-Depends on: 01. Status: not started.
+Depends on: 01. Status: done.
 
 ## Goal
 

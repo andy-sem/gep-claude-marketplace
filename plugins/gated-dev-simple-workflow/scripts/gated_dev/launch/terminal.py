@@ -39,7 +39,15 @@ class TerminalCommands:
         return match[1] if match else None
 
     @staticmethod
-    def build_shell_command(*, cwd: Any, key: Any, args: Sequence[str] = (), remote_control: Any = False, summary: Any = None) -> str:
+    def build_shell_command(
+        *, cwd: Any, key: Any, args: Sequence[str] = (), remote_control: Any = False, summary: Any = None, model: Any = None
+    ) -> str:
+        """The shell line that starts the session: `cd <cwd> && TICKET_FLOW_KEY=<key> claude [--model <model>] --name ...`.
+
+        Every value is checked before it reaches the line: the key, the cwd, each `/ticket` argument
+        (`--mode` only with a mode name after it) and `model` (None = no `--model`; otherwise an alias
+        or a `claude-...` id). Anything else raises.
+        """
         if not LaunchNaming.is_safe_key(key):
             raise LaunchError(f"Invalid ticket key: {LaunchNaming._json(key)}")
         if not isinstance(cwd, str) or not os.path.isabs(cwd) or re.search(r"[\n\r\0]", cwd):
@@ -47,18 +55,19 @@ class TerminalCommands:
         # Imported here: cli imports the launcher, which imports this module.
         from gated_dev.launch.cli import LaunchCli
 
-        for arg in args:
-            if arg not in LaunchCli.ALLOWED_ARGS:
-                raise LaunchError(f"Argument not allowed: {LaunchNaming._json(arg)}")
+        LaunchCli.check_ticket_args(args)
         if not isinstance(remote_control, bool):
             raise LaunchError(f"remoteControl must be a boolean: {LaunchNaming._json(remote_control)}")
+        if model is not None and not LaunchNaming.is_model(model):
+            raise LaunchError(f"Invalid model: {LaunchNaming._json(model)}")
         prompt = " ".join(["/ticket", key, *args])
         # The title only holds a checked key, a fixed purpose word and a summary reduced to a safe
         # character set, so double quotes are safe. The flags go before the prompt so the prompt
         # stays positional.
         title = LaunchNaming.session_name(key=key, args=args, summary=summary)
         rc = f'--remote-control "{title}" ' if remote_control else ""
-        return f'cd {LaunchNaming.shell_quote(cwd)} && TICKET_FLOW_KEY={key} claude --name "{title}" {rc}"{prompt}"'
+        model_flag = f"--model {model} " if model is not None else ""
+        return f'cd {LaunchNaming.shell_quote(cwd)} && TICKET_FLOW_KEY={key} claude {model_flag}--name "{title}" {rc}"{prompt}"'
 
     @staticmethod
     def build_apple_script(*, command: str, key: str, args: Sequence[str] = (), session_id: str | None = None, summary: Any = None) -> str:

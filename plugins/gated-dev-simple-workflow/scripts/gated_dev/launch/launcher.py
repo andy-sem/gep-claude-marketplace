@@ -26,18 +26,19 @@ class TicketLauncher:
         remote_control: bool = False,
         summary: Any = None,
         selector: str | None = None,
+        model: str | None = None,
         env: Mapping[str, str] | None = None,
         run: ProcessRunner.Run = ProcessRunner.default_run,
         log: Callable[[str], None] = lambda line: None,
     ) -> dict:
         """Opens one tab running the session command.
 
-        `host` is `orca` or `iterm`; `selector` is the Orca worktree to open the tab in (Orca only).
-        Returns `{command, title}`.
+        `host` is `orca` or `iterm`; `selector` is the Orca worktree to open the tab in (Orca only);
+        `model` starts the session with `claude --model <model>` (None: no `--model`). Returns `{command, title}`.
         """
         env = os.environ if env is None else env
         title = LaunchNaming.session_name(key=key, args=args, summary=summary)
-        command = TerminalCommands.build_shell_command(cwd=cwd, key=key, args=args, remote_control=remote_control, summary=summary)
+        command = TerminalCommands.build_shell_command(cwd=cwd, key=key, args=args, remote_control=remote_control, summary=summary, model=model)
         if host == "orca":
             created = run(
                 "orca",
@@ -76,6 +77,7 @@ class TicketLauncher:
         dry_run: bool = False,
         summary: str | None = None,
         parent: str | None = None,
+        ticket_mode: str | None = None,
         env: Mapping[str, str] | None = None,
         run: ProcessRunner.Run = ProcessRunner.default_run,
         log: Callable[[str], None] = lambda line: None,
@@ -87,23 +89,36 @@ class TicketLauncher:
         gets its worktree before the session starts; `parent` (the tracker parent) resolves
         `baseFromParent` for it.
 
-        Returns `{key, mode, host, cwd, command, title, base, worktree, note, launched}` where
-        `mode` is `resume`, `orca-worktree` or `main-checkout`. A dry run calls only read-only
+        `ticket_mode` (heavy, medium or light) starts a new session on `modes.<mode>.session` with
+        `/ticket KEY --mode <mode>`; None leaves the mode to the session and starts without
+        `--model`. A resume starts on the session model of the mode recorded in the run's
+        `state.json` (none recorded: no `--model`); a `ticket_mode` for a ticket with a run raises.
+
+        Returns `{key, mode, ticketMode, model, host, cwd, command, title, base, worktree, note,
+        launched}` where `mode` is `resume`, `orca-worktree` or `main-checkout`, `ticketMode` the
+        ticket mode (or None) and `model` the session model (or None). A dry run calls only read-only
         commands (`git worktree list`, `git symbolic-ref`, `orca repo show`).
         """
         env = os.environ if env is None else env
         root = str(root)
         TicketProject.check_key(key, config)
+        if ticket_mode is not None and ticket_mode not in TicketProject.MODE_NAMES:
+            raise LaunchError(f"mode must be heavy, medium or light: {LaunchNaming._json(ticket_mode)}")
         host = TerminalCommands.detect_host(env)
         if not host and not dry_run:
             raise LaunchError(f"open sessions from Orca or iTerm2 (TERM_PROGRAM={env.get('TERM_PROGRAM', 'unset')}); --dry-run works anywhere")
         base: dict = {"key": key, "host": host, "base": None, "worktree": None, "note": None}
 
+        def session_model(mode: str | None) -> str | None:
+            return (config.get("modes") or TicketProject.MODE_DEFAULTS)[mode]["session"] if mode else None
+
         def open_session(plan: dict) -> dict:
-            result = {**base, **plan, "launched": False}
-            result["title"] = LaunchNaming.session_name(key=key, args=plan["args"], summary=plan["summary"])
+            mode = plan.get("ticketMode", ticket_mode)
+            args = [*plan["args"], "--mode", mode] if mode and "--resume" not in plan["args"] else plan["args"]
+            result = {**base, **plan, "args": args, "ticketMode": mode, "model": session_model(mode), "launched": False}
+            result["title"] = LaunchNaming.session_name(key=key, args=args, summary=plan["summary"])
             result["command"] = TerminalCommands.build_shell_command(
-                cwd=plan["cwd"], key=key, args=plan["args"], remote_control=remote_control, summary=plan["summary"]
+                cwd=plan["cwd"], key=key, args=args, remote_control=remote_control, summary=plan["summary"], model=result["model"]
             )
             if dry_run:
                 return result
@@ -111,10 +126,11 @@ class TicketLauncher:
                 host=host,
                 cwd=plan["cwd"],
                 key=key,
-                args=plan["args"],
+                args=args,
                 remote_control=remote_control,
                 summary=plan["summary"],
                 selector=plan.get("selector"),
+                model=result["model"],
                 env=env,
                 run=run,
                 log=log,
@@ -123,6 +139,8 @@ class TicketLauncher:
 
         existing = TicketProject(root, run).find_run(key=key, config=config)
         if existing:
+            if ticket_mode is not None:
+                raise LaunchError(f"{key} has a run; a resume uses its recorded mode, so leave out --mode")
             summary = None
             try:
                 summary = TicketProject(existing["path"]).read_ticket(key=key, config=config)["title"]
@@ -131,6 +149,7 @@ class TicketLauncher:
             return open_session(
                 {
                     "mode": "resume",
+                    "ticketMode": existing.get("mode"),
                     "cwd": existing["path"],
                     "args": ["--resume"],
                     "summary": summary,
@@ -178,11 +197,13 @@ class TicketLauncher:
             return {
                 **base,
                 "mode": "orca-worktree",
+                "ticketMode": ticket_mode,
+                "model": session_model(ticket_mode),
                 "base": branch_base,
                 "cwd": f"<new Orca worktree {argv[argv.index('--name') + 1]}>",
                 "title": LaunchNaming.session_name(key=key, summary=summary),
                 "command": f"orca {planned}",
-                "note": f"then /ticket {key} in the new worktree",
+                "note": f"then /ticket {' '.join([key, *(['--mode', ticket_mode] if ticket_mode else [])])} in the new worktree",
                 "launched": False,
             }
         run("git", ["-C", root, "fetch", "origin", branch_base])
