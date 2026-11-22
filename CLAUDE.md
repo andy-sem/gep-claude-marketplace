@@ -17,19 +17,20 @@ The two plugins are independent and installable on their own:
 
 | Plugin | What it is | Ships |
 | --- | --- | --- |
-| `destructive-guard` | Deterministic `PreToolUse` approval gate. Installed once, globally; protects every session (human or agent). Configured **only through env variables**; useful with zero config. | hooks, gate engine, rule packs, Jev prompts, `check` skill |
+| `destructive-guard` | `PreToolUse` approval gate decided by the Jev classifier. Installed once, globally; protects every session (human or agent). Configured **only through env variables**; needs `TYPESAFE_API_KEY` to do anything beyond the `.env` guard. | hooks, Jev client and prompts, Lean model, `check` skill |
 | `gated-dev-simple-workflow` | Ticket (file or Jira issue) → spec → plan → dev → review → PR pipeline (`/ticket`), and the subtasks of a Jira parent run in turn (`/ticket-flow`). Knows nothing about gate internals; works with or without the gate and treats any gate prompt or denial as a checkpoint, never something to work around. | `ticket` and `ticket-flow` skills, four stage agents, launcher, flow CLI, PR watcher, `Notification` hook |
 
 ### `destructive-guard` (`plugins/destructive-guard/`)
 
-- `hooks/hooks.json`: `Bash|mcp__.*` → `hooks/gate.sh` (fail-closed wrapper: finds Python via `GATE_INFRA_PYTHON`, `python3.14`, `python3`, runs `lib/gate_main.py` with `-I`); `Read|Edit|Write` → `hooks/env-guard.sh` (blocks `.env*` files except `.env.example`).
-- The gate **asks or has no opinion; it never allows**. It parses shell commands (sees through `sudo`, `xargs`, `bash -c`, package runners) rather than grepping. Engine or config errors ask with a `gate-config:` reason.
-- `lib/destructive_guard/config.py` is the single place that turns env vars into config. Main vars: `GATE_ENABLED`, `GATE_CHECKS` (packs: `destructive` default, `postgres`, `terraform`; `base` always loaded), `GATE_RULES_FILE`, `GATE_DISABLE_RULES`, `GATE_STRICT` (default `0`), `GATE_LOG`, `GATE_JEV_*`.
-- Rule packs live in `packs/*.json`; `lib/destructive_guard/scripts/` scans scripts a command runs.
-- Optional **Jev** classifier (`lib/destructive_guard/jev/`, prompts in `jev/*.json`, off by default). With Jev on, its confident answer wins; rules decide in the uncertain band, on errors and when Jev is off. Fail-closed cases always ask and are never sent to Jev.
-- `skills/check` + `lib/check.py`: dry-run a command/MCP call through the gate, or print effective config (`/destructive-guard:check`).
-- The README is the user-facing reference for rules and configuration; keep it in sync with behaviour.
-- `formal/`: Lean 4 model of the planned lean gate (`SimpleGate.lean`, theses S1–S8). Dev-only: ships as source but users never build it, and the plugin runs without Lean. Build with `elan` (`~/.elan`, toolchain pinned in `lean-toolchain`): `cd plugins/destructive-guard/formal && PATH="$HOME/.elan/bin:$PATH" lake build`; keep it free of errors and `sorry`. `.lake/` is gitignored.
+- `hooks/hooks.json`: `Bash|mcp__.*` → `hooks/gate.sh` (finds Python via `GATE_INFRA_PYTHON`, `python3.14`, `python3`, runs `lib/gate_main.py` with `-I`; asks with a warning when it finds no Python or the engine fails); `Read|Edit|Write` → `hooks/env-guard.sh` (blocks `.env*` files except `.env.example`); `SessionStart` → `hooks/session-start.sh` (one warning when the Jev setting is invalid, e.g. no `TYPESAFE_API_KEY`, or removed 0.8 variables are set).
+- Jev only, no rules and no shell parser. The redacted call goes to Jev: risky (`risk > GATE_JEV_ESCALATE_THRESHOLD`) → `ask`, otherwise no decision, so Claude Code's own permissions apply. The hook never prints `allow` or `deny` (`outcome.HookOut` cannot represent them). **Jev configured but unavailable** (timeout, HTTP, network, malformed answer) and **plugin faults** (bad input, no Python, internal error) → warning **and** `ask`. A call mentioning `.env` is never sent: no decision plus a warning. Misconfigured (no key, bad URL or prompt) → no decision per call, one warning at session start.
+- `lib/destructive_guard/config.py` is the single place that turns the gate's env vars into config; `jev/config.py` does the Jev ones. Main vars: `GATE_ENABLED` (the only off switch), `GATE_ENV_GUARD`, `GATE_LOG`, `GATE_INFRA_PYTHON`, `TYPESAFE_API_KEY`, `GATE_JEV_*` (URL, MODEL, TIMEOUT_MS, ESCALATE_THRESHOLD, PROMPT, INSTRUCTIONS, CONTEXT, POLICY). The 0.8 variables (`GATE_JEV`, `GATE_CHECKS`, `GATE_RULES*`, `GATE_DISABLE_RULES`, `GATE_STRICT`, …) are removed; `session.py` lists them for the warning.
+- `formal/SimpleGate.lean` is the spec (theses S1–S10, Claude Code assumptions A1–A7 with the checked version). Where code and model disagree, fix the model first. `hook.py`, `session.py` and `outcome.py` carry model→code tables; `tests/test_lean_conformance.py` runs the real hook against the model.
+- Optional prompts in `jev/*.json` (`destructive` default, `cloud-change`); a test enforces generic MCP names there.
+- `skills/check` + `lib/check.py`: dry-run a command/MCP call through the hook (always contacts Jev) or print effective config (`/destructive-guard:check`).
+- Live tests: `tests/live/` talks to the real Jev (marker `live_jev`, off by default, needs `TYPESAFE_API_KEY`; the CI `jev-live` job runs them, never for fork PRs). Run the normal suite with `env -u TYPESAFE_API_KEY` so nothing reaches the real service.
+- The README is the user-facing reference for behaviour, warnings and configuration; keep it in sync (`tests/test_readme.py` checks variables and prompts).
+- `formal/` is dev-only: ships as source but users never build it, and the plugin runs without Lean. Build with `elan` (`~/.elan`, toolchain pinned in `lean-toolchain`): `cd plugins/destructive-guard/formal && PATH="$HOME/.elan/bin:$PATH" lake build --wfail`; keep it free of errors and `sorry`. `.lake/` is gitignored.
 
 ### `gated-dev-simple-workflow` (`plugins/gated-dev-simple-workflow/`)
 

@@ -1,7 +1,7 @@
 /-!
 # Lean gate: Jev decides; if Jev cannot, a person does
 
-Model of the lean `destructive-guard` (plan: `docs/plans/lean-gate/`):
+Model of the lean `destructive-guard` (decisions D1-D12: see "Design decisions and history" in the README):
 
 1. call → Jev (redacted) → risky: `ask` / not risky: no decision, so Claude
    Code's own permissions apply.

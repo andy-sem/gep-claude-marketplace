@@ -76,7 +76,6 @@ jobs:
     timeout-minutes: 10
     env:
       TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
-      GATE_JEV: ${{ vars.GATE_JEV }}      # 0.8 only; removed with D2 in L6
       LIVE_JEV_REQUIRED: "1"
     steps:
       - uses: actions/checkout@v4
