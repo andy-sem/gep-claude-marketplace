@@ -19,6 +19,9 @@ stops the run with a message (nothing is guessed).
   "models": { "plan": "opus", "reviewRisk": "opus" },
   "orchestratorRules": ".claude/gated-dev-rules.md",
   "dryRunGate": false,
+  "mode": "auto",
+  "modes": { "heavy": { "session": "opus" }, "light": { "session": "sonnet" } },
+  "modeRules": ["anything under packages/billing is at least medium"],
   "tracker": {
     "type": "jira",
     "site": "acme.example.net",
@@ -40,6 +43,9 @@ stops the run with a message (nothing is guessed).
 | `orchestratorRules` | none | Repo-relative path to a Markdown file of extra orchestrator steps, one `## <event>` section per event (SKILL.md section 0a). A missing file or an unknown event heading stops the run. A ticket without `ticket.md` may then be started: the `intake` section writes it. |
 | `tracker` | none (the ticket is a file) | Takes the ticket from an issue tracker instead of a hand-written `ticket.md`. Only Jira is supported; see [Tracker: Jira](#tracker-jira). |
 | `dryRunGate` | `false` | `true`: the planner dry-runs the calls it lists through `destructive-guard:check` and fills the `Gate` column of `## Gated operations` (`ask (risk 0.86)`); otherwise the column says `unknown`. Each checked call is one request to the gate's risk classifier and sends the redacted command, so it is off by default. Must be a boolean. `/ticket-flow` runs `/ticket` sessions and inherits the setting; nothing in the flow code calls the gate. |
+| `mode` | `auto` | `auto` (the session decides per ticket) or `heavy`, `medium`, `light` for every ticket. See [Modes](#modes). |
+| `modes` | see [Modes](#modes) | Session model the launcher starts per mode; entries given here override the defaults one by one. |
+| `modeRules` | `[]` | Extra plain-language rules for choosing the mode; a list of non-empty strings. |
 | `flow` | none | Settings of `/ticket-flow`, which runs the subtasks of a Jira parent. Needs a `tracker`; see [Flow](#flow). |
 
 ## Tracker: Jira
@@ -76,6 +82,32 @@ tokens, no client of its own); behaviour is described in
 - `keyPattern` defaults to `^[A-Z][A-Z0-9]*-\d+$` (Jira keys such as `PROJ-1`).
 - `orchestratorRules` may not have a `## intake` section when a `tracker` is
   set, because the tracker does the intake. That is a config error.
+
+## Modes
+
+`mode`, `modes` and `modeRules` control how much of the pipeline a ticket
+runs (heavy: spec, plan, dev, review; medium: plan, dev, review; light: plan,
+dev).
+
+```json
+"mode": "auto",
+"modes": {
+  "heavy":  { "session": "opus" },
+  "medium": { "session": "sonnet" },
+  "light":  { "session": "sonnet" }
+},
+"modeRules": ["anything under packages/billing is at least medium"]
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `mode` | `auto` | `auto` (the session decides) or a fixed mode for every ticket. |
+| `modes.<mode>.session` | `heavy: opus`, `medium: sonnet`, `light: sonnet` | Session model the launcher starts for that mode: `opus`, `sonnet`, `haiku` or a `claude-...` model id. |
+| `modeRules` | `[]` | Extra plain-language rules for the mode decision, like `flow.pickRules`. |
+
+Stage sets per mode are fixed, not configurable: a configurable stage list
+would make the approval points and the state machine depend on the project.
+An unknown mode, an unknown sub-key or a wrong type stops the run with a message.
 
 ## Flow
 

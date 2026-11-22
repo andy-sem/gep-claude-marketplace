@@ -1,7 +1,7 @@
 # Task 01: config keys and validation
 
 Plan: [../ticket-modes.md](../ticket-modes.md) D5, §5.5, §6 (`config.md`), §7.
-Depends on: –. Status: not started.
+Depends on: –. Status: done.
 
 ## Goal
 
