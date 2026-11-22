@@ -638,13 +638,16 @@ and release). Binding decisions:
 
 Known limits and open questions are in [Running a whole parent](#running-a-whole-parent).
 The manual acceptance run (a demo repo and a sandbox Jira project, never a
-real team project) is still to do.
+real team project) is still to do. The plan is in git history
+(`docs/plans/ticket-flow.md`).
 
 ### Ticket modes (0.13, November 2026)
 
 `heavy`, `medium` and `light` modes cut the pipeline for tickets that do not
-need all of it (details: [modes.md](skills/ticket/references/modes.md)). Binding
-decisions:
+need all of it (details: [modes.md](skills/ticket/references/modes.md)). Built
+in eight work packages: config keys, launcher (`--model`, `--mode`), flow CLI,
+the `modes.md` and pipeline-spec references, stage agents, the `/ticket`
+orchestrator, `/ticket-flow`, then docs and release. Binding decisions:
 
 - **D1. Decided once, at kickoff, without asking.** Medium and light skip the
   spec stage, so the decision cannot come later. The developer redirects at
@@ -658,14 +661,56 @@ decisions:
   its model, so the launcher starts it on `modes.<mode>.session`.
 - **D5. The stage set is not configurable.** A configurable list would make
   the approval points and the state machine depend on the project.
+- **D6. Without a spec, the plan carries the acceptance criteria.** The
+  planner writes `## Acceptance criteria` from `ticket.md`; dev and reviewer
+  read them from `spec.md` when it exists, else from `plan.md`. A missing or
+  unclear criterion is a planner `NEEDS_DECISION`, which takes over the
+  role of the post-spec stop.
+- **Settled while building.** The session-model question comes after kickoff
+  setup, so a restart loses nothing; the restart command starts with
+  `cd '<worktree>'`. A run without a recorded mode counts as heavy. Raising to
+  heavy is only possible before plan approval. A light PR feedback round
+  re-checks `riskPaths` before skipping the reviewer. The launcher refuses
+  `--mode` for a key that already has a run (the recorded mode wins).
 - **Decided 2026-11-22.** A hand-started session on a weaker model than the
   mode wants asks restart or continue (a weaker mode in a stronger session is
   never asked). Light mode gets no review just because the plan lists gated
   operations: only `riskPaths` or an explicit raise add it. `haiku` is
   forbidden as a session model: the session is the orchestrator, and the
   config check rejects `haiku` and any `claude-...haiku...` id.
+- **Left for later.** With dev tiers (a separate plan), the mode would bound
+  the tier: heavy at least `workhorse`, light at most `workhorse`.
 
-The manual acceptance run (a private demo repo) is still to do.
+The manual acceptance run (a private demo repo) is still to do: one ticket
+per mode, a `/ticket-flow` parent with small and large subtasks, a light
+ticket touching `riskPaths`, a planner raise to heavy, a hand-started Sonnet
+session that decides heavy, and `--resume` of a light run. The plan and its
+task files are in git history (`docs/plans/ticket-modes*`).
+
+### Dev tiers (planned)
+
+Not in this version; built on its own branch. Plan: replace `ticket-dev` with
+three dev agents of one contract and different weight, chosen by the
+orchestrator at plan approval.
+
+| Tier | Model | For |
+| --- | --- | --- |
+| `godzilla` | opus | Many steps, cross-cutting or tricky changes, decided escalation items |
+| `workhorse` | sonnet | The normal case (today's `ticket-dev`) |
+| `pawn` | haiku | Few mechanical steps fully spelled out in the plan |
+
+- The planner advises a tier in `## Dev tier`; config `devTier`, the
+  developer at plan approval and the safety rules (never `pawn` with gated
+  operations or `riskPaths`) decide. Fix-review round 2+ goes one tier up;
+  PR rounds pick per round.
+- A tier out of its depth (`tier too low:` or `verification failed`) is
+  promoted automatically, all the way up, in every dev mode (decided
+  2026-11-22); only after `godzilla` does it become a stop.
+- `models.dev` is replaced by `models.devGodzilla`, `.devWorkhorse`,
+  `.devPawn`; a test keeps the three agent bodies identical.
+- Open: a tier per plan step (left out to keep resume simple).
+
+The plan and its task files are in git history (`docs/plans/dev-tiers*`).
 
 ### Lean gate follow-up
 
