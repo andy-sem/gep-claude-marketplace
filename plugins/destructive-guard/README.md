@@ -295,3 +295,17 @@ uv run pytest plugins/destructive-guard    # tests
 | `lib/destructive_guard/check/cli.py` | The dry-run behind `lib/check.py` |
 | `packs/*.json` | Built-in rule packs |
 | `jev/*.json` | Built-in Jev prompts |
+
+### Formal model of the planned lean gate
+
+`formal/SimpleGate.lean` is a Lean 4 model of the planned lean gate (Jev
+decides; if Jev cannot, a person does). It states and proves theses S1–S10
+(the hook never allows or denies, it asks exactly when Jev says risky or
+cannot answer or the plugin itself failed, it can only add prompts, a
+misconfigured setting warns once at session start, and so on). It is a
+development aid: it ships as source, you never build it, and the plugin runs
+without Lean. The model does not describe the current rule gate. Its
+assumptions about Claude Code (a hook `ask` beats an allow rule, deny beats
+`ask`, `ask` still prompts in bypass and auto mode, `systemMessage` plus `ask`
+in one output) are listed in the file with links and the Claude Code version
+they were checked against. Build: `cd formal && PATH="$HOME/.elan/bin:$PATH" lake build --wfail`.
