@@ -1,6 +1,6 @@
 # L0: Lean model matches the decisions; Claude Code assumptions checked
 
-> Part of the [lean gate plan](README.md). Depends on: nothing. Needs: D2, D3, D11 (D2 still open: if it is answered differently, keep `Setting.off`).
+> Part of the [lean gate plan](README.md). Depends on: nothing. Needs: D2, D3, D11, D12 (all answered 2026-11-22).
 
 Files: `formal/SimpleGate.lean`, `formal/README` note in the plugin README.
 
@@ -10,13 +10,15 @@ Files: `formal/SimpleGate.lean`, `formal/README` note in the plugin README.
    `timeout | http | network | malformed | envReference | badInput | pythonMissing | internalError`.
    New predicate `Down.jevUnavailable : Down → Bool`, true for `timeout`,
    `http`, `network`, `malformed`.
-2a. `JevResult.down` only carries Jev failures (`jevUnavailable`), and
-   `judge c (.down why) = ⟨.ask, some why⟩` (D11). The `.env` skip and the
-   wrapper/plugin faults stay `⟨.none, some why⟩`.
+2a. `JevResult.down` carries Jev failures (`jevUnavailable`) and plugin faults
+   (`badInput`, `pythonMissing`, `internalError`). `judge c (.down why) =
+   ⟨.ask, some why⟩` for all of them (D11, D12). Only the `.env` skip
+   (`envReference`) stays `⟨.none, some why⟩`.
 3. `Call`: add `pythonMissing` and `crash` alongside `tool p` and `badInput`,
    so the wrapper's and the exception path's outputs are part of `hook`:
-   `.pythonMissing → ⟨none, some .pythonMissing⟩`,
-   `.crash → ⟨none, some .internalError⟩`.
+   `.badInput → ⟨ask, some .badInput⟩`,
+   `.pythonMissing → ⟨ask, some .pythonMissing⟩`,
+   `.crash → ⟨ask, some .internalError⟩` (D12).
 4. `hook … .misconfigured (.tool p) = ⟨.none, none⟩` (D3).
 5. New `SessionIssue` (`noKey | badUrl | badPrompt | badValue | pythonMissing`)
    and `sessionStart : Setting → Option SessionIssue`, with the setting
@@ -24,11 +26,13 @@ Files: `formal/SimpleGate.lean`, `formal/README` note in the plugin README.
    **S9** `misconfigured_warns_once`: `sessionStart s = some w ↔ s = .misconfigured w`,
    and `hook` for `.misconfigured _` never warns.
 6. Theses after D11:
-   - **S2** `asks_iff`: ask ⇔ on ∧ sent (no `.env`) ∧ (Jev answered with
-     `risk > escalate` **or** Jev was unavailable).
+   - **S2** `asks_iff`: ask ⇔ on ∧ ((Jev answered with `risk > escalate`) ∨
+     Jev was unavailable ∨ plugin fault: bad input, no Python, internal error).
+     A `.env` call never asks.
    - **S3** `warning_decision`: a warning comes with `ask` iff its reason is
-     `jevUnavailable`; every other warning (and misconfigured) has no decision.
-   - **S4** `fallback_is_claude`: premise narrowed to non-Jev warnings and
+     `jevUnavailable` or `pluginFault`; the `.env` warning and misconfigured
+     have no decision.
+   - **S4** `fallback_is_claude`: premise narrowed to the `.env` warning and
      misconfigured; there the final permission is exactly Claude Code's.
    - **S10** (new) `unavailable_asks`: on ∧ sent ∧ Jev down ⇒ ask with a
      warning, i.e. an unreachable Jev never silently lets a call through.

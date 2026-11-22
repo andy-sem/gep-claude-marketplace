@@ -1,6 +1,6 @@
 # L1: Jev-only hook, session warning, conformance tests
 
-> Part of the [lean gate plan](README.md). Depends on: L0 (theses to test against), LJ0 (`testkit/live_jev.py`). **Blocked until D1, D2, D4 are confirmed; D12 decides the no-Python / bad-input / internal-error rows.**
+> Part of the [lean gate plan](README.md). Depends on: L0 (theses to test against), LJ0 (`testkit/live_jev.py`). Not blocked: D1, D2, D4 and D12 were answered on 2026-11-22.
 
 ## `outcome.py`
 
@@ -14,6 +14,10 @@ class Down(StrEnum):
     def jev_unavailable(self) -> bool:        # the model's Down.jevUnavailable
         return self in (Down.TIMEOUT, Down.HTTP, Down.NETWORK, Down.MALFORMED)
 
+    @property
+    def plugin_fault(self) -> bool:           # D12: asks with a warning
+        return self in (Down.BAD_INPUT, Down.PYTHON_MISSING, Down.INTERNAL_ERROR)
+
 @dataclass(frozen=True)
 class HookOut:
     decision: Literal["none", "ask"]          # no "allow"/"deny" in the type
@@ -21,15 +25,19 @@ class HookOut:
     warning: Down | None = None
     detail: str | None = None                 # e.g. "http 503", "timeout after 1500 ms"
 
+    @classmethod
+    def fault(cls, kind: Down, detail: str | None = None) -> "HookOut": ...
+    # plugin fault (D12) → ask with reason "plugin-fault: <text>" and a warning
+
     def to_json(self) -> str | None: ...
     # ask            → {"hookSpecificOutput": {…"permissionDecision": "ask", "permissionDecisionReason": reason}}
-    # ask + warning  → the same plus "systemMessage": "destructive-guard: …"   (D11)
+    # ask + warning  → the same plus "systemMessage": "destructive-guard: …"   (D11, D12)
     # warning only   → {"systemMessage": "destructive-guard: …"}
     # neither        → None (no output)
 ```
 
 `__post_init__` enforces S3: `ask` with a warning only when
-`warning.jev_unavailable`; a `jev_unavailable` warning only with `ask`.
+`warning.jev_unavailable or warning.plugin_fault`; such a warning only with `ask`.
 
 Texts (one line each, all start with `destructive-guard:`):
 
@@ -40,9 +48,9 @@ Texts (one line each, all start with `destructive-guard:`):
 | network | `jev-unavailable: network error` | `Jev could not be reached; asking you instead. …` |
 | malformed | `jev-unavailable: malformed answer` | `Jev's answer was malformed; asking you instead. …` |
 | `.env` | none | `call mentions a .env file and was not sent to Jev; Claude Code's permissions apply` |
-| bad input | none | `could not read the hook input; Claude Code's permissions apply` |
-| no Python | none | `no Python >= 3.14 found (set GATE_INFRA_PYTHON); Claude Code's permissions apply` |
-| internal error | none | `internal error: <type>; Claude Code's permissions apply` |
+| bad input | `plugin-fault: bad hook input` | `could not read the hook input; asking you instead. GATE_ENABLED=0 turns the gate off.` |
+| no Python | `plugin-fault: no Python >= 3.14 found (set GATE_INFRA_PYTHON)` | `no Python >= 3.14 found (set GATE_INFRA_PYTHON); asking you instead. GATE_ENABLED=0 turns the gate off.` |
+| internal error | `plugin-fault: internal error: <type>` | `internal error (<type>); asking you instead. GATE_ENABLED=0 turns the gate off.` |
 
 ## `jev/judge.py`
 
@@ -71,10 +79,11 @@ as `decider.py`, moved here). `decider.py` is deleted in L2.
 
 ## `jev/request.py`
 
-- `build_state(call)`: Bash → `{tool, command, notes}` (no `scripts`); MCP →
-  first `Redactor.references_env_file(json.dumps(input))` → `None` (D9), else
-  as today.
-- Remove `scripts_payload`, `problem_notes`, `MAX_SCRIPTS_BYTES`.
+- `build_state(call)`: Bash → `{tool, command, scripts, notes}` (scripts and
+  problems as today, D4); MCP → first
+  `Redactor.references_env_file(json.dumps(input))` → `None` (D9), else as today.
+- Keep `scripts_payload`, `problem_notes`, `MAX_SCRIPTS_BYTES` and
+  `redact_script` (D4).
 
 ## `hook.py` (the model's `hook`)
 
@@ -86,7 +95,7 @@ main(stdin, env):
     try: cfg = JevConfig.read(env)
     except JevConfigError: log(misconfigured); return 0         # S9: silent per call
     try: input = parse(stdin)              # JSON object with tool_name str
-    except: out = HookOut(none, warning=BAD_INPUT)
+    except: out = HookOut.fault(BAD_INPUT, "bad hook input")
     else:
       call = Call.from_input(input)        # Bash with str command | mcp__* | other → nothing to do
       if call is None: return 0
@@ -94,7 +103,7 @@ main(stdin, env):
       if state is None: out = HookOut(none, warning=ENV_REFERENCE)
       else: out = JevJudge.judge(JevClient().ask_jev(state, cfg), cfg)
   except Exception as e:
-    out = HookOut(none, warning=INTERNAL_ERROR, detail=type(e).__name__)
+    out = HookOut.fault(INTERNAL_ERROR, detail=type(e).__name__)
   write out.to_json(); GateLog.write(...); return 0
 ```
 
@@ -103,6 +112,8 @@ main(stdin, env):
 - `GATE_DONE_FILE` handling removed.
 - A non-Bash, non-MCP tool (should not happen given the matcher) gives no
   output and no request.
+- Shell parse errors are not in D12's list. The old `unparsable:` ask has no
+  decided replacement yet: stop and ask before coding this path.
 
 ## `log.py` (`GATE_LOG`, replaces `GATE_JEV_LOG`)
 
@@ -116,19 +127,21 @@ log `warning: null, misconfigured: "<kind>"` so the log explains silent calls.
 ```bash
 dir="$(dirname "$0")"
 case "$(printf '%s' "${GATE_ENABLED:-}" | tr '[:upper:]' '[:lower:]')" in 0|false|no|off) exit 0 ;; esac
-warn() { printf '{"systemMessage":"destructive-guard: %s"}' "$1"; exit 0; }
+fault() { printf '{"systemMessage":"destructive-guard: %s; asking you instead. GATE_ENABLED=0 turns the gate off.","hookSpecificOutput":{"permissionDecision":"ask","permissionDecisionReason":"plugin-fault: %s"}}' "$1" "$1"; exit 0; }
 py="${GATE_INFRA_PYTHON:-}"
 [ -n "$py" ] || py="$(command -v python3.14 || command -v python3)"
-[ -n "$py" ] || warn "no Python >= 3.14 found (set GATE_INFRA_PYTHON); Claude Code's permissions apply"
+[ -n "$py" ] || fault "no Python >= 3.14 found (set GATE_INFRA_PYTHON)"
 out="$("$py" -I "$dir/../lib/gate_main.py" 2>/dev/null)"; rc=$?
-{ [ "$rc" -eq 127 ] || [ "$rc" -eq 126 ] || [ "$rc" -eq 3 ]; } && warn "no Python >= 3.14 found …"
-[ "$rc" -ne 0 ] && warn "internal error (engine exit $rc); Claude Code's permissions apply"
+{ [ "$rc" -eq 127 ] || [ "$rc" -eq 126 ] || [ "$rc" -eq 3 ]; } && fault "no Python >= 3.14 found (set GATE_INFRA_PYTHON)"
+[ "$rc" -ne 0 ] && fault "internal error (engine exit $rc)"
 [ -n "$out" ] && printf '%s' "$out"
 exit 0
 ```
 
-A partial stdout with a non-zero exit is discarded (the warning replaces it),
-so a crashed engine can never leave half an `ask` or anything else behind.
+`gate.sh` asks by itself on a plugin fault (D12), so it needs no Python for
+that. A partial stdout with a non-zero exit is discarded (the fault ask
+replaces it), so a crashed engine can never leave half an `ask` or anything
+else behind.
 
 ## `SessionStart` (D3, S9)
 
@@ -158,10 +171,10 @@ so a crashed engine can never leave half an `ask` or anything else behind.
   exception}. For each output it asserts:
   - S1: never `allow`/`deny`, never `"continue": false`;
   - S2: `ask` iff on ∧ not `.env` ∧ (answered with risk > escalate ∨ Jev
-    unavailable);
+    unavailable ∨ plugin fault);
   - S3: a `systemMessage` comes with `ask` exactly for timeout, HTTP (500, 429
-    over budget), network and malformed; every other `systemMessage` comes
-    without a `permissionDecision`;
+    over budget), network, malformed, bad stdin, no Python and engine
+    exception; the `.env` `systemMessage` comes without a `permissionDecision`;
   - S10: with a key set, a sent call never gets empty output when the mock
     hangs, refuses the connection, returns 5xx or returns garbage;
   - S8: an answered call never warns;
@@ -172,8 +185,8 @@ so a crashed engine can never leave half an `ask` or anything else behind.
 - `tests/test_session_start.py`: no key, bad URL, bad prompt file, removed
   variables, all fine (no output), gate disabled, no Python.
 - `tests/test_outcome.py`: `HookOut` JSON bytes for ask / ask + warning /
-  warning / none; ask with a non-Jev warning raises; a Jev warning without ask
-  raises.
+  warning / none; ask with a warning that is neither Jev-unavailable nor a
+  plugin fault raises; a Jev or plugin-fault warning without ask raises.
 - `tests/test_jev_judge.py`: thresholds, tie → last choice, each error →
   ask + warning with the right reason.
 - Hook latency: `testkit/bench_gate.py` rewritten to time the misconfigured
