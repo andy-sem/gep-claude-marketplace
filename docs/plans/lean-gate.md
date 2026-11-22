@@ -1,4 +1,4 @@
-# Lean Gate: `destructive-guard` 1.0, "Jev decides, otherwise Claude Code decides"
+# Lean Gate: `destructive-guard` 1.0, "Jev decides; if Jev cannot, a person does"
 
 > Branch `lean-gate-plan` (from `main` at `c6ef18b`, after PR #10). One commit per work package (L0–L6); every package leaves
 > `uv run pytest`, `uv run ruff check .`, `claude plugin validate .` and the Lean
@@ -9,6 +9,10 @@
 > model was built, L1–L5 never started because D1, D2 and D4 were never answered.
 > This version keeps that design and adds the implementation detail. **L1 does
 > not start until D1, D2 and D4 are confirmed** (see [Decisions](#decisions)).
+>
+> **Changed 2026-11-22 (D11):** when Jev is configured but does not answer
+> (timeout, HTTP error, network error, malformed answer), the hook warns **and
+> asks**. The first version fell back to Claude Code's own permissions there.
 
 ## Goal
 
@@ -17,10 +21,14 @@ The gate behaves exactly like the Lean model in
 
 1. A Bash or MCP call goes to Jev (redacted). Risky (`risk > escalate`): `ask`.
    Otherwise: no decision, and Claude Code's own permissions apply.
-2. Jev misconfigured, down, timed out or malformed, a call that mentions `.env`,
-   unreadable hook input, no suitable Python, an internal error: no decision
-   plus, where useful, a warning (`systemMessage`). Claude Code's own
-   permissions apply.
+2. Jev is configured but unavailable (timeout, HTTP error including 429/529
+   past the time budget, network error, malformed answer): a warning
+   (`systemMessage`) **and** `ask`, so a person decides the call (D11).
+3. Jev misconfigured (no key, bad URL or prompt): no decision, silent per call,
+   one warning at session start (D3).
+4. A call that mentions `.env`, unreadable hook input, no suitable Python, an
+   internal error: no decision plus a warning. Claude Code's own permissions
+   apply (D12 is open on whether these should ask too).
 
 The plugin never prints `allow` or `deny` (S1), so it can only add prompts (S5).
 Everything that exists only for rules or for fail-closed asks is deleted: rule
@@ -43,7 +51,9 @@ the model first, then the code.
 | D7 | Claude Code assumptions in the model | explained 2026-11-21, no answer | Verified in L0 against the hooks docs and a throwaway hook; results recorded in the model's assumptions section with links and the Claude Code version. |
 | D8 | Lean ships with the plugin | confirmed 2026-11-21 | Source only (~10 KB), dev-only, `.lake/` gitignored. Done. |
 | D9 | MCP input that mentions `.env` (new) | proposed | Follow the model: skip the call (no request, `envReference` warning), the same as Bash. Today's code instead drops the `.env` lines from MCP input and sends the rest. |
-| D10 | Warning noise during a Jev outage (new) | proposed | One warning per call at first; if that is too noisy in the L5 trial, rate-limit to once a minute via a state file in `$TMPDIR` (warnings become optional in the model; decisions unchanged). |
+| D10 | Noise during a Jev outage (new) | proposed | With D11 every gated call prompts while Jev is down; that is intended. The `systemMessage` can be rate-limited to once a minute via a state file in `$TMPDIR` if it is too noisy in the L6 trial (the ask reason still names the cause on every prompt). The way out of a long outage is `GATE_ENABLED=0`, which the warning mentions. |
+| D11 | Jev configured but unavailable | **confirmed 2026-11-22** | Warning **and** ask. Reason `jev-unavailable: timeout after 1500 ms` (or `http 503`, `network`, `malformed answer`). Applies to calls that were sent; `.env` calls are never sent, so they are not "unavailable". |
+| D12 | Bad hook input, no Python, internal error while Jev is configured (new) | **open** | Proposed: keep no decision + warning (these are plugin faults, not Jev faults; asking would also hit users without a key). Alternative: ask whenever `TYPESAFE_API_KEY` is set, consistent with D11. `gate.sh` can read the variable without Python. |
 
 ## Current → target
 
@@ -52,7 +62,7 @@ the model first, then the code.
 | Decision source | rule packs + script scan, Jev optional on top | Jev only |
 | Jev safe answer | lifts a rule ask (`allowThreshold`, `canLift`) | no decision |
 | Jev uncertain band | rule result stands | no decision |
-| Jev down / timeout / HTTP / malformed | rule result stands, silent | no decision + warning |
+| Jev down / timeout / HTTP / network / malformed | rule result stands, silent | **ask** + warning (D11) |
 | Jev misconfigured (no key, bad URL, bad prompt) | `ask gate-config:` on every call | no decision, silent per call; one warning at session start |
 | Python missing / too old | `ask unparsable: python unavailable` | no decision + warning |
 | Engine exception | `ask gate-config: internal error` | no decision + warning |
@@ -109,8 +119,13 @@ Files: `formal/SimpleGate.lean`, `formal/README` note in the plugin README.
 
 1. `Setting`: remove `off` (D2). `Setting = misconfigured | on`.
 2. `Down`: remove `off` and `misconfigured` (misconfigured gives no warning per
-   call); add `pythonMissing` and `internalError`. Result:
-   `timeout | http | malformed | envReference | badInput | pythonMissing | internalError`.
+   call); add `network`, `pythonMissing` and `internalError`. Result:
+   `timeout | http | network | malformed | envReference | badInput | pythonMissing | internalError`.
+   New predicate `Down.jevUnavailable : Down → Bool`, true for `timeout`,
+   `http`, `network`, `malformed`.
+2a. `JevResult.down` only carries Jev failures (`jevUnavailable`), and
+   `judge c (.down why) = ⟨.ask, some why⟩` (D11). The `.env` skip and the
+   wrapper/plugin faults stay `⟨.none, some why⟩`.
 3. `Call`: add `pythonMissing` and `crash` alongside `tool p` and `badInput`,
    so the wrapper's and the exception path's outputs are part of `hook`:
    `.pythonMissing → ⟨none, some .pythonMissing⟩`,
@@ -121,9 +136,17 @@ Files: `formal/SimpleGate.lean`, `formal/README` note in the plugin README.
    carrying the issue (`misconfigured (why : SessionIssue)`). New thesis
    **S9** `misconfigured_warns_once`: `sessionStart s = some w ↔ s = .misconfigured w`,
    and `hook` for `.misconfigured _` never warns.
-6. S3 becomes "warning **or** misconfigured ⇒ no decision"; S4
-   (`fallback_is_claude`) gets the same premise. S1, S2, S5–S8 re-proved; S2's
-   right side loses nothing (it already requires `s = .on`).
+6. Theses after D11:
+   - **S2** `asks_iff`: ask ⇔ on ∧ sent (no `.env`) ∧ (Jev answered with
+     `risk > escalate` **or** Jev was unavailable).
+   - **S3** `warning_decision`: a warning comes with `ask` iff its reason is
+     `jevUnavailable`; every other warning (and misconfigured) has no decision.
+   - **S4** `fallback_is_claude`: premise narrowed to non-Jev warnings and
+     misconfigured; there the final permission is exactly Claude Code's.
+   - **S10** (new) `unavailable_asks`: on ∧ sent ∧ Jev down ⇒ ask with a
+     warning, i.e. an unreachable Jev never silently lets a call through.
+   - **S8** unchanged (an answer never warns); S1, S5, S6, S7 re-proved
+     unchanged (an `ask` is never weaker than Claude Code's own permission).
 7. Examples at the bottom extended to one per row of the conformance table in
    L1 (`.misconfigured`, `.pythonMissing`, `.crash`, `.envReference`, risk 0,
    risk = 500, risk 501, each `Down`).
@@ -134,7 +157,9 @@ Files: `formal/SimpleGate.lean`, `formal/README` note in the plugin README.
    - a settings `deny` wins over a hook `ask`;
    - no hook output leaves the call to rules and mode;
    - behaviour under `bypassPermissions` and auto mode;
-   - `systemMessage` from PreToolUse and SessionStart is shown to the user.
+   - `systemMessage` from PreToolUse and SessionStart is shown to the user;
+   - a PreToolUse output may carry both `systemMessage` and
+     `hookSpecificOutput.permissionDecision: "ask"` and both take effect (D11).
    Confirm with a throwaway plugin in the scratchpad (hook that always prints
    `ask`, or only a `systemMessage`) against an allow rule, a deny rule,
    bypass mode and auto mode. If an assumption is false, stop and bring it to
@@ -149,9 +174,13 @@ Commit: `Lean gate L0: model with session warning, D2/D3 applied, CC assumptions
 
 ```python
 class Down(StrEnum):
-    TIMEOUT = "timeout"; HTTP = "http"; MALFORMED = "malformed"
+    TIMEOUT = "timeout"; HTTP = "http"; NETWORK = "network"; MALFORMED = "malformed"
     ENV_REFERENCE = "envReference"; BAD_INPUT = "badInput"
     PYTHON_MISSING = "pythonMissing"; INTERNAL_ERROR = "internalError"
+
+    @property
+    def jev_unavailable(self) -> bool:        # the model's Down.jevUnavailable
+        return self in (Down.TIMEOUT, Down.HTTP, Down.NETWORK, Down.MALFORMED)
 
 @dataclass(frozen=True)
 class HookOut:
@@ -160,18 +189,28 @@ class HookOut:
     warning: Down | None = None
     detail: str | None = None                 # e.g. "http 503", "timeout after 1500 ms"
 
-    def to_json(self) -> str | None: ...      # ask → hookSpecificOutput; warning → {"systemMessage": "destructive-guard: …"}; else None
+    def to_json(self) -> str | None: ...
+    # ask            → {"hookSpecificOutput": {…"permissionDecision": "ask", "permissionDecisionReason": reason}}
+    # ask + warning  → the same plus "systemMessage": "destructive-guard: …"   (D11)
+    # warning only   → {"systemMessage": "destructive-guard: …"}
+    # neither        → None (no output)
 ```
 
-Warning texts (one line each, all start with `destructive-guard:`):
-`Jev did not answer in time (1500 ms); Claude Code's permissions apply`,
-`Jev returned http 503; …`, `Jev's answer was malformed; …`,
-`call mentions a .env file and was not sent to Jev; …`,
-`could not read the hook input; …`, `no Python >= 3.14 found (set GATE_INFRA_PYTHON); …`,
-`internal error: <type>; …`.
+`__post_init__` enforces S3: `ask` with a warning only when
+`warning.jev_unavailable`; a `jev_unavailable` warning only with `ask`.
 
-Constructing a `HookOut` with a warning and `decision="ask"` raises
-(`__post_init__`), which is S3 in code.
+Texts (one line each, all start with `destructive-guard:`):
+
+| Case | Ask reason | `systemMessage` |
+| --- | --- | --- |
+| timeout | `jev-unavailable: timeout after 1500 ms` | `Jev did not answer in time (1500 ms); asking you instead. GATE_ENABLED=0 turns the gate off.` |
+| HTTP | `jev-unavailable: http 503` | `Jev returned http 503; asking you instead. …` |
+| network | `jev-unavailable: network error` | `Jev could not be reached; asking you instead. …` |
+| malformed | `jev-unavailable: malformed answer` | `Jev's answer was malformed; asking you instead. …` |
+| `.env` | none | `call mentions a .env file and was not sent to Jev; Claude Code's permissions apply` |
+| bad input | none | `could not read the hook input; Claude Code's permissions apply` |
+| no Python | none | `no Python >= 3.14 found (set GATE_INFRA_PYTHON); Claude Code's permissions apply` |
+| internal error | none | `internal error: <type>; Claude Code's permissions apply` |
 
 ### `jev/judge.py`
 
@@ -181,8 +220,8 @@ class JevJudge:
     def risk(probs, prompt) -> float            # sum of the prompt's `ask` choices
     @classmethod
     def judge(cls, result: dict, cfg) -> HookOut:
-        # {error: "timeout"|"http 503"|"malformed"|"network"} → HookOut("none", warning=…)
-        # ("network" maps to Down.HTTP with detail "network")
+        # {error: "timeout"|"http 503"|"network"|"malformed"}
+        #     → HookOut("ask", reason="jev-unavailable: …", warning=Down.…, detail=…)   (D11)
         # probabilities → risk > escalate ? ask("jev: <top> p=… risk=…") : none
 ```
 
@@ -286,8 +325,13 @@ so a crashed engine can never leave half an `ask` or anything else behind.
   plus {no Python, Python 3.9, engine exit 1 with partial stdout, engine
   exception}. For each output it asserts:
   - S1: never `allow`/`deny`, never `"continue": false`;
-  - S2: `ask` iff on ∧ not `.env` ∧ answered ∧ risk > escalate;
-  - S3: a `systemMessage` never comes with a `permissionDecision`;
+  - S2: `ask` iff on ∧ not `.env` ∧ (answered with risk > escalate ∨ Jev
+    unavailable);
+  - S3: a `systemMessage` comes with `ask` exactly for timeout, HTTP (500, 429
+    over budget), network and malformed; every other `systemMessage` comes
+    without a `permissionDecision`;
+  - S10: with a key set, a sent call never gets empty output when the mock
+    hangs, refuses the connection, returns 5xx or returns garbage;
   - S8: an answered call never warns;
   - S9: misconfigured → no output at all at `PreToolUse`;
   - S7: the mock never receives a body containing `.env` or an unredacted
@@ -295,9 +339,11 @@ so a crashed engine can never leave half an `ask` or anything else behind.
   Each Lean `example` has a test with the same name.
 - `tests/test_session_start.py`: no key, bad URL, bad prompt file, removed
   variables, all fine (no output), gate disabled, no Python.
-- `tests/test_outcome.py`: `HookOut` JSON bytes for ask / warning / none;
-  ask + warning raises.
-- `tests/test_jev_judge.py`: thresholds, tie → last choice, error mapping.
+- `tests/test_outcome.py`: `HookOut` JSON bytes for ask / ask + warning /
+  warning / none; ask with a non-Jev warning raises; a Jev warning without ask
+  raises.
+- `tests/test_jev_judge.py`: thresholds, tie → last choice, each error →
+  ask + warning with the right reason.
 - Hook latency: `testkit/bench_gate.py` rewritten to time the misconfigured
   path (no network); assert median < 100 ms on CI is too flaky, so it stays a
   manual benchmark and the result goes into the L6 commit message.
@@ -392,7 +438,9 @@ Commit: `Lean gate L3: model ↔ code cross-references`.
   reason:   jev: destructive p=0.81 risk=0.86
   ```
 
-  or `decision: none (risk 0.04 ≤ 0.5)` or `decision: none — warning: Jev did not answer …`.
+  or `decision: none (risk 0.04 ≤ 0.5)`, or
+  `decision: ask (jev-unavailable: timeout after 1500 ms)` with the warning, or
+  `decision: none — warning: call mentions a .env file …`.
 - `skills/check/SKILL.md`: every call check sends the redacted call to Jev and
   costs a request; never put secrets in the checked call; a `.env` mention is
   reported as "not sent".
@@ -428,8 +476,10 @@ Commit: `gated-dev: gated operations without rule ids`.
 - `plugins/destructive-guard/README.md` rewrite:
   - what it does: Jev asks before risky Bash/MCP calls; `.env` files are
     blocked for Read/Edit/Write; it never allows or denies;
-  - what it no longer does: no rules, no parser, no fail-closed; without a key
-    it only blocks `.env` files and says so once per session;
+  - when Jev is configured but does not answer, every gated call asks with a
+    warning until it is back (or `GATE_ENABLED=0`);
+  - what it no longer does: no rules, no parser; without a key it only blocks
+    `.env` files and says so once per session;
   - every warning and what to do about it;
   - env table (kept variables only), what is sent, the question, prompts;
   - Claude Code assumptions from L0 with links and version;
@@ -448,7 +498,8 @@ Commit: `gated-dev: gated operations without rule ids`.
   `plugin.json` and the catalog; bump `metadata.version`.
 - `docs/plans/lean-gate.md`: summarised into the README and deleted.
 - Manual trial in a real session before tagging: Jev on, Jev with a wrong key,
-  no key, Jev endpoint unreachable (D10 noise check), `bypassPermissions`.
+  no key, Jev endpoint unreachable (every call prompts with a warning; D10
+  noise check), `bypassPermissions`.
 - `claude plugin validate .`, `jq . .claude-plugin/marketplace.json`,
   `uv run pytest`, `uv run ruff check .`, `lake build --wfail`.
 
@@ -474,5 +525,9 @@ Commit: `destructive-guard 1.0.0: lean gate`.
   Measure p50/p95 in the L6 trial; the timeout stays configurable.
 - **Privacy.** Every Bash command and MCP input (redacted) leaves the machine
   once a key is set. The README says so in the first paragraph.
-- **Blind spots.** Scripts (D4), `.env`-mentioning calls, and all calls while
-  Jev is down are judged only by Claude Code's own permissions.
+- **Outage = prompts.** While Jev is down, every Bash/MCP call prompts (D11),
+  after waiting out the timeout budget. Unattended agents stop at the first
+  call; that is the intended trade-off. The warning names `GATE_ENABLED=0` as
+  the way out.
+- **Blind spots.** Scripts (D4), `.env`-mentioning calls, and (unless D12
+  changes it) plugin faults are judged only by Claude Code's own permissions.
