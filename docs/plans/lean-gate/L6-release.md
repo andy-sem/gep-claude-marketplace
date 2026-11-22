@@ -12,7 +12,8 @@
   - every warning and what to do about it;
   - env table (kept variables only), what is sent, the question, prompts;
   - Claude Code assumptions from L0 with links and version;
-  - known blind spots: `.env` calls are never judged; a broken install (bad
+  - known blind spots: scripts a command runs (D4: `bash cleanup.sh` is judged
+    by its text only), `.env` calls are never judged; a broken install (bad
     hook input, no Python, internal error) asks on every gated call until it
     is fixed or `GATE_ENABLED=0` is set (D12);
   - migration from 0.8: removed variables, behaviour changes table;
