@@ -3,6 +3,20 @@
 The call goes to Jev (redacted); a risky answer asks, a safe or uncertain one gives no decision, so
 Claude Code's own permissions apply. It never prints allow or deny. Jev unavailable (D11) and plugin
 faults (D12) ask with a warning. A misconfigured setting is silent here: `SessionStart` warns once.
+
+Lean model (formal/SimpleGate.lean) -> code; tests/test_lean_conformance.py checks the examples:
+
+| Lean                                  | Here                                                           |
+| ------------------------------------- | -------------------------------------------------------------- |
+| `hook`                                | `GateHook.main` (input, setting) and `GateHook.decide` (call)  |
+| `Call.tool p`                         | `GateHook.call_of`                                             |
+| `Call.badInput`, `Call.crash`         | `HookOut.fault(BAD_INPUT / INTERNAL_ERROR, ...)` in `main`     |
+| `Call.pythonMissing`                  | `hooks/gate.sh` (Python lookup fails; never reaches this file) |
+| `e.mentionsEnv`, `e.redact`           | `JevRequest.build_state` (None means `.env`)                   |
+| `q` (the Jev request)                 | `JevClient.ask_jev`                                            |
+| `judge c (q ...)`                     | `JevJudge.judge`                                               |
+| `Setting.misconfigured`               | `JevConfigError` in `main`: silent, exit 0                     |
+| `HookOut`, `Down`                     | `outcome.HookOut`, `outcome.Down`                              |
 """
 
 import json

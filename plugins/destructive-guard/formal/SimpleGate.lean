@@ -373,34 +373,54 @@ theorem unavailable_asks (e : Env) (c : Config) (q : String → JevResult) (p : 
   have ha : w.asks = true := (Down.asks_iff w).2 (Or.inl hw)
   simp [hook, hm, hq, judge, ha]
 
-/-! ## Examples (default `escalate = 500`), one per row of the conformance table -/
+/-! ## Examples (default `escalate = 500`), one per row of the conformance table.
+Each `example` is preceded by a `-- example: NAME` line; `tests/test_lean_conformance.py` fails when a
+name has no test, so a new example needs a test of the same name -/
 
 private def env₀ : Env := ⟨id, fun s => s == ".env"⟩
 private def q₀ (r : JevResult) : String → JevResult := fun _ => r
 
 -- Jev answered
+-- example: answer_0
 example : hook env₀ {} .on (q₀ (.answer 0)) (.tool "ls") = ⟨.none, none⟩ := by decide
+-- example: answer_500
 example : hook env₀ {} .on (q₀ (.answer 500)) (.tool "ls") = ⟨.none, none⟩ := by decide
+-- example: answer_501
 example : hook env₀ {} .on (q₀ (.answer 501)) (.tool "ls") = ⟨.ask, none⟩ := by decide
 -- Jev unavailable: warning and ask
+-- example: down_timeout
 example : hook env₀ {} .on (q₀ (.down .timeout)) (.tool "ls") = ⟨.ask, some .timeout⟩ := by decide
+-- example: down_http
 example : hook env₀ {} .on (q₀ (.down .http)) (.tool "ls") = ⟨.ask, some .http⟩ := by decide
+-- example: down_network
 example : hook env₀ {} .on (q₀ (.down .network)) (.tool "ls") = ⟨.ask, some .network⟩ := by decide
+-- example: down_malformed
 example : hook env₀ {} .on (q₀ (.down .malformed)) (.tool "ls") = ⟨.ask, some .malformed⟩ := by decide
 -- misconfigured: silent per call
+-- example: misconfigured_no_key_silent
 example : hook env₀ {} (.misconfigured .noKey) (q₀ (.answer 900)) (.tool "ls") = ⟨.none, none⟩ := by decide
+-- example: session_start_misconfigured_no_key
 example : sessionStart (.misconfigured .noKey) = some .noKey := by decide
+-- example: session_start_on
 example : sessionStart .on = none := by decide
 -- `.env`: not sent, warning, no decision
+-- example: env_mention_not_sent
 example : hook env₀ {} .on (q₀ (.answer 900)) (.tool ".env") = ⟨.none, some .envReference⟩ := by decide
 -- plugin faults: ask with a warning, with or without a key
+-- example: bad_input_on
 example : hook env₀ {} .on (q₀ (.answer 0)) .badInput = ⟨.ask, some .badInput⟩ := by decide
+-- example: bad_input_misconfigured
 example : hook env₀ {} (.misconfigured .noKey) (q₀ (.answer 0)) .badInput = ⟨.ask, some .badInput⟩ := by decide
+-- example: python_missing
 example : hook env₀ {} .on (q₀ (.answer 0)) .pythonMissing = ⟨.ask, some .pythonMissing⟩ := by decide
+-- example: crash
 example : hook env₀ {} .on (q₀ (.answer 0)) .crash = ⟨.ask, some .internalError⟩ := by decide
 -- Claude Code's side
+-- example: effective_ask_allow
 example : effective .ask .allow = .ask := by decide
+-- example: effective_ask_deny
 example : effective .ask .deny = .deny := by decide
+-- example: effective_none_allow
 example : effective .none .allow = .allow := by decide
 
 end SimpleGate
