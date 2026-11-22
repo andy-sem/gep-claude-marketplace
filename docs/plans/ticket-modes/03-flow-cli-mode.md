@@ -1,7 +1,7 @@
 # Task 03: flow CLI stores and shows the mode
 
 Plan: [../ticket-modes.md](../ticket-modes.md) §5.1 (CLI part), §5.2, §7.
-Depends on: 02. Status: not started.
+Depends on: 02. Status: done.
 
 ## Goal
 
