@@ -1,7 +1,7 @@
 # Task 04: references `modes.md` and pipeline spec
 
 Plan: [../ticket-modes.md](../ticket-modes.md) §1, D1–D4, D6, §6.
-Depends on: –. Status: not started.
+Depends on: –. Status: done.
 
 ## Goal
 

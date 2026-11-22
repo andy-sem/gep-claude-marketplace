@@ -9,6 +9,11 @@ the session watches it: new review feedback is addressed in a follow-up round
 (§5a), and a merge removes the worktree. The pipeline works on
 its own and stops for the developer only at the points in §3.
 
+How many stages a ticket runs depends on its mode, decided once at kickoff
+([modes.md](modes.md)): `heavy` runs spec → plan → dev → review, `medium`
+plan → dev → review, `light` plan → dev. Plan approval (H2) is a stop in
+every mode.
+
 ## 2. Principles
 
 | Principle | Meaning |
@@ -27,11 +32,11 @@ from the orchestrator, recommended option first, except H4.
 
 | # | When | Shown | Options |
 | --- | --- | --- | --- |
-| H1 | Spec stage finds a blocking question | Question, context, recommendation | An option or free text |
-| H2 | **Plan ready (mandatory)** | Plan summary, path to `plan.md`, the gated operations table, open decisions | Approve · Request changes (free text, then re-plan) · Abort |
+| H1 | Spec stage finds a blocking question (heavy only; in medium and light the planner's `NEEDS_DECISION` with `stage: plan`, asked as H3, takes this role) | Question, context, recommendation | An option or free text |
+| H2 | **Plan ready (mandatory, every mode)** | Plan summary, path to `plan.md`, the gated operations table, open decisions, the mode and its reason (and a raise the planner made) | Approve · Request changes (free text, then re-plan; the text may raise the mode, [modes.md §5](modes.md#5-raising-the-mode-d3)) · Abort |
 | H3 | Any stage raises `NEEDS_DECISION` (§4) | Question, options, trade-offs, recommendation | An option or free text |
 | H4 | A gated tool call | The permission prompt with the exact call and the gate's reason | Allow · Deny |
-| H5 | Review loop limit (2 fix rounds) with critical or important findings open | Remaining findings | Accept as is · One more round · Take over manually |
+| H5 | Review loop limit (no review stage in light mode unless raised) (2 fix rounds) with critical or important findings open | Remaining findings | Accept as is · One more round · Take over manually |
 | H6 | Verification still fails after 2 dev fix attempts, or an infrastructure blocker | Failing command and output excerpt | Retry · Skip this check (listed in the PR) · Abort |
 | H7 | Subagent failure (crash, empty result, missing file) after 1 automatic retry, or a scope-check failure | Error summary | Retry · Abort |
 
@@ -79,13 +84,27 @@ decision. A dev question starting with `verification failed: ` is H6.
 
 Every file lives in `<ticketsDir>/<KEY>/` in the ticket worktree.
 
+Stages per mode ([modes.md §1](modes.md#1-the-modes)):
+
+| Stage | heavy | medium | light |
+| --- | --- | --- | --- |
+| kickoff | yes | yes | yes |
+| spec | yes | no | no |
+| plan | yes, from `spec.md` | yes, from `ticket.md`, writes the acceptance criteria | as medium |
+| dev | yes | yes | yes |
+| review | yes | yes | no, unless the mode is raised (`riskPaths` in the diff, or an explicit raise) |
+| complete, done, addressing_review, merged | yes | yes | yes (addressing_review without the reviewer unless raised) |
+
+The mode can be raised during the run, never lowered
+([modes.md §5](modes.md#5-raising-the-mode-d3)).
+
 | Stage | Who | Reads | Writes | Exit |
 | --- | --- | --- | --- | --- |
 | kickoff | orchestrator | `ticket.md`, config | worktree, `state.json`, `decisions.md` | worktree exists, setup ran |
-| spec | spec agent (read-only) | `ticket.md`, repo docs, code | `spec.md` (goal, context, in/out of scope, testable acceptance criteria, assumptions, open questions tagged blocking/non-blocking) | no blocking questions left |
-| plan | planner (read-only) | `spec.md`, `decisions.md`, repo | `plan.md` (steps with files and checks, gated operations table, verification, risks) | **H2 approval**; then `ticket.md`, `spec.md`, `plan.md`, `decisions.md` are committed |
-| dev | dev agent (all tools) | `plan.md`, `spec.md`, `decisions.md` | one commit per step (`Plan-Step: N`), `dev-report.md` | steps done, verification passes (2 fix attempts, then H6) |
-| review | reviewer (read-only) | diff vs base, `spec.md`, `plan.md`, `dev-report.md` | `review.md`: critical / important / minor findings, `VERDICT: PASS|CHANGES_REQUIRED` | PASS, or H5 after 2 fix rounds |
+| spec (heavy) | spec agent (read-only) | `ticket.md`, repo docs, code | `spec.md` (goal, context, in/out of scope, testable acceptance criteria, assumptions, open questions tagged blocking/non-blocking) | no blocking questions left |
+| plan | planner (read-only) | `spec.md` (heavy) or `ticket.md` (medium, light), `decisions.md`, repo | `plan.md` (steps with files and checks, gated operations table, verification, risks, `## Mode`; in medium and light also `## Acceptance criteria`) | **H2 approval**; then `ticket.md`, `spec.md` (when it exists), `plan.md`, `decisions.md` are committed |
+| dev | dev agent (all tools) | `plan.md`, `spec.md` (when it exists), `decisions.md` | one commit per step (`Plan-Step: N`), `dev-report.md` | steps done, verification passes (2 fix attempts, then H6) |
+| review (heavy, medium) | reviewer (read-only) | diff vs base, `spec.md` (when it exists), `plan.md`, `dev-report.md` | `review.md`: critical / important / minor findings, `VERDICT: PASS|CHANGES_REQUIRED` | PASS, or H5 after 2 fix rounds |
 | complete | orchestrator | `plan.md`, `review.md`, `state.json` | push, PR | PR open, stage `done` |
 | done | orchestrator + `watch_pr.py` (background) | the PR | `watch` heartbeat in `state.json` | feedback → `addressing_review`, merged → `merged`, closed → stop |
 | addressing_review | orchestrator, dev (`MODE=fix-pr`), reviewer (`REVIEW_SINCE`) | PR reviews and comments | `pr-feedback-<n>.md`, `PR-Fix: <id>` commits, push, replies | back to `done` |
@@ -95,7 +114,9 @@ Read-only stages may change only the ticket directory; the orchestrator checks
 `git status --porcelain` after them (scope check → H7). Review fix rounds run
 the dev agent with `MODE=fix-review` (critical and important only, commits
 with `Review-Fix: <n>`). Minor findings go into the PR. The reviewer runs on a
-stronger model when the diff touches `riskPaths`.
+stronger model when the diff touches `riskPaths`; in light mode that diff
+raises the run to medium, so the review runs. Acceptance criteria are read
+from `spec.md` when it exists, otherwise from `plan.md`.
 
 With a `tracker` (details in `jira.md`), the orchestrator runs these steps at
 the stage boundaries. Each posts a `Pipeline:` comment; a failed call is a
@@ -105,10 +126,10 @@ warning and never stops the run.
 | --- | --- | --- | --- |
 | intake | kickoff, before the worktree | none | none; `ticket.md` is generated, the issue is assigned |
 | `started` | end of kickoff | yes | to In Progress |
-| `spec-done` | spec exit | yes | none |
+| `spec-done` | spec exit (heavy) | yes | none |
 | `plan-approved` | after H2 | yes | none |
 | `dev-done` | dev exit | yes | none |
-| `review-done` | review exit | yes | none |
+| `review-done` | review exit (not in light unless raised) | yes | none |
 | `pr-opened` | PR opened or reused | yes, with the PR link | to In Review |
 | `pr-feedback-addressed` | end of a round (§5a) | yes | none |
 | `merged` | merge cleanup | yes, once | to Done |
@@ -161,6 +182,9 @@ hint; launched sessions carry `TICKET_FLOW_KEY` and are already named.
   "worktree": "/abs/repo/.claude/worktrees/proj-1-export-reports-as-csv",
   "host": "orca | iterm | plain",
   "stage": "spec | plan | awaiting_plan_approval | dev | review | complete | done | addressing_review | merged | aborted",
+  "mode": "heavy | medium | light",
+  "modeReason": "light: one area (apps/web copy), clear result, one file",
+  "modeHistory": [{ "from": "light", "to": "medium", "by": "planner | developer | riskPaths", "stage": "awaiting_plan_approval", "reason": "...", "at": "ISO-8601" }],
   "abortedFrom": "dev",
   "reviewRound": 0,
   "decisions": [{ "stage": "plan", "question": "...", "answer": "...", "at": "ISO-8601" }],
@@ -174,9 +198,12 @@ hint; launched sessions carry `TICKET_FLOW_KEY` and are already named.
 ```
 
 `tracker` exists only when a tracker is configured; every writer of
-`state.json` keeps it, as it keeps `watch`.
+`state.json` keeps it, as it keeps `watch`. `mode`, `modeReason` and
+`modeHistory` are described in [modes.md §9](modes.md#9-records); a state
+without `mode` counts as `heavy`.
 
-`--resume` re-enters the recorded stage from its start. Stages are safe to run
+`--resume` re-enters the recorded stage from its start, with the recorded
+mode (a `--mode` that differs is refused). Stages are safe to run
 again: they overwrite their own file, and dev skips steps whose `Plan-Step: N`
 commit already exists. In stage `done` it restarts the PR watch, in
 `addressing_review` the feedback round, in `merged` the cleanup. Only the
