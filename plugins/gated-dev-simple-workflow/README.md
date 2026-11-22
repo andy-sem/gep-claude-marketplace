@@ -6,6 +6,153 @@ by default the ticket is a Markdown file (`docs/tickets/<KEY>/ticket.md`), and
 every stage reads and writes files next to it. A project can **switch to Jira
 issues** instead (see [Jira](#jira)); the stages still work on files.
 
+What ships:
+
+| Part | What it does |
+| --- | --- |
+| `/ticket` skill | The orchestrator. Runs in your main session, never writes product code, drives the stage agents and talks to you at stop points. |
+| Four stage agents | `ticket-spec`, `ticket-planner`, `ticket-dev`, `ticket-reviewer`: one subagent per stage, each writing one file. |
+| `/ticket-flow` skill | Works through the subtasks of one Jira parent by launching a `/ticket` session for each. |
+| Launcher (`scripts/launch.py`) | Opens one Claude Code session per ticket in a new Orca or iTerm2 tab. |
+| PR watcher (`scripts/watch_pr.py`) | Polls the PR in the background and wakes the session on feedback, merge or close. |
+| `Notification` hook | Desktop notification when a launched session needs you. |
+
+## How it works
+
+### The pipeline
+
+`/ticket <KEY>` creates (or adopts) a worktree on branch `<KEY>/<slug>`, then
+runs one subagent per stage. Each agent reads the files of the stages before
+it and ends with `RESULT: OK <file>` or a `NEEDS_DECISION` block; a
+`NEEDS_DECISION` stops the run and asks you. The orchestrator records every
+answer in `decisions.md` and the stage in `state.json`, so `--resume` can
+re-enter any stage.
+
+```mermaid
+flowchart TD
+    T["ticket.md<br/>(file, pasted text or Jira issue)"] --> K["Kickoff: worktree + branch<br/>KEY/slug"]
+    K --> S["ticket-spec agent<br/>writes spec.md"]
+    S -->|"blocking questions"| Q1(["You answer"])
+    Q1 --> S
+    S --> P["ticket-planner agent<br/>writes plan.md"]
+    P --> A{{"Plan approval<br/>always a stop point"}}
+    A -->|"changes requested"| P
+    A -->|"approved"| C["Commit ticket, spec, plan, decisions"]
+    C --> D["ticket-dev agent<br/>Plan-Step commits + dev-report.md"]
+    D -->|"verification failed /<br/>blocker"| Q2(["You: Retry, Skip or Abort"])
+    Q2 --> D
+    D --> R["ticket-reviewer agent<br/>writes review.md"]
+    R -->|"CHANGES_REQUIRED<br/>(up to 2 rounds)"| F["ticket-dev MODE=fix-review<br/>Review-Fix commits"]
+    F --> R
+    R -->|"still failing after 2 rounds"| Q3(["You: Accept, One more round,<br/>or Take over"])
+    R -->|"PASS"| V["Complete: run plan's verification,<br/>push branch, open PR with gh"]
+    V --> W["Watch the PR"]
+```
+
+Stop points (where the run waits for you): blocking spec questions, **plan
+approval**, decisions an agent escalates (for example anything in
+`riskPaths` or the escalation list), verification failures and other
+blockers, the review-loop limit, and agent failures. A prompt or denial from
+an approval gate such as `destructive-guard` is treated the same way: as a
+checkpoint, never something to work around.
+
+The stages move through these states in `state.json`:
+
+```mermaid
+stateDiagram-v2
+    [*] --> spec
+    spec --> plan
+    plan --> awaiting_plan_approval
+    awaiting_plan_approval --> plan: changes requested
+    awaiting_plan_approval --> dev: approved
+    dev --> review
+    review --> dev: CHANGES_REQUIRED
+    review --> complete: PASS or accepted
+    complete --> done: PR open
+    done --> addressing_review: new PR feedback
+    addressing_review --> done: replies posted
+    done --> merged: PR merged
+    merged --> [*]
+    spec --> aborted
+    plan --> aborted
+    dev --> aborted
+    review --> aborted
+    awaiting_plan_approval --> aborted
+    aborted --> [*]
+```
+
+### After the PR opens
+
+The session starts `scripts/watch_pr.py` in the background. It polls the PR
+with `gh` once a minute and exits on the first event, which wakes the
+session.
+
+```mermaid
+sequenceDiagram
+    participant O as /ticket session
+    participant W as watch_pr.py
+    participant GH as GitHub PR
+    participant Dev as ticket-dev
+    participant Rev as ticket-reviewer
+    O->>W: start in background
+    loop every minute
+        W->>GH: gh: comments, reviews, state
+    end
+    alt new human feedback
+        W-->>O: feedback
+        O->>O: classify items in pr-feedback-n.md<br/>(change / question / decline)
+        O->>Dev: MODE=fix-pr
+        Dev-->>O: PR-Fix commits
+        O->>Rev: review the fixes
+        O->>GH: push, reply to every item (gated-dev marker)
+        O->>W: watch again
+    else merged
+        W-->>O: merged
+        O->>O: notify, remove clean worktree (branch kept)
+    else closed
+        W-->>O: closed, watch stops
+    end
+```
+
+### With a Jira tracker
+
+When `tracker` is set in `.claude/gated-dev.json`, the orchestrator (never the
+stage agents) uses the session's own Jira tools: it fetches the issue into
+`ticket.md` at kickoff and moves it forward at fixed events.
+
+```mermaid
+flowchart LR
+    TD["To Do"] -->|"kickoff<br/>assign to you"| IP["In Progress"]
+    IP -->|"PR opened"| IR["In Review"]
+    IR -->|"PR merged"| DN["Done"]
+```
+
+Each stage transition also posts a short `Pipeline:` comment. Statuses only
+move forward, and a failed Jira call after kickoff is a warning, not a stop.
+
+### Running a parent: `/ticket-flow`
+
+`/ticket-flow <PARENT>` is a driver session for the subtasks of one Jira
+parent. It reads Jira and launches sessions; all Jira writes stay in the
+launched `/ticket` sessions.
+
+```mermaid
+flowchart TD
+    S["/ticket-flow PARENT"] --> L["List candidates<br/>flow.jql, ranked"]
+    L --> F["Hard filter: To Do, not in flow state,<br/>no open 'is blocked by' link"]
+    F --> J["Judge with flow.pickRules<br/>and the description"]
+    J --> Q{"Free slot and<br/>a ready ticket?"}
+    Q -->|"yes"| LA["launch.py: new /ticket KEY session<br/>in Orca or iTerm2"]
+    LA --> Q
+    Q -->|"no slot / nothing ready"| WT["flow.py wait<br/>(background)"]
+    WT -->|"slot freed, lost watch,<br/>stale run"| L
+    Q -->|"nothing left"| E["Done"]
+```
+
+A run holds a slot from launch until its PR is open (plan approval included);
+`flow.max` sets the number of slots. Flow state lives in the git common dir,
+so every worktree sees the same picture.
+
 ## Usage
 
 ```text
