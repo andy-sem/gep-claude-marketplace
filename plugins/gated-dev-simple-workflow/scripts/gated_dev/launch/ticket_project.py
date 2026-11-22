@@ -17,7 +17,7 @@ class TicketProject:
 
     DEFAULT_KEY_PATTERN = "^[A-Za-z][A-Za-z0-9._-]*$"
     CONFIG_KEYS = frozenset(
-        ("ticketsDir", "keyPattern", "baseBranch", "setupCommand", "formatCommand", "riskPaths", "escalationExtra", "models", "orchestratorRules", "tracker", "flow", "dryRunGate")
+        ("ticketsDir", "keyPattern", "baseBranch", "setupCommand", "formatCommand", "riskPaths", "escalationExtra", "models", "orchestratorRules", "tracker", "flow", "dryRunGate", "mode", "modes", "modeRules")
     )
     TRACKER_KEY_PATTERN = r"^[A-Z][A-Z0-9]*-\d+$"
     TRACKER_KEYS = frozenset(("type", "site", "statuses", "startFrom", "assign", "comments", "baseFromParent"))
@@ -31,6 +31,12 @@ class TicketProject:
         "staleHours": 3,
         "lostWatchMinutes": 10,
         "remoteControl": False,
+    }
+    MODE_NAMES = ("heavy", "medium", "light")
+    MODE_DEFAULTS: ClassVar[dict[str, dict[str, str]]] = {
+        "heavy": {"session": "opus"},
+        "medium": {"session": "sonnet"},
+        "light": {"session": "sonnet"},
     }
     DEFAULT_STATUSES: ClassVar[dict[str, str]] = {"inProgress": "In Progress", "inReview": "In Review", "done": "Done"}
     _SITE = re.compile(r"[A-Za-z0-9.-]+")
@@ -87,6 +93,13 @@ class TicketProject:
         dry_run_gate = raw.get("dryRunGate", False)
         if not isinstance(dry_run_gate, bool):
             raise LaunchError(f"{file}: dryRunGate must be true or false")
+        mode = raw.get("mode", "auto")
+        if mode not in ("auto", *TicketProject.MODE_NAMES):
+            raise LaunchError(f"{file}: mode must be one of auto, heavy, medium, light")
+        modes = TicketProject._read_modes(raw.get("modes"), file)
+        mode_rules = raw.get("modeRules", [])
+        if not (isinstance(mode_rules, list) and all(isinstance(x, str) and x for x in mode_rules)):
+            raise LaunchError(f"{file}: modeRules must be a list of non-empty strings")
         return {
             "ticketsDir": tickets_dir,
             "keyPattern": key_pattern,
@@ -95,7 +108,32 @@ class TicketProject:
             "tracker": tracker,
             "flow": flow,
             "dryRunGate": dry_run_gate,
+            "mode": mode,
+            "modes": modes,
+            "modeRules": mode_rules,
         }
+
+    @staticmethod
+    def _read_modes(raw: Any, file: Path) -> dict[str, dict[str, str]]:
+        """The checked `modes` config merged over the defaults."""
+        modes = {name: dict(value) for name, value in TicketProject.MODE_DEFAULTS.items()}
+        if raw is None:
+            return modes
+        if not isinstance(raw, dict):
+            raise LaunchError(f"{file}: modes must be an object")
+        for name, value in raw.items():
+            if name not in modes:
+                raise LaunchError(f'{file}: modes has unknown mode "{name}" (use heavy, medium or light)')
+            if not isinstance(value, dict):
+                raise LaunchError(f"{file}: modes.{name} must be an object")
+            for k in value:
+                if k != "session":
+                    raise LaunchError(f'{file}: modes.{name} has unknown key "{k}"')
+            if "session" in value:
+                if not LaunchNaming.is_model(value["session"]):
+                    raise LaunchError(f"{file}: modes.{name}.session must be opus, sonnet, haiku or a claude-... model id")
+                modes[name]["session"] = value["session"]
+        return modes
 
 
     @staticmethod

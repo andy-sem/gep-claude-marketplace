@@ -191,6 +191,51 @@ def test_read_config_defaults_overrides_and_invalid_content(tmp_path):
             cfg(f"bad{n}", config=bad)
 
 
+MODE_DEFAULTS = {"heavy": {"session": "opus"}, "medium": {"session": "sonnet"}, "light": {"session": "sonnet"}}
+
+
+def test_read_config_mode_defaults_and_overrides(tmp_path):
+    d = TicketProject(project(tmp_path / "d")).read_config()
+    assert (d["mode"], d["modes"], d["modeRules"]) == ("auto", MODE_DEFAULTS, [])
+    for n, mode in enumerate(("auto", "heavy", "medium", "light")):
+        assert TicketProject(project(tmp_path / f"m{n}", config={"mode": mode})).read_config()["mode"] == mode
+    config = {"modes": {"light": {"session": "haiku"}, "heavy": {"session": "claude-opus-4-5"}}, "modeRules": ["billing is medium"]}
+    c = TicketProject(project(tmp_path / "c", config=config)).read_config()
+    assert c["modes"] == {"heavy": {"session": "claude-opus-4-5"}, "medium": {"session": "sonnet"}, "light": {"session": "haiku"}}
+    assert c["modeRules"] == ["billing is medium"]
+    assert TicketProject(project(tmp_path / "e", config={"modes": {"light": {}}})).read_config()["modes"] == MODE_DEFAULTS
+    assert MODE_DEFAULTS == TicketProject.MODE_DEFAULTS
+
+
+@pytest.mark.parametrize(
+    ("bad", "message"),
+    [
+        ({"mode": "huge"}, "mode must be"),
+        ({"mode": None}, "mode must be"),
+        ({"modes": []}, "modes must be an object"),
+        ({"modes": {"huge": {"session": "opus"}}}, 'unknown mode "huge"'),
+        ({"modes": {"light": "haiku"}}, "modes.light must be an object"),
+        ({"modes": {"light": {"model": "haiku"}}}, 'unknown key "model"'),
+        ({"modes": {"light": {"session": 3}}}, "session must be"),
+        ({"modes": {"light": {"session": "opus 4"}}}, "session must be"),
+        ({"modes": {"light": {"session": "opus;ls"}}}, "session must be"),
+        ({"modes": {"light": {"session": "claude-x'y"}}}, "session must be"),
+        ({"modes": {"light": {"session": "gpt"}}}, "session must be"),
+        ({"modeRules": "billing"}, "modeRules must be"),
+        ({"modeRules": ["ok", ""]}, "modeRules must be"),
+        ({"modeRules": [1]}, "modeRules must be"),
+    ],
+)
+def test_read_config_mode_invalid(tmp_path, bad, message):
+    with pytest.raises(LaunchError, match=message):
+        TicketProject(project(tmp_path, config=bad)).read_config()
+
+
+def test_is_model_accepts_aliases_and_ids_only():
+    assert all(LaunchNaming.is_model(m) for m in ("opus", "sonnet", "haiku", "claude-opus-4-5", "claude-sonnet-4.5"))
+    assert not any(LaunchNaming.is_model(m) for m in ("", "gpt", "Opus", "claude-", "claude-A", "a b", "opus;x", 'x"', None, 3))
+
+
 TRACKER_DEFAULTS = {
     "type": "jira",
     "site": None,
