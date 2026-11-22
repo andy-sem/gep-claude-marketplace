@@ -17,11 +17,21 @@ class TicketProject:
 
     DEFAULT_KEY_PATTERN = "^[A-Za-z][A-Za-z0-9._-]*$"
     CONFIG_KEYS = frozenset(
-        ("ticketsDir", "keyPattern", "baseBranch", "setupCommand", "formatCommand", "riskPaths", "escalationExtra", "models", "orchestratorRules", "tracker")
+        ("ticketsDir", "keyPattern", "baseBranch", "setupCommand", "formatCommand", "riskPaths", "escalationExtra", "models", "orchestratorRules", "tracker", "flow")
     )
     TRACKER_KEY_PATTERN = r"^[A-Z][A-Z0-9]*-\d+$"
     TRACKER_KEYS = frozenset(("type", "site", "statuses", "startFrom", "assign", "comments", "baseFromParent"))
     TRACKER_TYPES = frozenset(("jira",))
+    FLOW_KEYS = frozenset(("max", "jql", "pickRules", "pollSeconds", "staleHours", "lostWatchMinutes", "remoteControl"))
+    FLOW_DEFAULTS: ClassVar[dict[str, Any]] = {
+        "max": 1,
+        "jql": "parent = {parent} ORDER BY Rank ASC",
+        "pickRules": [],
+        "pollSeconds": 60,
+        "staleHours": 3,
+        "lostWatchMinutes": 10,
+        "remoteControl": False,
+    }
     DEFAULT_STATUSES: ClassVar[dict[str, str]] = {"inProgress": "In Progress", "inReview": "In Review", "done": "Done"}
     _SITE = re.compile(r"[A-Za-z0-9.-]+")
     _FRONT_MATTER = re.compile(r"---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
@@ -62,6 +72,7 @@ class TicketProject:
         if not isinstance(tickets_dir, str) or not tickets_dir or TicketProject._outside_repo(tickets_dir):
             raise LaunchError(f"{file}: ticketsDir must be a relative path inside the repo")
         tracker = TicketProject._read_tracker(raw.get("tracker"), file)
+        flow = TicketProject._read_flow(raw.get("flow"), file, tracker)
         default_pattern = TicketProject.TRACKER_KEY_PATTERN if tracker else TicketProject.DEFAULT_KEY_PATTERN
         try:
             key_pattern = re.compile(LaunchNaming._first(raw.get("keyPattern"), default_pattern))
@@ -73,7 +84,7 @@ class TicketProject:
         rules = raw.get("orchestratorRules")
         if rules is not None and (not isinstance(rules, str) or not rules or TicketProject._outside_repo(rules)):
             raise LaunchError(f"{file}: orchestratorRules must be a relative path inside the repo")
-        return {"ticketsDir": tickets_dir, "keyPattern": key_pattern, "baseBranch": base_branch, "orchestratorRules": rules, "tracker": tracker}
+        return {"ticketsDir": tickets_dir, "keyPattern": key_pattern, "baseBranch": base_branch, "orchestratorRules": rules, "tracker": tracker, "flow": flow}
 
 
     @staticmethod
@@ -123,6 +134,41 @@ class TicketProject:
             "comments": raw.get("comments", True),
             "baseFromParent": base,
         }
+
+    @staticmethod
+    def _read_flow(raw: Any, file: Path, tracker: dict | None) -> dict | None:
+        """The checked `flow` config with defaults filled in, or None when it is not set."""
+        if raw is None:
+            return None
+        if tracker is None:
+            raise LaunchError(f"{file}: flow requires tracker (flow searches the tracker for a parent's subtasks)")
+        if not isinstance(raw, dict):
+            raise LaunchError(f"{file}: flow must be an object")
+        for k in raw:
+            if k not in TicketProject.FLOW_KEYS:
+                raise LaunchError(f'{file}: flow has unknown key "{k}"')
+        flow = {**TicketProject.FLOW_DEFAULTS, "pickRules": [], **raw}
+        if not isinstance(flow["max"], int) or isinstance(flow["max"], bool) or not 1 <= flow["max"] <= 10:
+            raise LaunchError(f"{file}: flow.max must be an integer from 1 to 10")
+        jql = flow["jql"]
+        if not (isinstance(jql, str) and "{parent}" in jql):
+            raise LaunchError(f"{file}: flow.jql must be a string containing {{parent}}")
+        rules = flow["pickRules"]
+        if not (isinstance(rules, list) and all(isinstance(x, str) for x in rules)):
+            raise LaunchError(f"{file}: flow.pickRules must be a list of strings")
+        poll = flow["pollSeconds"]
+        if not isinstance(poll, int) or isinstance(poll, bool) or not 15 <= poll <= 3600:
+            raise LaunchError(f"{file}: flow.pollSeconds must be an integer from 15 to 3600")
+        for hours in ("staleHours", "lostWatchMinutes"):
+            if not TicketProject._is_number(flow[hours]) or flow[hours] <= 0:
+                raise LaunchError(f"{file}: flow.{hours} must be a positive number")
+        if not isinstance(flow["remoteControl"], bool):
+            raise LaunchError(f"{file}: flow.remoteControl must be true or false")
+        return flow
+
+    @staticmethod
+    def _is_number(value: Any) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
 
     @staticmethod
     def check_key(key: Any, config: Mapping) -> None:

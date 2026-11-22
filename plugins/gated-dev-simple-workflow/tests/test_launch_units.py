@@ -285,6 +285,90 @@ def test_launch_ticket_with_tracker_and_no_ticket_md_starts_in_the_main_checkout
     assert plan["note"] is None
 
 
+FLOW_DEFAULTS = {
+    "max": 1,
+    "jql": "parent = {parent} ORDER BY Rank ASC",
+    "pickRules": [],
+    "pollSeconds": 60,
+    "staleHours": 3,
+    "lostWatchMinutes": 10,
+    "remoteControl": False,
+}
+
+
+def test_read_config_flow_defaults_and_overrides(tmp_path):
+    assert TicketProject(project(tmp_path / "none", config={"tracker": {"type": "jira"}})).read_config()["flow"] is None
+    defaults = TicketProject(project(tmp_path / "empty", config={"tracker": {"type": "jira"}, "flow": {}})).read_config()
+    assert defaults["flow"] == FLOW_DEFAULTS
+    flow = {
+        "max": 10,
+        "jql": "parent = {parent} AND status = 'To Do'",
+        "pickRules": ["prefer the earliest phase"],
+        "pollSeconds": 15,
+        "staleHours": 0.5,
+        "lostWatchMinutes": 2.5,
+        "remoteControl": True,
+    }
+    config = TicketProject(project(tmp_path / "set", config={"tracker": {"type": "jira"}, "flow": flow})).read_config()
+    assert config["flow"] == flow
+
+
+@pytest.mark.parametrize(
+    ("flow", "message"),
+    [
+        ("yes", "flow must be an object"),
+        ({"nope": 1}, 'flow has unknown key "nope"'),
+        ({"max": 0}, "flow.max"),
+        ({"max": 11}, "flow.max"),
+        ({"max": 1.5}, "flow.max"),
+        ({"max": True}, "flow.max"),
+        ({"max": "2"}, "flow.max"),
+        ({"jql": "status = 'To Do'"}, "flow.jql.*{parent}"),
+        ({"jql": 5}, "flow.jql"),
+        ({"pickRules": "earliest first"}, "flow.pickRules"),
+        ({"pickRules": ["ok", 3]}, "flow.pickRules"),
+        ({"pollSeconds": 14}, "flow.pollSeconds"),
+        ({"pollSeconds": 3601}, "flow.pollSeconds"),
+        ({"pollSeconds": 60.5}, "flow.pollSeconds"),
+        ({"pollSeconds": True}, "flow.pollSeconds"),
+        ({"staleHours": 0}, "flow.staleHours"),
+        ({"staleHours": -1}, "flow.staleHours"),
+        ({"staleHours": "3"}, "flow.staleHours"),
+        ({"lostWatchMinutes": 0}, "flow.lostWatchMinutes"),
+        ({"lostWatchMinutes": False}, "flow.lostWatchMinutes"),
+        ({"remoteControl": "no"}, "flow.remoteControl"),
+        ({"remoteControl": 0}, "flow.remoteControl"),
+    ],
+)
+def test_read_config_flow_invalid(tmp_path, flow, message):
+    with pytest.raises(LaunchError, match=message):
+        TicketProject(project(tmp_path, config={"tracker": {"type": "jira"}, "flow": flow})).read_config()
+
+
+def test_read_config_flow_without_tracker_is_a_config_error(tmp_path):
+    with pytest.raises(LaunchError, match="flow requires tracker"):
+        TicketProject(project(tmp_path, config={"flow": {"max": 2}})).read_config()
+
+
+def test_launch_ticket_summary_titles_a_tracker_ticket_without_ticket_md(tmp_path):
+    from gated_dev.completed_run import CompletedRun
+    from gated_dev.launch.launcher import TicketLauncher
+
+    def fake_run(file, argv):
+        return CompletedRun("", "")
+
+    env = {"TERM_PROGRAM": "iTerm.app"}
+    root = project(tmp_path, config={"tracker": {"type": "jira"}})
+    config = TicketProject(root).read_config()
+    titled = TicketLauncher.launch_ticket(root=root, key="PROJ-1", config=config, dry_run=True, summary="Add export", env=env, run=fake_run)
+    assert titled["summary"] == "Add export"
+    assert titled["title"] == LaunchNaming.session_name(key="PROJ-1", summary="Add export")
+    assert titled["title"] != "PROJ-1"
+    plain = TicketLauncher.launch_ticket(root=root, key="PROJ-1", config=config, dry_run=True, env=env, run=fake_run)
+    assert plain["summary"] is None
+    assert plain["title"] == LaunchNaming.session_name(key="PROJ-1", summary=None) == "PROJ-1"
+
+
 def test_check_key_applies_key_pattern_and_the_safe_character_set(tmp_path):
     strict = TicketProject(project(tmp_path / "strict", config={"keyPattern": "^[A-Z]+-\\d+$"})).read_config()
     assert TicketProject.check_key("PROJ-1", strict) is None

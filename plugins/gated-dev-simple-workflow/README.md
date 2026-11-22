@@ -45,6 +45,67 @@ In Orca they are created with `orca worktree create`; in iTerm2 and other
 terminals with `git worktree add`. A session that already runs in a linked
 worktree adopts it.
 
+## Running a whole parent
+
+`/ticket-flow` works through the subtasks of one Jira parent (an epic, or a
+story with subtasks) without you choosing each next ticket. It needs a Jira
+[tracker](#jira) in `.claude/gated-dev.json` and stops with a message without
+one.
+
+```text
+/ticket-flow PROJ-100                       # pick, launch, wait, repeat until nothing is left
+/ticket-flow PROJ-100 --once                # one pass: fill the free slots, then stop
+/ticket-flow PROJ-100 --max 2               # up to two runs at once (overrides flow.max)
+/ticket-flow PROJ-100 --dry-run             # show the pick and the launch plan, launch nothing
+/ticket-flow PROJ-100 --status              # launched, skipped and merged tickets, free slots
+/ticket-flow PROJ-100 --skip PROJ-104 needs a vendor contract
+/ticket-flow PROJ-100 --retry PROJ-104      # make a skipped or aborted ticket pickable again
+```
+
+- **Pick.** Candidates come from `flow.jql` (default
+  `parent = {parent} ORDER BY Rank ASC`, the base priority). A ticket is
+  dropped when it is not in a To Do status, is already in the flow state, has
+  a run you started by hand (listed, never picked) or has an `is blocked by`
+  link to an issue that is not Done. A ticket whose PR the flow saw merged
+  counts as Done. Then `flow.pickRules` and the description decide: a ticket
+  that needs a person (a meeting, a purchase) or names an unfinished
+  dependency is not picked.
+- **Launch.** Each pick opens its own `/ticket <KEY>` session through the
+  launcher, in the same tabs as [Launching several tickets](#launching-several-tickets).
+  The launched session does its own Jira assignment, transitions and comments.
+  `/ticket-flow` reads Jira and launches; it never writes to an issue.
+- **Slots.** A run holds a slot from its launch until its PR is open or the
+  run ends. A run waiting for plan approval holds a slot too. `flow.max`
+  (default 1) is the number of slots.
+- **Wait.** A background `flow.py wait` wakes the session when a slot frees,
+  a PR watch is lost, or a run has been idle for `flow.staleHours`. You get a
+  notification for a stale run, a failed launch and a ticket left after its
+  relaunch cap.
+- **Keep the session open.** Closing the session stops the wait. Running
+  `/ticket-flow PROJ-100` again continues from the saved state; it does not
+  start over.
+- **One driver per parent.** Run one driver session for each parent.
+- **Settings.** The `flow` key in `.claude/gated-dev.json` (`max`, `jql`,
+  `pickRules`, `pollSeconds`, `staleHours`, `lostWatchMinutes`, `remoteControl`):
+  see `skills/ticket/references/config.md`.
+- **State.** `$(git rev-parse --git-common-dir)/gated-dev/flow/<PARENT>.json`,
+  shared by every worktree and never committed. Each run's own
+  `state.json` stays in its worktree; the flow only reads it.
+
+Known limits:
+
+- The lock is held for each state write, not for a whole driver session, so
+  it does not stop a second driver for the same parent from picking the same
+  ticket.
+- A "nothing ready" pick is reported in chat with its reason, but the flow
+  state does not record it. Only launch reasons are recorded.
+- A lost PR watch (its session was closed while the PR was open) is reopened
+  with `launch.py`, which resumes the run and restarts the watch. After 3
+  relaunches the ticket is left to you.
+- Not decided yet: whether an open PR should hold a slot (today it frees
+  one), whether the driver moves the parent issue, and the relaunch cap of 3
+  (a constant, not a setting).
+
 ## Ticket files and run state
 
 Write `docs/tickets/<KEY>/ticket.md` (the first `# ` heading is the title; it
@@ -338,9 +399,9 @@ launcher, J3 docs and release). Binding decisions:
 - **Launcher:** `TicketProject.read_config` validates `tracker`, and a Jira
   key with no `ticket.md` opens in the main checkout titled with the plain
   key. `--all` never queries Jira.
-- **Not built:** the parent-based picker (a long-running driver that needs
-  its own plan), other trackers (`tracker.type` leaves room), and moving the
-  issue back during PR feedback rounds.
+- **Not built:** other trackers (`tracker.type` leaves room), and moving the
+  issue back during PR feedback rounds. The parent-based picker came in 0.11
+  (see [Ticket flow](#ticket-flow-011-november-2026)).
 
 Still to do: a manual acceptance run in a demo repo with a sandbox Jira
 project (never a real team project). It covers the kickoff, the move to In
@@ -348,6 +409,41 @@ Review at PR open, a PR feedback round, merge and `--resume` (no second
 merged comment), a missing target status (warning only) and a session
 without Jira tools (kickoff stops). The step-by-step plan, with the full
 acceptance list, is in git history (`docs/plans/jira-tracker/`).
+
+### Ticket flow (0.11, November 2026)
+
+`/ticket-flow <PARENT>` picks the subtasks of one Jira parent and launches
+each as a `/ticket` session. Built in five work packages (F1 flow state, F2
+wait and CLI, F3 launcher summary and config, F4 skill and references, F5 docs
+and release). Binding decisions:
+
+- **D1. A skill with a Python helper.** The skill does the Jira reads and the
+  judgement; `scripts/flow.py` does everything deterministic (state, git,
+  `gh`, launching, waiting) and has tests. Same split as `/ticket` and
+  `watch_pr.py`. The skill uses the session's Jira tools, not a Jira client.
+- **D2. Waiting is a background process that exits on an event.** `flow.py
+  wait` polls and prints one JSON line; the session wakes, acts and waits
+  again. Closing the session stops it; `/ticket-flow` continues from the
+  saved state.
+- **D3. Flow state in the git common dir**
+  (`$(git rev-parse --git-common-dir)/gated-dev/flow/<PARENT>.json`): shared
+  by every worktree, never committed. Runs keep their own `state.json`, which
+  the flow only reads.
+- **D4. Two-step pick.** A hard filter on the Jira data (status, exclusions,
+  `is blocked by` links), then judgement with `flow.pickRules`. Launch
+  reasons are recorded in the state; a "nothing ready" reason is only shown
+  in chat (a known limit).
+- **D5. Merged means Done for the pick,** even when Jira has not caught up.
+- **D6. A slot is a run that needs the pipeline.** `awaiting_plan_approval`
+  holds a slot; `done` (PR open) and the ends (`merged`, `aborted`) free it.
+  `flow.max` defaults to 1.
+- **D7. Jira writes stay in `/ticket`.** `/ticket-flow` reads Jira and
+  launches sessions, nothing else.
+- **D8. Requires `tracker`.** A file-based flow is not part of it.
+
+Known limits and open questions are in [Running a whole parent](#running-a-whole-parent).
+The manual acceptance run (a demo repo and a sandbox Jira project, never a
+real team project) is still to do.
 
 ### Planned change in the gate
 
