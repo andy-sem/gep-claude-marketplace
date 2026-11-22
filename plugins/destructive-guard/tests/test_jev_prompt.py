@@ -10,7 +10,7 @@ import pytest
 
 from destructive_guard.errors import JevConfigError
 from destructive_guard.jev.config import JevConfig
-from destructive_guard.jev.decider import JevDecider
+from destructive_guard.jev.judge import JevJudge
 from destructive_guard.jev.prompt import JevPrompt
 from testkit import DG
 from testkit.hook import HookRunner
@@ -25,7 +25,6 @@ def cfg_with(prompt):
         "url": "https://example.test/v1",
         "model": "m",
         "timeoutMs": 500,
-        "allowThreshold": 0.95,
         "escalateThreshold": 0.5,
         "prompt": prompt,
     }
@@ -80,14 +79,19 @@ def test_builtin_prompts_valid_and_generic(path):
     assert not re.search(r"jira|atlassian|chrome|cloudflare|wrangler|supabase|gcloud|google", text, re.IGNORECASE)
 
 
-def test_jev_decision_with_destructive_prompt():
+def test_judge_with_destructive_prompt():
     cfg = cfg_with(JevPrompt.builtin_prompt("destructive"))
-    assert JevDecider.jev_decision(d(0.1, 0.2, 0.7), cfg) == {"decision": "ask", "reason": "jev: destructive p=0.70 risk=0.70"}
-    assert JevDecider.jev_decision(d(0.02, 0.96, 0.02), cfg) == {
-        "decision": "pass",
-        "reason": "jev: reversible_change p=0.96 safe=0.98",
-    }
-    assert JevDecider.jev_decision(d(0.3, 0.3, 0.4), cfg) is None
+    out = JevJudge.judge({"probabilities": d(0.1, 0.2, 0.7)}, cfg)
+    assert (out.decision, out.reason) == ("ask", "jev: destructive p=0.70 risk=0.70")
+    assert JevJudge.judge({"probabilities": d(0.02, 0.96, 0.02)}, cfg).decision == "none"
+    assert JevJudge.judge({"probabilities": d(0.3, 0.3, 0.4)}, cfg).decision == "none"
+
+
+def test_safe_is_optional_but_validated_when_present():
+    without = {k: v for k, v in CUSTOM.items() if k != "safe"}
+    assert JevPrompt.validate_prompt(without) == without
+    with pytest.raises(JevConfigError, match="safe"):
+        JevPrompt.validate_prompt({**CUSTOM, "safe": []})
 
 
 def test_hook_sends_destructive_question(impl, jev, tmp_path):

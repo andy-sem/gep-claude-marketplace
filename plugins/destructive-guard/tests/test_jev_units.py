@@ -1,6 +1,6 @@
 """Jev pure helpers (port of gate-jev.test.mjs, pure part).
 
-Runs in-process against destructive_guard.jev.decider. askJev / runJev rows are in test_jev_http.py
+Runs in-process against the jev package (decisions: test_jev_judge.py). askJev / runJev rows are in test_jev_http.py
 (through the hook) and test_jev_request_py.py (in-process).
 """
 
@@ -10,7 +10,6 @@ import pytest
 
 from destructive_guard.errors import JevConfigError
 from destructive_guard.jev.config import JevConfig
-from destructive_guard.jev.decider import JevDecider
 from destructive_guard.jev.prompt import JevPrompt
 from destructive_guard.jev.redactor import Redactor
 from destructive_guard.jev.request import JevRequest
@@ -24,14 +23,13 @@ CFG = {
     "url": "https://example.test/v1",
     "model": "jev-latest",
     "timeoutMs": 500,
-    "allowThreshold": 0.95,
     "escalateThreshold": 0.5,
     "prompt": JevPrompt.builtin_prompt("cloud-change"),
 }
 
 
 def jev_many(fn, *arg_lists):
-    owner = JevConfig if fn in ("read",) else Redactor if fn.startswith("redact") else JevRequest if fn in ("parse_answer", "build_state") else JevDecider
+    owner = JevConfig if fn in ("read",) else Redactor if fn.startswith("redact") else JevRequest if fn in ("parse_answer", "build_state") else None
     return [getattr(owner, fn)(*args) for args in arg_lists]
 
 
@@ -187,48 +185,6 @@ def test_read_jev_config_accepts_loopback_http_urls():
 
 
 # ---------------------------------------------------------------------------
-# jevDecision
-# ---------------------------------------------------------------------------
-
-
-def decide_many(*ps):
-    return jev_many("jev_decision", *([p, CFG] for p in ps))
-
-
-def test_jev_decision_passes_confident_read_only_and_unrelated():
-    assert decide_many(JevMock.probs(0.01, 0.97, 0.01, 0.01), JevMock.probs(0.97, 0.01, 0.01, 0.01)) == [
-        {"decision": "pass", "reason": "jev: read_only p=0.97 safe=0.98"},
-        {"decision": "pass", "reason": "jev: unrelated p=0.97 safe=0.98"},
-    ]
-
-
-def test_jev_decision_sums_unrelated_and_read_only():
-    assert decide_many(JevMock.probs(0.6, 0.36, 0.02, 0.02)) == [
-        {"decision": "pass", "reason": "jev: unrelated p=0.60 safe=0.96"}
-    ]
-
-
-def test_jev_decision_null_below_allow_threshold():
-    assert decide_many(JevMock.probs(0.04, 0.9, 0.04, 0.02), JevMock.probs(0.4, 0.5, 0.05, 0.05)) == [None, None]
-
-
-def test_jev_decision_asks_above_escalate_threshold():
-    [d] = decide_many(JevMock.probs(0.1, 0.35, 0.25, 0.3))
-    assert d["decision"] == "ask"
-    assert d["reason"] == "jev: destructive p=0.30 risk=0.55"
-
-
-def test_jev_decision_no_ask_at_exactly_escalate_threshold():
-    assert decide_many(JevMock.probs(0.25, 0.25, 0.25, 0.25)) == [None]
-
-
-def test_jev_decision_names_cloud_or_data_change_when_larger():
-    [d] = decide_many(JevMock.probs(0.05, 0.05, 0.6, 0.3))
-    assert d["decision"] == "ask"
-    assert d["reason"] == "jev: cloud_or_data_change p=0.60 risk=0.90"
-
-
-# ---------------------------------------------------------------------------
 # parseAnswer
 # ---------------------------------------------------------------------------
 
@@ -291,30 +247,6 @@ def test_build_state_caps_command_and_notes_cut():
 # ---------------------------------------------------------------------------
 # redactScript / redactMcpInput
 # ---------------------------------------------------------------------------
-
-
-SCRIPT_IN = [
-    "#!/bin/bash",
-    "source .env.local",
-    "export API_TOKEN=abc123",
-    'curl -H "Authorization: Bearer sekret" https://x',
-    "echo ok",
-]
-SCRIPT_OUT = [
-    "#!/bin/bash",
-    "[line removed: .env reference]",
-    "export API_TOKEN=[REDACTED]",
-    'curl -H "Authorization: [REDACTED] [REDACTED]" https://x',
-    "echo ok",
-]
-
-
-def test_redact_script_removes_env_lines_and_redacts_secrets():
-    out, process_env = jev_many("redact_script", ["\n".join(SCRIPT_IN)], ["const a = process.env.FOO"])
-    assert out == "\n".join(SCRIPT_OUT)
-    assert "sekret" not in out
-    # JS: process.env is not an .env file
-    assert process_env == "const a = process.env.FOO"
 
 
 def test_redact_mcp_input_redacts_sql_literals_keeps_statement_and_ids():

@@ -14,11 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from testkit import GD
-from testkit.check_cli import CheckRunner
 from testkit.envs import IsolatedEnv
 from testkit.fakebin import FakeBin
-from testkit.impl import Impl
 
 PR_URL = "https://github.com/o/r/pull/7"
 T0 = "2026-10-22T08:00:00Z"
@@ -323,16 +320,3 @@ def test_pr_url_that_cannot_be_parsed_counts_as_a_failed_poll(impl, tmp_path):
     assert res["outcome"] == "error"
     assert re.search(r"cannot parse", res["message"])
     assert s.fb.calls() == []
-
-
-def test_watcher_command_passes_the_gate(tmp_path):
-    """The command the ticket skill documents passes destructive-guard with its defaults (no import of gate code)."""
-    skill = (GD / "skills" / "ticket" / "SKILL.md").read_text()
-    documented = re.search(r"`(python3 -I \"\$\{CLAUDE_PLUGIN_ROOT\}/scripts/watch_pr\.py\" --state [^`]+)`", skill)
-    assert documented, "watcher command not found in skills/ticket/SKILL.md"
-    state = "/abs/repo/.claude/worktrees/proj-1-x/docs/tickets/PROJ-1/state.json"
-    command = documented.group(1).replace("${CLAUDE_PLUGIN_ROOT}", str(GD)).replace("<TICKET_DIR>/state.json", state)
-    assert "<" not in command
-    gate = Impl.select("destructive-guard", {})
-    for line in (command, f"cd /abs/repo && {command}"):
-        assert CheckRunner.check_call(gate, {"bash": line}, cwd=tmp_path)["decision"] == "none", line

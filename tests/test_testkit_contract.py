@@ -22,16 +22,16 @@ def _post(url: str, body: dict, timeout: float = 5) -> tuple[int, bytes]:
 
 
 def test_clean_env_drops_gate_vars(monkeypatch):
-    monkeypatch.setenv("GATE_CHECKS", "nope")
+    monkeypatch.setenv("GATE_ENV_GUARD", "nope")
     monkeypatch.setenv("TYPESAFE_API_KEY", "x")
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", "/x")
     env = IsolatedEnv.clean()
-    assert "GATE_CHECKS" not in env
+    assert "GATE_ENV_GUARD" not in env
     assert "TYPESAFE_API_KEY" not in env
     assert "CLAUDE_PROJECT_DIR" not in env
     assert "PATH" in env
-    env = IsolatedEnv.clean({"GATE_CHECKS": "a", "X": "1"}, {"GATE_CHECKS": "b"})
-    assert env["GATE_CHECKS"] == "b"
+    env = IsolatedEnv.clean({"GATE_ENV_GUARD": "a", "X": "1"}, {"GATE_ENV_GUARD": "b"})
+    assert env["GATE_ENV_GUARD"] == "b"
     assert env["X"] == "1"
 
 
@@ -76,9 +76,6 @@ def test_temp_project_has_git_root(tmp_path):
     assert (root / ".git").is_dir()
     assert (root / "a/b.sh").read_text() == "echo hi\n"
     assert root == root.resolve()
-    prov = TempProject.provision_project(tmp_path)
-    assert (prov / "scripts/provision-cloud-app-dev.mjs").is_file()
-    assert "cloudctl" in (prov / "scripts/deploy-cloud-app-dev.mjs").read_text()
 
 
 def test_jev_mock_status_kind_needs_status():

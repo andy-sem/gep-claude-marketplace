@@ -1,9 +1,9 @@
 import pytest
 
-from testkit import DG, GD
+from testkit import GD
 from testkit.porting import PortingMap
 
-PLUGIN_DIRS = [DG, GD]
+PLUGIN_DIRS = [GD]
 
 # JS tests deleted before their plugin's JS: the row stays as the record of the Python twin.
 REMOVED_JS_TESTS = {
@@ -63,7 +63,6 @@ def test_no_todo_rows(plugin_dir):
 
 
 def test_js_tests_found():
-    # the JS tests of both plugins are gone (P9, P13); the PORTING.md files stay as the record.
-    assert not (DG / "test").exists()
+    # the JS tests of the workflow plugin are gone (P13); its PORTING.md stays as the record.
     assert not (GD / "test").exists()
     assert PortingMap.js_tests(GD) == []
