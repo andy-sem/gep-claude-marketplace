@@ -9,8 +9,8 @@ import pytest
 
 from destructive_guard.config import GateConfig
 from destructive_guard.errors import ConfigError
-from testkit.entrypoints import Entrypoints
-from testkit.envs import IsolatedEnv
+from dg_testkit.entrypoints import Entrypoints
+from dg_testkit.envs import IsolatedEnv
 
 CLEAN = {"GATE_ENABLED": "", "GATE_ENV_GUARD": "", "GATE_LOG": "", "CLAUDE_PROJECT_DIR": ""}
 

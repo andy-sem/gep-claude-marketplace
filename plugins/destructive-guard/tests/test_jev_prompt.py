@@ -12,8 +12,8 @@ from destructive_guard.errors import JevConfigError
 from destructive_guard.jev.config import JevConfig
 from destructive_guard.jev.judge import JevJudge
 from destructive_guard.jev.prompt import JevPrompt
-from testkit import DG
-from testkit.hook import HookRunner
+from dg_testkit import DG
+from dg_testkit.hook import HookRunner
 
 BASE_ENV = {"TYPESAFE_API_KEY": "key-123"}
 JEV_DIR = DG / "jev"

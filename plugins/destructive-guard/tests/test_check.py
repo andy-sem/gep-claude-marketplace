@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from testkit.check_cli import CheckRunner
-from testkit.jev_mock import JevMock
+from dg_testkit.check_cli import CheckRunner
+from dg_testkit.jev_mock import JevMock
 
 RISKY = JevMock.probs(0.1, 0.1, 0.6, 0.2)
 SAFE = JevMock.probs(0.01, 0.97, 0.01, 0.01)

@@ -6,8 +6,8 @@ import subprocess
 
 import pytest
 
-from testkit.entrypoints import Entrypoints
-from testkit.envs import IsolatedEnv
+from dg_testkit.entrypoints import Entrypoints
+from dg_testkit.envs import IsolatedEnv
 
 
 def status(argv, file_path, env=None, tool="Read"):

@@ -5,7 +5,7 @@ import math
 import pytest
 
 from destructive_guard.jev.prompt import JevPrompt
-from testkit.live_jev import LiveJev
+from dg_testkit.live_jev import LiveJev
 
 pytestmark = pytest.mark.live_jev
 

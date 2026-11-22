@@ -5,7 +5,7 @@ import pytest
 from destructive_guard.down import Down
 from destructive_guard.jev.judge import JevJudge
 from destructive_guard.jev.prompt import JevPrompt
-from testkit.jev_mock import JevMock
+from dg_testkit.jev_mock import JevMock
 
 CFG = {"escalateThreshold": 0.5, "timeoutMs": 1500, "prompt": JevPrompt.builtin_prompt("cloud-change")}
 

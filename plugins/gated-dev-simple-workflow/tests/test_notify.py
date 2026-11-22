@@ -6,10 +6,10 @@ import subprocess
 
 import pytest
 
-from testkit import GD
-from testkit.entrypoints import Entrypoints
-from testkit.envs import IsolatedEnv
-from testkit.fakebin import FakeBin
+from gd_testkit import GD
+from gd_testkit.entrypoints import Entrypoints
+from gd_testkit.envs import IsolatedEnv
+from gd_testkit.fakebin import FakeBin
 
 EVENT = json.dumps({"hook_event_name": "Notification", "message": "Claude needs your permission to use Bash"})
 

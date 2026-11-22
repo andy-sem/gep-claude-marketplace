@@ -6,9 +6,9 @@ from dataclasses import dataclass
 
 import pytest
 
-from testkit import DG, REPO
-from testkit.hook import HookRunner
-from testkit.jev_mock import JevMock
+from dg_testkit import DG, REPO
+from dg_testkit.hook import HookRunner
+from dg_testkit.jev_mock import JevMock
 
 HERE = DG / "tests"
 DOWN = "http://127.0.0.1:1/v1/systemone"

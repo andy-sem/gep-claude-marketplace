@@ -4,10 +4,10 @@ import subprocess
 
 import pytest
 
-from testkit import DG
-from testkit.envs import IsolatedEnv
-from testkit.pythons import Pythons
-from testkit.stubs import EntryStubs
+from dg_testkit import DG
+from dg_testkit.envs import IsolatedEnv
+from dg_testkit.pythons import Pythons
+from dg_testkit.stubs import EntryStubs
 
 STUBS = EntryStubs.stubs_of(DG)
 

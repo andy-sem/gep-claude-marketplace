@@ -11,14 +11,24 @@ dev = ["pytest>=8", "ruff>=0.8"]
 package = false
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "plugins"]
+testpaths = ["plugins"]
 addopts = ["--import-mode=importlib", "-m", "not live_jev"]
 markers = ["live_jev: calls the real Jev service (needs TYPESAFE_API_KEY); run with -m live_jev"]
-pythonpath = [".", "plugins/destructive-guard/lib", "plugins/gated-dev-simple-workflow/scripts"]
+pythonpath = [
+  "plugins/destructive-guard/lib",
+  "plugins/destructive-guard/tests",
+  "plugins/gated-dev-simple-workflow/scripts",
+  "plugins/gated-dev-simple-workflow/tests",
+]
 
 [tool.ruff]
 target-version = "py314"
-src = [".", "plugins/destructive-guard/lib", "plugins/gated-dev-simple-workflow/scripts"]
+src = [
+  "plugins/destructive-guard/lib",
+  "plugins/destructive-guard/tests",
+  "plugins/gated-dev-simple-workflow/scripts",
+  "plugins/gated-dev-simple-workflow/tests",
+]
 
 # Entry stubs must parse on Python 3.7 and still check the version themselves.
 [tool.ruff.lint.per-file-ignores]

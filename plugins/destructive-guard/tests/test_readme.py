@@ -4,7 +4,7 @@ import re
 
 import pytest
 
-from testkit import DG
+from dg_testkit import DG
 
 README = (DG / "README.md").read_text()
 # Variables the hook wrapper and the tests use internally; not user settings.

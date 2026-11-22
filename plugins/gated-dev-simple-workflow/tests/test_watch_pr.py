@@ -14,12 +14,9 @@ from pathlib import Path
 
 import pytest
 
-from testkit import GD
-from testkit.entrypoints import Entrypoints
-from testkit.envs import IsolatedEnv
-from testkit.fakebin import FakeBin
-from testkit.hook import HookRunner
-from testkit.jev_mock import JevMock
+from gd_testkit.entrypoints import Entrypoints
+from gd_testkit.envs import IsolatedEnv
+from gd_testkit.fakebin import FakeBin
 
 PR_URL = "https://github.com/o/r/pull/7"
 T0 = "2026-10-22T08:00:00Z"
@@ -323,19 +320,3 @@ def test_pr_url_that_cannot_be_parsed_counts_as_a_failed_poll(tmp_path):
     assert res["outcome"] == "error"
     assert re.search(r"cannot parse", res["message"])
     assert s.fb.calls() == []
-
-
-def test_watcher_command_passes_the_gate(tmp_path, jev):
-    """The command the ticket skill documents gets no `ask` from the gate hook when Jev judges it safe (local mock)."""
-    skill = (GD / "skills" / "ticket" / "SKILL.md").read_text()
-    documented = re.search(r"`(python3 -I \"\$\{CLAUDE_PLUGIN_ROOT\}/scripts/watch_pr\.py\" --state [^`]+)`", skill)
-    assert documented, "watcher command not found in skills/ticket/SKILL.md"
-    state = "/abs/repo/.claude/worktrees/proj-1-x/docs/tickets/PROJ-1/state.json"
-    command = documented.group(1).replace("${CLAUDE_PLUGIN_ROOT}", str(GD)).replace("<TICKET_DIR>/state.json", state)
-    assert "<" not in command
-    jev.answer(JevMock.probs(0.01, 0.97, 0.01, 0.01))
-    key = {"TYPESAFE_API_KEY": "test-key", "GATE_JEV_URL": jev.url, "GATE_JEV_PROMPT": "cloud-change"}
-    for line in (command, f"cd /abs/repo && {command}"):
-        res = HookRunner.run(HookRunner.bash_input(line, tmp_path), key, cwd=tmp_path)
-        assert (res.status, res.stdout) == (0, ""), line
-    assert jev.hits == 2

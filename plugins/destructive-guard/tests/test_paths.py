@@ -3,7 +3,7 @@
 import os
 
 from destructive_guard.paths import ProjectDir
-from testkit.projects import TempProject
+from dg_testkit.projects import TempProject
 
 
 def make_project(tmp_path):

@@ -1,22 +1,17 @@
-"""Shared logic of the entry-stub tests (one test file per plugin uses it)."""
+"""Shared logic of the entry-stub tests."""
 
 import ast
-import os
 import re
 import subprocess
 from pathlib import Path
 from typing import ClassVar
 
-from . import DG, GD
-from .pythons import Pythons
+from . import GD
 
 
 class EntryStubs:
     # (stub path, package module the stub imports)
     STUBS: ClassVar[list[tuple[Path, str]]] = [
-        (DG / "lib" / "gate_main.py", "gate_main"),
-        (DG / "lib" / "session_main.py", "session_main"),
-        (DG / "lib" / "check.py", "check"),
         (GD / "scripts" / "launch.py", "launch"),
         (GD / "scripts" / "watch_pr.py", "watch_pr"),
         (GD / "scripts" / "flow.py", "flow"),
@@ -43,11 +38,3 @@ class EntryStubs:
         assert cls.TOO_OLD.match(proc.stderr), proc.stderr
         assert proc.stdout == ""
 
-    @staticmethod
-    def check_314_imports_package(tmp_path: Path, stub: Path, module: str) -> None:
-        for planted in ("destructive_guard.py", "gated_dev.py"):
-            (tmp_path / planted).write_text("raise SystemExit(99)\n")
-        python = Pythons.require_new_python(os.environ)
-        proc = subprocess.run([python, "-I", str(stub)], capture_output=True, text=True, cwd=tmp_path, check=False)
-        assert proc.returncode == 2, proc.stderr
-        assert proc.stderr == f"{module}: not implemented yet\n"
