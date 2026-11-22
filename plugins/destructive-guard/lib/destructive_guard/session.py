@@ -9,6 +9,9 @@ Lean model (formal/SimpleGate.lean) -> code:
 | `sessionStart`               | `SessionCheck.message` (via `SessionCheck.main`)              |
 | `Setting.misconfigured w`    | `SessionCheck.issue` returns a `JevConfigError` / `ConfigError` |
 | `Setting.on`                 | `SessionCheck.issue` returns None: no output                  |
+
+Outside the model (notices only, they never change a decision): the removed 0.8 variables and a
+GATE_LOG path that cannot be written. They join the same message.
 """
 
 import json
@@ -20,6 +23,7 @@ from typing import ClassVar
 from .config import GateConfig
 from .errors import ConfigError, JevConfigError
 from .jev.config import JevConfig
+from .log import GateLog
 
 
 class SessionCheck:
@@ -66,6 +70,10 @@ class SessionCheck:
         removed = [name for name in cls.REMOVED if (env.get(name) or "").strip()]
         if removed:
             parts.append(f"ignoring the removed 0.8 variables {', '.join(removed)}")
+        log = GateConfig.log_path(env)
+        log_problem = GateLog.problem(log)
+        if log_problem is not None:
+            parts.append(f"cannot write GATE_LOG {log} ({log_problem}): no log this session")
         if not parts:
             return None
         return cls.PREFIX + "; ".join(parts)

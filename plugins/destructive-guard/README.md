@@ -95,6 +95,7 @@ Warnings are `systemMessage` texts shown to you. Each one starts with
 | Session start | `TYPESAFE_API_KEY is not set: destructive-guard only blocks .env files this session` | Set the key in `env` of your settings, or ignore it if you want only the `.env` guard. |
 | Session start | `GATE_JEV_URL must use https`, `GATE_JEV_TIMEOUT_MS must be an integer from 1 to 30000`, `GATE_JEV_ESCALATE_THRESHOLD must be a number from 0 to 1`, an unreadable or invalid prompt file, a bad `GATE_ENABLED`/`GATE_ENV_GUARD` value | Fix the named variable. Until then the gate gives no decisions. `/destructive-guard:check --config` shows what the gate sees. |
 | Session start | `ignoring the removed 0.8 variables ...` | Delete those variables from your settings (see [Migration](#migration-from-08)). |
+| Session start | `cannot write GATE_LOG <path> (<reason>): no log this session` | Point `GATE_LOG` at a writable file. Missing directories are created; this warning means the path itself cannot be written (a file in the way, no permission). |
 | Session start | `no Python >= 3.14 found (set GATE_INFRA_PYTHON): every Bash and MCP call will ask this session` | Install Python 3.14 or set `GATE_INFRA_PYTHON`. |
 | Per call | `Jev did not answer in time (1500 ms); asking you instead.` | Answer the prompt. Raise `GATE_JEV_TIMEOUT_MS` if it repeats. |
 | Per call | `Jev returned http 503; asking you instead.` | Answer the prompt; check the key and `GATE_JEV_URL` if it repeats (a 401/403 means a wrong key). |
@@ -118,7 +119,7 @@ current directory.
 | --- | --- | --- |
 | `GATE_ENABLED` | `1` | `0` turns both hooks and the session warning off (no Python is started). The only off switch. |
 | `GATE_ENV_GUARD` | `1` | `0` allows Read/Edit/Write of env files. |
-| `GATE_LOG` | unset | File to append one JSON line per handled call: `ts`, `tool`, `command` or `input` (redacted; `null` when it mentions `.env`), `probabilities`, `risk`, `usage`, `latencyMs`, `decision` (`ask`/`none`), `reason`, `warning`, and `misconfigured` when a Jev setting is invalid. |
+| `GATE_LOG` | unset | File to append one JSON line per handled call: `ts`, `tool`, `command` or `input` (redacted; `null` when it mentions `.env`), `probabilities`, `risk`, `usage`, `latencyMs`, `decision` (`ask`/`none`), `reason`, `warning`, and `misconfigured` when a setting is invalid (a bad `GATE_ENABLED`/`GATE_ENV_GUARD` value included). Missing directories are created. Not logged: calls when the gate is off, plugin faults that stop before Python runs (no Python, engine exit), and `.env` blocks of Read/Edit/Write. |
 | `GATE_INFRA_PYTHON` | unset | Python interpreter for the hooks and the check script (see [Install](#install)). A broken value is a plugin fault, with no fallback. |
 | `TYPESAFE_API_KEY` | unset | Your Jev key. Sent only as a bearer token. Not set = misconfigured (no decisions, one session warning). |
 | `GATE_JEV_URL` | `https://api.typesafe.ai/v1/systemone` | Endpoint. Must be `https` (plain `http` only to `localhost`/`127.0.0.1`/`[::1]`). |
