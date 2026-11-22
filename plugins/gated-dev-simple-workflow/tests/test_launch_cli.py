@@ -68,12 +68,13 @@ class Project:
 
     # git ---------------------------------------------------------------------
 
-    def run_dir(self, name: str, branch: str, stage: str | None = None, ticket: str | None = None, key="K-1") -> Path:
+    def run_dir(self, name: str, branch: str, stage: str | None = None, ticket: str | None = None, key="K-1", mode: str | None = None) -> Path:
         """A worktree of the repo on `branch` (a run), with its state.json stage and ticket.md."""
         wt = GitRepo.add_worktree(self.root, self.tmp / "wts" / name, branch)
         (wt / "docs" / "tickets" / key).mkdir(parents=True, exist_ok=True)
         if stage:
-            (wt / "docs" / "tickets" / key / "state.json").write_text(json.dumps({"stage": stage}))
+            state = {"stage": stage, **({"mode": mode} if mode else {})}
+            (wt / "docs" / "tickets" / key / "state.json").write_text(json.dumps(state))
         if ticket is not None:
             (wt / "docs" / "tickets" / key / "ticket.md").write_text(ticket)
         return wt
@@ -508,3 +509,88 @@ def test_documented_invocations_run(tmp_path):
         assert (gd / script).is_file()
         r = p.launch("--dry-run", *[a for a in args if a != "--dry-run"], host=ORCA)
         assert r.status == 0, (name, args, r.stderr)
+
+
+# --- ticket mode and session model ------------------------------------------------
+
+
+def test_mode_starts_the_session_on_the_modes_model_and_passes_mode_to_ticket(demo):
+    p = demo()
+    r = p.launch("--mode", "heavy", "K-1", host=ITERM)
+    assert r.status == 0, r.stderr
+    assert "  mode:    heavy\n  model:   opus\n" in r.stdout
+    assert re.search(r'^  command: .* claude --model opus --name "K-1 · Do it" "/ticket K-1 --mode heavy"$', r.stdout, re.MULTILINE)
+    [call] = p.fb.calls("osascript")
+    assert any("claude --model opus --name" in a for a in call["argv"])
+
+
+def test_mode_in_orca_reaches_the_tab_command_in_the_new_worktree(demo):
+    p = demo()
+    r = p.launch("--mode", "medium", "K-1", host=ORCA)
+    assert r.status == 0, r.stderr
+    assert re.search(r'claude --model sonnet --name "K-1 · Do it" "/ticket K-1 --mode medium"$', arg_after(create_call(p), "--command"))
+
+
+def test_dry_run_shows_mode_and_model_per_key_without_mode_the_session_decides(demo):
+    p = demo(tickets={"K-1": "# Do it\n", "K-2": "# Other\n"})
+    r = p.launch("--dry-run", "--mode", "light", "K-1", "K-2", host=ITERM)
+    assert r.status == 0, r.stderr
+    assert r.stdout.count("  mode:    light\n  model:   sonnet\n") == 2
+    plain = p.launch("--dry-run", "K-1", host=ITERM)
+    assert "  mode:    decided by the session\n  model:   default\n" in plain.stdout
+    assert "--model" not in plain.stdout
+    orca = p.launch("--dry-run", "--mode", "heavy", "K-1", host=ORCA)
+    assert orca.stdout.startswith("K-1: orca-worktree\n")
+    assert "  mode:    heavy\n  model:   opus\n" in orca.stdout
+    assert re.search(r"^  note:    then /ticket K-1 --mode heavy in the new worktree$", orca.stdout, re.MULTILINE)
+
+
+def test_config_modes_session_override_is_used(demo):
+    p = demo(config={"modes": {"light": {"session": "claude-haiku-4-5"}}})
+    r = p.launch("--dry-run", "--mode", "light", "K-1", host=ITERM)
+    assert r.status == 0, r.stderr
+    assert re.search(r'^  command: .* claude --model claude-haiku-4-5 --name .*"/ticket K-1 --mode light"$', r.stdout, re.MULTILINE)
+
+
+@pytest.mark.parametrize("argv", [["--mode"], ["--mode", "auto", "K-1"], ["--mode", "opus", "K-1"], ["--mode", "heavy;id", "K-1"]])
+def test_bad_mode_values_are_refused_before_anything_runs(demo, argv):
+    p = demo()
+    r = p.launch(*argv, host=ITERM)
+    assert r.status == 2
+    assert "--mode needs heavy, medium or light" in r.stderr
+    assert p.fb.calls("osascript") == []
+
+
+def test_resume_starts_on_the_recorded_modes_model(demo):
+    p = demo(tickets={}, config={"modes": {"medium": {"session": "haiku"}}})
+    p.run_dir("k-1-do-it", "K-1/do-it", stage="dev", ticket="# Do it\n", mode="medium")
+    r = p.launch("K-1", host=ORCA)
+    assert r.status == 0, r.stderr
+    assert "  mode:    medium\n  model:   haiku\n" in r.stdout
+    assert re.search(r'claude --model haiku --name "K-1 resume · Do it" "/ticket K-1 --resume"$', arg_after(create_call(p), "--command"))
+
+
+def test_resume_of_a_run_without_a_mode_starts_without_model(demo):
+    p = demo(tickets={})
+    p.run_dir("k-1-do-it", "K-1/do-it", stage="dev", ticket="# Do it\n")
+    r = p.launch("--dry-run", "K-1", host=ITERM)
+    assert r.status == 0, r.stderr
+    assert "  mode:    not recorded\n  model:   default\n" in r.stdout
+    assert "--model" not in r.stdout
+
+
+def test_resume_ignores_an_invalid_recorded_mode(demo):
+    p = demo(tickets={})
+    p.run_dir("k-1-do-it", "K-1/do-it", stage="dev", ticket="# Do it\n", mode="opus; rm -rf ~")
+    r = p.launch("--dry-run", "K-1", host=ITERM)
+    assert r.status == 0, r.stderr
+    assert "--model" not in r.stdout and "rm -rf" not in r.stdout
+
+
+def test_mode_for_a_ticket_with_a_run_is_refused(demo):
+    p = demo(tickets={})
+    p.run_dir("k-1-do-it", "K-1/do-it", stage="dev", ticket="# Do it\n", mode="light")
+    r = p.launch("--mode", "heavy", "K-1", host=ORCA)
+    assert r.status == 1
+    assert re.search(r"K-1: .*recorded mode", r.stderr)
+    assert not [c for c in p.orca_calls() if c[0] == "terminal"]
