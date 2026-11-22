@@ -9,6 +9,7 @@ import pytest
 
 from destructive_guard.config import GateConfig
 from destructive_guard.errors import ConfigError
+from testkit.entrypoints import Entrypoints
 from testkit.envs import IsolatedEnv
 
 CLEAN = {"GATE_ENABLED": "", "GATE_ENV_GUARD": "", "GATE_LOG": "", "CLAUDE_PROJECT_DIR": ""}
@@ -61,9 +62,9 @@ def test_relative_log_resolves_against_git_root_else_cwd(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def guard(impl, file_path, env=None):
+def guard(file_path, env=None):
     return subprocess.run(
-        impl.env_guard(),
+        Entrypoints.env_guard(),
         input=json.dumps({"tool_name": "Read", "tool_input": {"file_path": file_path}}),
         capture_output=True,
         text=True,
@@ -72,9 +73,9 @@ def guard(impl, file_path, env=None):
     ).returncode
 
 
-def test_env_guard_matches_env_file_names_only(impl):
+def test_env_guard_matches_env_file_names_only():
     for f in ["/p/.env", "/p/.env.local", "/p/web/.env.production", "/p/prod.env", ".env"]:
-        assert guard(impl, f) == 2, f
+        assert guard(f) == 2, f
     for f in [
         "/p/.env.example",
         "/p/src/config.environment.ts",
@@ -83,14 +84,14 @@ def test_env_guard_matches_env_file_names_only(impl):
         "/p/.env/notes.txt",
         "/p/src/dotenv.ts",
     ]:
-        assert guard(impl, f) == 0, f
+        assert guard(f) == 0, f
 
 
-def test_env_guard_switches(impl):
-    assert guard(impl, "/p/.env", {"GATE_ENV_GUARD": "0"}) == 0
-    assert guard(impl, "/p/.env", {"GATE_ENABLED": "false"}) == 0
-    assert guard(impl, "/p/.env", {"GATE_ENV_GUARD": "1"}) == 2
-    assert guard(impl, "/p/.env", {"GATE_ENV_GUARD": "maybe"}) == 2
+def test_env_guard_switches():
+    assert guard("/p/.env", {"GATE_ENV_GUARD": "0"}) == 0
+    assert guard("/p/.env", {"GATE_ENABLED": "false"}) == 0
+    assert guard("/p/.env", {"GATE_ENV_GUARD": "1"}) == 2
+    assert guard("/p/.env", {"GATE_ENV_GUARD": "maybe"}) == 2
 
 
 def test_log_path_survives_a_bad_flag():

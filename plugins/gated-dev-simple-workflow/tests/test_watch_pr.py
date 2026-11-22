@@ -1,7 +1,7 @@
 """Contract: the PR watcher (port of watch-pr.test.mjs).
 
 A fake `gh` on PATH answers the polls; the watcher runs with every sleep elapsing at once
-(`impl.watch_pr(fast=True)`), the requested delays are recorded.
+(`Entrypoints.watch_pr(fast=True)`), the requested delays are recorded.
 """
 
 import json
@@ -15,10 +15,10 @@ from pathlib import Path
 import pytest
 
 from testkit import GD
+from testkit.entrypoints import Entrypoints
 from testkit.envs import IsolatedEnv
 from testkit.fakebin import FakeBin
 from testkit.hook import HookRunner
-from testkit.impl import Impl
 from testkit.jev_mock import JevMock
 
 PR_URL = "https://github.com/o/r/pull/7"
@@ -96,60 +96,59 @@ class Scenario:
         return [int(x) for x in self.sleep_log.read_text().split()] if self.sleep_log.exists() else []
 
 
-def run_watcher(impl, scenario: Scenario, *args: str):
+def run_watcher(scenario: Scenario, *args: str):
     proc = subprocess.run(
-        [*FakeBin.absolute(impl.watch_pr(fast=True)), *args],
+        [*FakeBin.absolute(Entrypoints.watch_pr(fast=True)), *args],
         capture_output=True,
         text=True,
-        env=IsolatedEnv.clean(impl.env(), {"PATH": str(scenario.fb.path), "GD_TEST_SLEEP_LOG": str(scenario.sleep_log)}),
+        env=IsolatedEnv.clean(Entrypoints.env(), {"PATH": str(scenario.fb.path), "GD_TEST_SLEEP_LOG": str(scenario.sleep_log)}),
         timeout=60,
         check=False,
     )
     return proc
 
 
-def watch(impl, scenario: Scenario, polls: list):
+def watch(scenario: Scenario, polls: list):
     """Run the watcher on `polls`; returns (exit status, the result line as a dict, stderr)."""
     scenario.gh(polls)
-    proc = run_watcher(impl, scenario, "--state", str(scenario.state_path))
+    proc = run_watcher(scenario, "--state", str(scenario.state_path))
     lines = proc.stdout.splitlines()
     assert len(lines) == 1, proc.stdout
     return proc.returncode, json.loads(lines[0]), proc.stderr
 
 
-def outcome(impl, tmp_path, polls, state_extra=None):
-    return watch(impl, Scenario(tmp_path, state_extra), polls)[1]
+def outcome(tmp_path, polls, state_extra=None):
+    return watch(Scenario(tmp_path, state_extra), polls)[1]
 
 
-def test_human_issue_comment_newer_than_pr_creation_is_feedback(impl, tmp_path):
-    res = outcome(impl, tmp_path, [view(comments=[comment(T1)])])
+def test_human_issue_comment_newer_than_pr_creation_is_feedback(tmp_path):
+    res = outcome(tmp_path, [view(comments=[comment(T1)])])
     assert res["outcome"] == "feedback"
     assert res["prUrl"] == PR_URL
     assert res["newestAt"] == T1
 
 
-def test_review_and_inline_comment_count_as_feedback(impl, tmp_path):
+def test_review_and_inline_comment_count_as_feedback(tmp_path):
     review = {"author": {"login": "bob"}, "body": "needs work", "state": "CHANGES_REQUESTED", "submittedAt": T1}
-    assert outcome(impl, tmp_path / "a", [view(reviews=[review])])["outcome"] == "feedback"
-    b = outcome(impl, tmp_path / "b", [view(inline=[{"login": "carol", "body": "nit", "createdAt": T2}])])
+    assert outcome(tmp_path / "a", [view(reviews=[review])])["outcome"] == "feedback"
+    b = outcome(tmp_path / "b", [view(inline=[{"login": "carol", "body": "nit", "createdAt": T2}])])
     assert b["outcome"] == "feedback"
     assert b["newestAt"] == T2
 
 
-def test_cutoff_is_last_addressed_comment_else_pr_creation(impl, tmp_path):
+def test_cutoff_is_last_addressed_comment_else_pr_creation(tmp_path):
     with_cutoff = Scenario(tmp_path / "a", {"lastAddressedCommentAt": T1})
-    _, res, _ = watch(impl, with_cutoff, [view(comments=[comment(T1)]), view(state="MERGED")])
+    _, res, _ = watch(with_cutoff, [view(comments=[comment(T1)]), view(state="MERGED")])
     assert res["outcome"] == "merged"
     assert with_cutoff.sleeps() == [60000]
-    older = outcome(impl, tmp_path / "b", [view(comments=[comment(T0)]), view(state="CLOSED")])
+    older = outcome(tmp_path / "b", [view(comments=[comment(T0)]), view(state="CLOSED")])
     assert older["outcome"] == "closed"
 
 
-def test_cutoff_written_to_the_file_between_polls_is_honoured(impl, tmp_path):
+def test_cutoff_written_to_the_file_between_polls_is_honoured(tmp_path):
     s = Scenario(tmp_path, {"lastAddressedCommentAt": T2})
     # The first poll is covered by the cutoff; a gh call lowers it, and the next poll must read the new one.
     _, res, _ = watch(
-        impl,
         s,
         [view(comments=[comment(T1)], write_state={"lastAddressedCommentAt": T0}), view(comments=[comment(T1)])],
     )
@@ -157,7 +156,7 @@ def test_cutoff_written_to_the_file_between_polls_is_honoured(impl, tmp_path):
     assert len(s.sleeps()) == 1
 
 
-def test_bots_pipeline_replies_empty_comments_and_reviews_never_exit(impl, tmp_path):
+def test_bots_pipeline_replies_empty_comments_and_reviews_never_exit(tmp_path):
     noise = view(
         comments=[
             comment(T1, author={"login": "github-actions[bot]"}),
@@ -171,56 +170,56 @@ def test_bots_pipeline_replies_empty_comments_and_reviews_never_exit(impl, tmp_p
         inline=[{"login": "x[bot]", "body": "lint", "createdAt": T1}],
     )
     s = Scenario(tmp_path)
-    _, res, _ = watch(impl, s, [noise, noise, view(state="MERGED")])
+    _, res, _ = watch(s, [noise, noise, view(state="MERGED")])
     assert res["outcome"] == "merged"
     assert len(s.sleeps()) == 2
 
 
-def test_merged_and_closed_exit_with_their_outcome(impl, tmp_path):
-    assert outcome(impl, tmp_path / "a", [view(state="MERGED")])["outcome"] == "merged"
-    assert outcome(impl, tmp_path / "b", [view(state="CLOSED")])["outcome"] == "closed"
+def test_merged_and_closed_exit_with_their_outcome(tmp_path):
+    assert outcome(tmp_path / "a", [view(state="MERGED")])["outcome"] == "merged"
+    assert outcome(tmp_path / "b", [view(state="CLOSED")])["outcome"] == "closed"
 
 
-def test_merged_wins_over_feedback(impl, tmp_path):
-    assert outcome(impl, tmp_path, [view(state="MERGED", comments=[comment(T1)])])["outcome"] == "merged"
+def test_merged_wins_over_feedback(tmp_path):
+    assert outcome(tmp_path, [view(state="MERGED", comments=[comment(T1)])])["outcome"] == "merged"
 
 
-def test_five_consecutive_gh_failures_exit_with_error(impl, tmp_path):
+def test_five_consecutive_gh_failures_exit_with_error(tmp_path):
     s = Scenario(tmp_path)
-    _, res, _ = watch(impl, s, [Fail("gh: network down")])
+    _, res, _ = watch(s, [Fail("gh: network down")])
     assert res["outcome"] == "error"
     assert re.search(r"network down", res["message"])
     assert len(s.view_calls()) == 5
     assert len(s.sleeps()) == 4
 
 
-def test_four_failures_a_success_four_failures_do_not_exit(impl, tmp_path):
+def test_four_failures_a_success_four_failures_do_not_exit(tmp_path):
     s = Scenario(tmp_path)
     polls = [*[Fail("boom")] * 4, view(), *[Fail("boom")] * 4, view(state="MERGED")]
-    _, res, _ = watch(impl, s, polls)
+    _, res, _ = watch(s, polls)
     assert res["outcome"] == "merged"
     assert len(s.view_calls()) == 10
 
 
-def test_missing_or_invalid_state_counts_as_a_failed_poll(impl, tmp_path):
+def test_missing_or_invalid_state_counts_as_a_failed_poll(tmp_path):
     a = Scenario(tmp_path / "a")
     a.state_path.write_text("{ not json")
-    _, res, _ = watch(impl, a, [view(state="MERGED")])
+    _, res, _ = watch(a, [view(state="MERGED")])
     assert res["outcome"] == "error"
     assert a.fb.calls("gh") == []
 
     b = Scenario(tmp_path / "b")
     b.state_path.write_text(json.dumps({"stage": "done"}))
-    assert watch(impl, b, [view(state="MERGED")])[1]["outcome"] == "error"
+    assert watch(b, [view(state="MERGED")])[1]["outcome"] == "error"
 
     c = Scenario(tmp_path / "c")
     c.state_path.unlink()
-    assert watch(impl, c, [view(state="MERGED")])[1]["outcome"] == "error"
+    assert watch(c, [view(state="MERGED")])[1]["outcome"] == "error"
 
 
-def test_every_poll_writes_the_heartbeat_and_keeps_every_other_field(impl, tmp_path):
+def test_every_poll_writes_the_heartbeat_and_keeps_every_other_field(tmp_path):
     s = Scenario(tmp_path, {"prNumber": 7, "lastAddressedCommentAt": T0, "extra": {"a": 1}})
-    watch(impl, s, [view(), view(state="MERGED")])
+    watch(s, [view(), view(state="MERGED")])
     seen = s.snapshots()[1]
     assert isinstance(seen["watch"]["pid"], int)
     assert iso(seen["watch"]["startedAt"]) <= iso(seen["watch"]["heartbeatAt"])
@@ -233,16 +232,16 @@ def test_every_poll_writes_the_heartbeat_and_keeps_every_other_field(impl, tmp_p
     assert [p.name for p in s.ticket_dir.iterdir() if p.name.endswith(".tmp")] == []
 
 
-def test_heartbeat_is_written_after_a_failed_poll_too(impl, tmp_path):
+def test_heartbeat_is_written_after_a_failed_poll_too(tmp_path):
     s = Scenario(tmp_path)
-    watch(impl, s, [Fail("x"), view(state="MERGED")])
+    watch(s, [Fail("x"), view(state="MERGED")])
     assert "heartbeatAt" in s.snapshots()[1]["watch"]
     assert "watch" not in s.snapshots()[0]
 
 
-def test_started_at_stays_the_first_poll_time_while_heartbeat_advances(impl, tmp_path):
+def test_started_at_stays_the_first_poll_time_while_heartbeat_advances(tmp_path):
     s = Scenario(tmp_path)
-    watch(impl, s, [view(), view(), view(state="MERGED")])
+    watch(s, [view(), view(), view(state="MERGED")])
     first, second = s.snapshots()[1]["watch"], s.snapshots()[2]["watch"]
     final = s.state()["watch"]
     assert first["startedAt"] == second["startedAt"] == final["startedAt"]
@@ -251,21 +250,21 @@ def test_started_at_stays_the_first_poll_time_while_heartbeat_advances(impl, tmp
     assert final["startedAt"] != final["heartbeatAt"]
 
 
-def test_every_sleep_is_60000_ms_and_only_gh_is_run(impl, tmp_path):
+def test_every_sleep_is_60000_ms_and_only_gh_is_run(tmp_path):
     s = Scenario(tmp_path)
-    watch(impl, s, [view(), view(), view(state="MERGED")])
+    watch(s, [view(), view(), view(state="MERGED")])
     assert s.sleeps() == [60000, 60000]
     calls = s.fb.calls()
     assert calls
     assert {c["name"] for c in calls} == {"gh"}
 
 
-def test_failed_heartbeat_write_is_logged_and_does_not_stop_the_watcher(impl, tmp_path):
+def test_failed_heartbeat_write_is_logged_and_does_not_stop_the_watcher(tmp_path):
     s = Scenario(tmp_path)
     s.ticket_dir.chmod(0o555)  # no room for the temporary file
     try:
         assert not os.access(s.ticket_dir, os.W_OK), "cannot make the state dir read-only (running as root?)"
-        _, res, stderr = watch(impl, s, [view(state="MERGED")])
+        _, res, stderr = watch(s, [view(state="MERGED")])
     finally:
         s.ticket_dir.chmod(stat.S_IRWXU)
     assert res["outcome"] == "merged"
@@ -282,11 +281,11 @@ def test_failed_heartbeat_write_is_logged_and_does_not_stop_the_watcher(impl, tm
     ],
     ids=["feedback", "merged", "closed", "error"],
 )
-def test_main_prints_one_json_line_and_exits_per_outcome(impl, tmp_path, polls, outcome_name, code):
+def test_main_prints_one_json_line_and_exits_per_outcome(tmp_path, polls, outcome_name, code):
     s = Scenario(tmp_path)
     s.gh(polls)
     before = datetime.now(UTC)
-    proc = run_watcher(impl, s, "--state", str(s.state_path))
+    proc = run_watcher(s, "--state", str(s.state_path))
     assert proc.returncode == code
     assert proc.stdout.endswith("\n")
     assert proc.stdout.count("\n") == 1
@@ -305,10 +304,10 @@ def test_main_prints_one_json_line_and_exits_per_outcome(impl, tmp_path, polls, 
     [[], ["--state"], ["--state", "docs/tickets/PROJ-9/state.json"], ["--bogus"]],
     ids=["none", "no-value", "relative", "unknown"],
 )
-def test_main_exits_2_with_a_usage_line_for_missing_or_relative_state(impl, tmp_path, argv):
+def test_main_exits_2_with_a_usage_line_for_missing_or_relative_state(tmp_path, argv):
     s = Scenario(tmp_path)
     s.gh([view(state="MERGED")])
-    proc = run_watcher(impl, s, *argv)
+    proc = run_watcher(s, *argv)
     assert proc.returncode == 2
     lines = proc.stdout.splitlines()
     assert len(lines) == 1
@@ -318,9 +317,9 @@ def test_main_exits_2_with_a_usage_line_for_missing_or_relative_state(impl, tmp_
     assert s.fb.calls() == []
 
 
-def test_pr_url_that_cannot_be_parsed_counts_as_a_failed_poll(impl, tmp_path):
+def test_pr_url_that_cannot_be_parsed_counts_as_a_failed_poll(tmp_path):
     s = Scenario(tmp_path, {"prUrl": "nope"})
-    _, res, _ = watch(impl, s, [view(state="MERGED")])
+    _, res, _ = watch(s, [view(state="MERGED")])
     assert res["outcome"] == "error"
     assert re.search(r"cannot parse", res["message"])
     assert s.fb.calls() == []
@@ -334,10 +333,9 @@ def test_watcher_command_passes_the_gate(tmp_path, jev):
     state = "/abs/repo/.claude/worktrees/proj-1-x/docs/tickets/PROJ-1/state.json"
     command = documented.group(1).replace("${CLAUDE_PLUGIN_ROOT}", str(GD)).replace("<TICKET_DIR>/state.json", state)
     assert "<" not in command
-    gate = Impl.select("destructive-guard", {})
     jev.answer(JevMock.probs(0.01, 0.97, 0.01, 0.01))
     key = {"TYPESAFE_API_KEY": "test-key", "GATE_JEV_URL": jev.url, "GATE_JEV_PROMPT": "cloud-change"}
     for line in (command, f"cd /abs/repo && {command}"):
-        res = HookRunner.run(gate, HookRunner.bash_input(line, tmp_path), key, cwd=tmp_path)
+        res = HookRunner.run(HookRunner.bash_input(line, tmp_path), key, cwd=tmp_path)
         assert (res.status, res.stdout) == (0, ""), line
     assert jev.hits == 2
