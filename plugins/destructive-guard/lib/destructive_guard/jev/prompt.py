@@ -21,8 +21,8 @@ class JevPrompt:
     @staticmethod
     def validate_prompt(p: Any, where: str = "prompt") -> dict:
         """A prompt is {question, instructions, context, criteria, ask, safe}: `criteria` maps each choice
-        to {description, examples}, `ask` lists the choices whose probabilities add up to the risk, `safe`
-        the choices that may lift a rule ask. Raises JevConfigError when the shape is wrong."""
+        to {description, examples}, `ask` lists the choices whose probabilities add up to the risk. `safe` is
+        optional (the choices that are harmless; for the log only, the decision never reads it). Raises JevConfigError when the shape is wrong."""
 
         def bad(msg: str) -> None:
             raise JevConfigError(f"{where}: {msg}")
@@ -53,10 +53,12 @@ class JevPrompt:
             ):
                 bad(f"criteria.{c} needs a description and string examples")
         for key in ("ask", "safe"):
+            if key == "safe" and "safe" not in p:
+                continue
             items = p.get(key)
             if not isinstance(items, list) or not items or any(c not in choices for c in items):
                 bad(f"{key} must be a non-empty list of criteria choices")
-        if any(c in p["safe"] for c in p["ask"]):
+        if any(c in p.get("safe", []) for c in p["ask"]):
             bad("ask and safe must not overlap")
         return p
 

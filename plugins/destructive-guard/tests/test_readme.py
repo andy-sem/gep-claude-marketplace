@@ -8,7 +8,7 @@ from testkit import DG
 
 README = (DG / "README.md").read_text()
 # Variables the hook wrapper and the tests use internally; not user settings.
-INTERNAL = {"GATE_RUN", "GATE_DONE_FILE", "GATE_INFRA_PYTHON"}
+INTERNAL = {"GATE_INFRA_PYTHON"}
 ENV_NAME = re.compile(r"\b(?:GATE|TYPESAFE)_[A-Z_]*[A-Z]\b")
 
 
@@ -25,6 +25,6 @@ def test_readme_documents_every_env_variable():
     assert [n for n in names if f"`{n}`" not in README] == []
 
 
-@pytest.mark.parametrize("path", sorted([*(DG / "packs").glob("*.json"), *(DG / "jev").glob("*.json")]), ids=lambda p: p.name)
-def test_readme_lists_every_pack_and_jev_prompt(path):
+@pytest.mark.parametrize("path", sorted((DG / "jev").glob("*.json")), ids=lambda p: p.name)
+def test_readme_lists_every_jev_prompt(path):
     assert f"`{path.stem}`" in README

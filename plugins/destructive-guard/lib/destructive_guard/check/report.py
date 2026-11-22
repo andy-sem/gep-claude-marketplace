@@ -26,48 +26,37 @@ class CheckReport:
     @classmethod
     def format_check(cls, r: Mapping[str, Any]) -> str:
         what = f"Bash: {r['command']}" if r["tool"] == "Bash" else f"{r['tool']} {cls._compact(r['input'])}"
-        lines = [what]
-        if r["decision"] == "ask":
-            lines += ["decision: ask", f"source:   {r['source']}", f"reason:   {r['reason']}"]
-        else:
-            lines.append("decision: none (the gate has no opinion; Claude Code's own permission rules decide)")
-        if r["reason"] and r["decision"] != "ask":
+        lines = [what, f"decision: {r['decision']}"]
+        if r["reason"]:
             lines.append(f"reason:   {r['reason']}")
-        rule = r.get("rule")
-        if rule and rule["reason"] != r["reason"]:
-            lines.append(f"rules alone: {rule['decision']} ({rule['reason']})")
-        if r.get("jev"):
-            lines.append(f"jev:      {r['jev']}")
+        if r.get("risk") is not None:
+            lines.append(f"risk:     {cls._js(round(r['risk'], 2))}")
+        if r.get("warning"):
+            lines.append(f"warning:  {r['warning']}")
         return "\n".join(lines)
 
     @classmethod
     def format_config(cls, c: Mapping[str, Any]) -> str:
         lines: list[str] = []
         if c.get("error"):
-            lines.append(f"ERROR: {c['error']} (every gated call asks)")
+            lines.append(f"ERROR: {c['error']}")
         if "enabled" in c:
             lines += [
                 f"enabled:       {cls._js(c['enabled'])}",
-                f"packs:         {', '.join(c['packs']) or '(none)'}",
-                f"rules files:   {', '.join(c['rulesFiles']) or '(none)'}",
-                f"disabled ids:  {', '.join(c['disableRules']) or '(none)'}",
-                f"strict:        {cls._js(c['strict'])}",
                 f"env guard:     {cls._js(c['envGuard'])}",
                 f"log:           {c['log'] if c['log'] is not None else '(off)'}",
             ]
-            if "ruleIds" in c:
-                lines.append(f"rules ({len(c['ruleIds'])}): {', '.join(c['ruleIds'])}")
         j = c["jev"]
-        if not j["enabled"]:
-            lines.append("jev:           off")
-        elif j.get("error"):
-            lines.append(f"jev:           ERROR {j['error']}")
+        if j.get("error"):
+            lines.append(f"jev:           ERROR {j['error']} (api key {j['apiKey']})")
         else:
             lines += [
-                f"jev:           on ({j['url']}, model {j['model']}, api key {j['apiKey']})",
-                f"  prompt:      {j['prompt']} (question {j['question']}; ask {','.join(j['ask'])}; safe {','.join(j['safe'])})",
+                f"jev:           {j['url']}, model {j['model']}, api key {j['apiKey']}",
+                f"  prompt:      {j['prompt']} (question {j['question']}; ask {','.join(j['ask'])})",
                 f"  thresholds:  escalate {cls._js(j['escalateThreshold'])}; timeout {cls._js(j['timeoutMs'])}ms",
             ]
+        if c.get("sessionWarning"):
+            lines.append(f"session warning: {c['sessionWarning']}")
         return "\n".join(lines)
 
     @staticmethod

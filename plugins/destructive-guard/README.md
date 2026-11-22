@@ -287,13 +287,10 @@ uv run pytest plugins/destructive-guard    # tests
 | `hooks/env-guard.sh` | Env-file guard |
 | `lib/gate_main.py` | Hook entry point (version-checking stub, then the package) |
 | `lib/check.py` | Dry-run CLI behind the `check` skill (same stub) |
-| `lib/destructive_guard/config.py` | Env → effective configuration, pack composition |
-| `lib/destructive_guard/gate/gate.py` | `Gate`: rules, script scan, optional Jev |
-| `lib/destructive_guard/hook.py` | `GateHook`: stdin JSON → decision on stdout, `GATE_LOG`, done-file |
-| `lib/destructive_guard/scripts/` | Script collection and scanning |
-| `lib/destructive_guard/jev/` | Jev configuration, prompts, redaction, request, client, decision |
+| `lib/destructive_guard/config.py` | Env → `GATE_ENABLED`, `GATE_ENV_GUARD`, `GATE_LOG` |
+| `lib/destructive_guard/hook.py` | `GateHook`: stdin JSON → Jev → ask or no decision on stdout, `GATE_LOG` |
+| `lib/destructive_guard/jev/` | Jev configuration, prompts, redaction, request, client, judge |
 | `lib/destructive_guard/check/cli.py` | The dry-run behind `lib/check.py` |
-| `packs/*.json` | Built-in rule packs |
 | `jev/*.json` | Built-in Jev prompts |
 
 ### Formal model of the planned lean gate
