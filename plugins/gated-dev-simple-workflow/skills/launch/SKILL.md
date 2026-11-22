@@ -15,12 +15,25 @@ than 3.14, run the script with the interpreter in `$GATE_INFRA_PYTHON` instead
    ```bash
    python3 -I "${CLAUDE_PLUGIN_ROOT}/scripts/launch.py" --dry-run KEY-1 KEY-2
    python3 -I "${CLAUDE_PLUGIN_ROOT}/scripts/launch.py" --dry-run --all
+   python3 -I "${CLAUDE_PLUGIN_ROOT}/scripts/launch.py" --dry-run --mode light KEY-3
    ```
 
 2. Ask the user to confirm (each tab starts a new Claude session), then run the
    same command without `--dry-run`. Add `--remote-control` only when the user
    asks for it.
 3. Report per key what opened (`mode`, `title`) and any error line verbatim.
+
+Ticket mode (`--mode heavy|medium|light`, applies to every key of the call):
+pass it only when the user names a mode. The session then starts as
+`claude --model <modes.<mode>.session>` (defaults: heavy `opus`, medium and
+light `sonnet`; override in `.claude/gated-dev.json`) with
+`/ticket <KEY> --mode <mode>`. Without `--mode` there is no `--model`: the
+session starts on the default model and decides the mode itself. A ticket
+with a run is resumed on the session model of the mode recorded in its
+`state.json` (no `--model` when the run recorded none); `--mode` for such a
+ticket is refused, since the recorded mode wins. Each key's dry-run block
+shows `mode:` (the mode, `decided by the session`, or `not recorded` for a
+resume without one) and `model:` (the model, or `default`).
 
 Modes: `orca-worktree` (a new Orca worktree on branch `<KEY>/<slug>`; the
 session adopts it), `main-checkout` (iTerm2, or Orca with a repo Orca does not

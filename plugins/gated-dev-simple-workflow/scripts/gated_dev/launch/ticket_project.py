@@ -17,7 +17,7 @@ class TicketProject:
 
     DEFAULT_KEY_PATTERN = "^[A-Za-z][A-Za-z0-9._-]*$"
     CONFIG_KEYS = frozenset(
-        ("ticketsDir", "keyPattern", "baseBranch", "setupCommand", "formatCommand", "riskPaths", "escalationExtra", "models", "orchestratorRules", "tracker", "flow", "dryRunGate")
+        ("ticketsDir", "keyPattern", "baseBranch", "setupCommand", "formatCommand", "riskPaths", "escalationExtra", "models", "orchestratorRules", "tracker", "flow", "dryRunGate", "mode", "modes", "modeRules")
     )
     TRACKER_KEY_PATTERN = r"^[A-Z][A-Z0-9]*-\d+$"
     TRACKER_KEYS = frozenset(("type", "site", "statuses", "startFrom", "assign", "comments", "baseFromParent"))
@@ -31,6 +31,12 @@ class TicketProject:
         "staleHours": 3,
         "lostWatchMinutes": 10,
         "remoteControl": False,
+    }
+    MODE_NAMES = ("heavy", "medium", "light")
+    MODE_DEFAULTS: ClassVar[dict[str, dict[str, str]]] = {
+        "heavy": {"session": "opus"},
+        "medium": {"session": "sonnet"},
+        "light": {"session": "sonnet"},
     }
     DEFAULT_STATUSES: ClassVar[dict[str, str]] = {"inProgress": "In Progress", "inReview": "In Review", "done": "Done"}
     _SITE = re.compile(r"[A-Za-z0-9.-]+")
@@ -87,6 +93,13 @@ class TicketProject:
         dry_run_gate = raw.get("dryRunGate", False)
         if not isinstance(dry_run_gate, bool):
             raise LaunchError(f"{file}: dryRunGate must be true or false")
+        mode = raw.get("mode", "auto")
+        if mode not in ("auto", *TicketProject.MODE_NAMES):
+            raise LaunchError(f"{file}: mode must be one of auto, heavy, medium, light")
+        modes = TicketProject._read_modes(raw.get("modes"), file)
+        mode_rules = raw.get("modeRules", [])
+        if not (isinstance(mode_rules, list) and all(isinstance(x, str) and x for x in mode_rules)):
+            raise LaunchError(f"{file}: modeRules must be a list of non-empty strings")
         return {
             "ticketsDir": tickets_dir,
             "keyPattern": key_pattern,
@@ -95,7 +108,36 @@ class TicketProject:
             "tracker": tracker,
             "flow": flow,
             "dryRunGate": dry_run_gate,
+            "mode": mode,
+            "modes": modes,
+            "modeRules": mode_rules,
         }
+
+    @staticmethod
+    def _read_modes(raw: Any, file: Path) -> dict[str, dict[str, str]]:
+        """The checked `modes` config merged over the defaults."""
+        modes = {name: dict(value) for name, value in TicketProject.MODE_DEFAULTS.items()}
+        if raw is None:
+            return modes
+        if not isinstance(raw, dict):
+            raise LaunchError(f"{file}: modes must be an object")
+        for name, value in raw.items():
+            if name not in modes:
+                raise LaunchError(f'{file}: modes has unknown mode "{name}" (use heavy, medium or light)')
+            if not isinstance(value, dict):
+                raise LaunchError(f"{file}: modes.{name} must be an object")
+            for k in value:
+                if k != "session":
+                    raise LaunchError(f'{file}: modes.{name} has unknown key "{k}"')
+            if "session" in value:
+                if not LaunchNaming.is_model(value["session"]):
+                    raise LaunchError(f"{file}: modes.{name}.session must be opus, sonnet or a claude-... model id")
+                if "haiku" in value["session"].lower():
+                    raise LaunchError(
+                        f"{file}: modes.{name}.session must not be haiku: the session is the orchestrator and needs sonnet or opus"
+                    )
+                modes[name]["session"] = value["session"]
+        return modes
 
 
     @staticmethod
@@ -227,9 +269,10 @@ class TicketProject:
 
 
     def find_run(self, *, key: str, config: Mapping) -> dict | None:
-        """The ticket's run: the worktree on a `<KEY>/*` branch, with the `stage` of its `state.json`.
+        """The ticket's run: the worktree on a `<KEY>/*` branch, with the `stage` and `mode` of its `state.json`.
 
-        The stage is None without one. Aborted runs are ignored. Returns None when there is no run;
+        The stage is None without one; the mode is None unless it is heavy, medium or light (a run
+        from before modes has none). Aborted runs are ignored. Returns None when there is no run;
         raises when several are left.
         """
         out = self.run("git", ["-C", str(self.root), "worktree", "list", "--porcelain"]).stdout
@@ -239,14 +282,17 @@ class TicketProject:
             branch = re.search(r"^branch refs/heads/(.+)$", block, re.MULTILINE)
             if not wt or not branch or not branch[1].startswith(f"{key}/"):
                 continue
-            stage = None
+            stage = mode = None
             try:
-                state = Path(wt[1]) / config["ticketsDir"] / key / "state.json"
-                stage = LaunchNaming._get(json.loads(state.read_text(encoding="utf-8")), "stage")
+                state = json.loads((Path(wt[1]) / config["ticketsDir"] / key / "state.json").read_text(encoding="utf-8"))
+                stage = LaunchNaming._get(state, "stage")
+                mode = LaunchNaming._get(state, "mode")
             except (OSError, ValueError):
                 pass
+            if mode not in TicketProject.MODE_NAMES:
+                mode = None
             if stage != "aborted":
-                runs.append({"path": wt[1], "branch": branch[1], "stage": stage})
+                runs.append({"path": wt[1], "branch": branch[1], "stage": stage, "mode": mode})
         if len(runs) > 1:
             raise LaunchError(f"{key}: several runs ({', '.join(r['branch'] for r in runs)}); open the one you want with /ticket {key} --resume")
         return runs[0] if runs else None
