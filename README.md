@@ -24,9 +24,9 @@ checkpoint, never as something to work around.
 Plugin `destructive-guard`. A safety net for every Claude Code session,
 whether a person or an agent is driving. Before a Bash command or an MCP tool
 call runs, a `PreToolUse` hook sends the call (with secrets redacted) to
-**Jev**, a risk classifier. When Jev
-judges that the call could delete, overwrite or irreversibly change data or
-resources, locally or in a remote service, Claude Code **asks you first**.
+**Jev**, a risk classifier. When Jev judges that the call could delete,
+overwrite or irreversibly change data or resources, locally or in a remote
+service, Claude Code **asks you first**.
 
 - Only ever adds prompts: it never allows or denies a call by itself, so
   your own permission rules still apply.
