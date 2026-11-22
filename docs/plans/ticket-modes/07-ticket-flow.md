@@ -1,7 +1,7 @@
 # Task 07: `/ticket-flow` decides and passes the mode
 
 Plan: [../ticket-modes.md](../ticket-modes.md) §5.1, §7 (`test_flow_skill.py`).
-Depends on: 03, 06. Status: not started.
+Depends on: 03, 06. Status: done.
 
 ## Goal
 
