@@ -1,6 +1,6 @@
 """Dry run for destructive-guard: what would the hook do with a call, and what is the effective
 configuration? Used by the `check` skill. Never runs the call; a call check sends the redacted call to
-Jev (one request). Interim shape until L4 finishes `check` on the Jev hook path.
+Jev (one request).
 
     check.py [--json] -- <command...>       a Bash command
     check.py [--json] --mcp <tool> [<json input>]       an MCP call

@@ -1,7 +1,9 @@
-"""Contract: the check CLI (interim shape; L4 finishes it on the Jev hook path)."""
+"""Contract: the check CLI (a call check goes through the hook's decision against Jev)."""
 
 import json
 import re
+import shlex
+from pathlib import Path
 
 import pytest
 
@@ -111,3 +113,56 @@ def test_text_output_never_prints_the_key(impl, jev, jev_env, tmp_path):
     conf = CheckRunner.run_check(impl, env=jev_env, cwd=tmp_path)
     assert re.search(r"api key \[set\]", conf.stdout)
     assert "sekret-123" not in text.stdout + conf.stdout
+
+
+def test_text_report_shapes(impl, jev, jev_env, tmp_path):
+    def text(*args, env=jev_env):
+        return CheckRunner.run_check(impl, *args, env=env, cwd=tmp_path).stdout.splitlines()
+
+    jev.answer(RISKY)
+    assert text("git push --force origin main") == [
+        "Bash: git push --force origin main",
+        "decision: ask",
+        "reason:   jev: cloud_or_data_change p=0.60 risk=0.80",
+    ]
+    jev.answer(SAFE)
+    assert text("ls")[1] == "decision: none (risk 0.02 \u2264 0.5)"
+    jev.answer(kind="status", status=503)
+    out = text("ls")
+    assert out[1].startswith("decision: ask (jev-unavailable: http 503")
+    assert out[2].startswith("warning:  ")
+    out = text("cat .env")
+    assert out[1].startswith("decision: none \u2014 warning: ") and ".env" in out[1]
+    assert len(out) == 2
+
+
+SKILL = Path(__file__).resolve().parents[1] / "skills" / "check" / "SKILL.md"
+
+
+def documented_invocations() -> list[list[str]]:
+    """The argv after check.py of every example in SKILL.md's bash blocks."""
+    blocks = re.findall(r"```bash\n(.*?)```", SKILL.read_text(), re.DOTALL)
+    found = []
+    for line in "\n".join(blocks).splitlines():
+        if "check.py" in line and not line.lstrip().startswith("#"):
+            found.append(shlex.split(line.split("check.py", 1)[1].lstrip('" ')))
+    return found
+
+
+def test_documented_invocations_pass_the_gate(impl, jev, jev_env, tmp_path):
+    """The example command lines themselves mention no .env and parse; each call goes to Jev."""
+    jev.answer(SAFE)
+    examples = documented_invocations()
+    assert len(examples) >= 3
+    for argv in examples:
+        assert ".env" not in " ".join(argv)
+        proc = CheckRunner.run_check(impl, "--json", *argv, env=jev_env, cwd=tmp_path)
+        assert proc.returncode == 0, (argv, proc.stdout)
+        assert json.loads(proc.stdout)["jev"] if "--config" in argv else True
+    # The invocation lines are Bash calls too: the hook would send them to Jev, not skip them.
+    before = jev.hits
+    for argv in examples:
+        line = 'python3 "${CLAUDE_PLUGIN_ROOT}/lib/check.py" ' + shlex.join(argv)
+        r = check_json(impl, line, env=jev_env, cwd=tmp_path)
+        assert r["decision"] == "none" and r["risk"] is not None
+    assert jev.hits - before == len(examples)

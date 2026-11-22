@@ -35,13 +35,16 @@ python3 "${CLAUDE_PLUGIN_ROOT}/lib/check.py" --config
 ```
 
 Option: `--json` prints machine-readable output (`decision`, `reason`, `risk`,
-`warning`). With several commands to check, run the script once per command.
+`threshold`, `warning`). With several commands to check, run the script once per command.
 
 ## Reading the result
 
-- `decision: ask` — the hook would ask. The reason is `jev: <choice> p=… risk=…`,
-  or `jev-unavailable: …` when Jev did not answer (a warning is shown too).
-- `decision: none` — no decision; Claude Code's own permission rules decide.
-  A `warning` explains a skipped `.env` call or a misconfigured setting.
+- `decision: ask` with `reason: jev: <choice> p=… risk=…` — the hook would ask.
+- `decision: ask (jev-unavailable: …)` — Jev did not answer, so the hook asks;
+  a warning follows.
+- `decision: none (risk 0.04 ≤ 0.5)` — Jev judged it below the threshold; no
+  decision, Claude Code's own permission rules decide.
+- `decision: none — warning: …` — nothing was sent: a `.env` call is skipped, or
+  a setting is misconfigured.
 
 Report the result as-is; never run the checked command as part of this skill.

@@ -26,13 +26,21 @@ class CheckReport:
     @classmethod
     def format_check(cls, r: Mapping[str, Any]) -> str:
         what = f"Bash: {r['command']}" if r["tool"] == "Bash" else f"{r['tool']} {cls._compact(r['input'])}"
-        lines = [what, f"decision: {r['decision']}"]
-        if r["reason"]:
-            lines.append(f"reason:   {r['reason']}")
-        if r.get("risk") is not None:
-            lines.append(f"risk:     {cls._js(round(r['risk'], 2))}")
-        if r.get("warning"):
-            lines.append(f"warning:  {r['warning']}")
+        reason, warning, risk = r.get("reason"), r.get("warning"), r.get("risk")
+        if r["decision"] == "ask" and reason and not reason.startswith("jev-unavailable"):
+            lines = [what, "decision: ask", f"reason:   {reason}"]
+        elif r["decision"] == "ask":
+            lines = [what, f"decision: ask ({reason})"]
+        elif warning and risk is None and not reason:
+            return "\n".join([what, f"decision: none \u2014 warning: {warning}"])
+        elif risk is not None:
+            limit = r.get("threshold")
+            tail = f" \u2264 {cls._js(limit)}" if limit is not None else ""
+            lines = [what, f"decision: none (risk {cls._js(round(risk, 2))}{tail})"]
+        else:
+            lines = [what, f"decision: none ({reason})" if reason else "decision: none"]
+        if warning:
+            lines.append(f"warning:  {warning}")
         return "\n".join(lines)
 
     @classmethod
