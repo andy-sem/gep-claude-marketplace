@@ -18,6 +18,7 @@ stops the run with a message (nothing is guessed).
   ],
   "models": { "plan": "opus", "reviewRisk": "opus" },
   "orchestratorRules": ".claude/gated-dev-rules.md",
+  "dryRunGate": false,
   "tracker": {
     "type": "jira",
     "site": "acme.example.net",
@@ -38,6 +39,7 @@ stops the run with a message (nothing is guessed).
 | `models` | `spec: sonnet`, `plan: opus`, `dev: sonnet`, `review: sonnet`, `reviewRisk: opus` | Model per stage; keys given here override the defaults one by one. |
 | `orchestratorRules` | none | Repo-relative path to a Markdown file of extra orchestrator steps, one `## <event>` section per event (SKILL.md section 0a). A missing file or an unknown event heading stops the run. A ticket without `ticket.md` may then be started: the `intake` section writes it. |
 | `tracker` | none (the ticket is a file) | Takes the ticket from an issue tracker instead of a hand-written `ticket.md`. Only Jira is supported; see [Tracker: Jira](#tracker-jira). |
+| `dryRunGate` | `false` | `true`: the planner dry-runs the calls it lists through `destructive-guard:check` and fills the `Gate` column of `## Gated operations` (`ask (risk 0.86)`); otherwise the column says `unknown`. Each checked call is one request to the gate's risk classifier and sends the redacted command, so it is off by default. Must be a boolean. `/ticket-flow` runs `/ticket` sessions and inherits the setting; nothing in the flow code calls the gate. |
 | `flow` | none | Settings of `/ticket-flow`, which runs the subtasks of a Jira parent. Needs a `tracker`; see [Flow](#flow). |
 
 ## Tracker: Jira
