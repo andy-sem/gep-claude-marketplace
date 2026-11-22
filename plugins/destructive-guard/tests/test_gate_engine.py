@@ -15,6 +15,7 @@ from destructive_guard.shell.tokenizer import ShellTokenizer
 from testkit import DG, REPO
 from testkit.check_cli import CheckRunner
 from testkit.hook import HookRunner
+from testkit.legacy_gate import LegacyGate
 
 ENGINE_RULES = DG / "tests" / "fixtures" / "engine_rules.json"
 CORPUS_ENV = {"GATE_CHECKS": "none", "GATE_RULES_FILE": str(ENGINE_RULES), "GATE_STRICT": "1"}
@@ -60,7 +61,7 @@ def test_shell_reading_stdin_reason(impl, tmp_path):
 
 @pytest.mark.parametrize("stdin", ["null", '"x"'])
 def test_non_object_input_fails_closed(impl, stdin):
-    out = HookRunner.run(impl, stdin, CLI_ENV).stdout
+    out = LegacyGate.run(stdin, CLI_ENV).stdout
     assert HookRunner.decision(out)["permissionDecisionReason"].startswith("unparsable:")
 
 
@@ -173,7 +174,7 @@ def hook_stdin(tool_name, tool_input, **extra):
 
 
 def test_cli_gated_command_asks(impl):
-    r = HookRunner.run(impl, hook_stdin("Bash", {"command": "dbtool push"}), CLI_ENV)
+    r = LegacyGate.run(hook_stdin("Bash", {"command": "dbtool push"}), CLI_ENV)
     assert r.status == 0
     d = HookRunner.decision(r.stdout)
     assert d["hookEventName"] == "PreToolUse"
@@ -182,19 +183,19 @@ def test_cli_gated_command_asks(impl):
 
 
 def test_cli_non_gated_prints_nothing(impl):
-    r = HookRunner.run(impl, hook_stdin("Bash", {"command": "ls"}), CLI_ENV)
+    r = LegacyGate.run(hook_stdin("Bash", {"command": "ls"}), CLI_ENV)
     assert r.status == 0
     assert r.stdout.strip() == ""
 
 
 def test_cli_subagent_call_still_asks(impl):
-    r = HookRunner.run(impl, hook_stdin("Bash", {"command": "dbtool push"}, agent_id="agent-123"), CLI_ENV)
+    r = LegacyGate.run(hook_stdin("Bash", {"command": "dbtool push"}, agent_id="agent-123"), CLI_ENV)
     assert r.status == 0
     assert HookRunner.decision(r.stdout)["permissionDecision"] == "ask"
 
 
 def test_cli_broken_rules_asks_gate_config(impl, bad_rules):
-    r = HookRunner.run(impl, hook_stdin("Read", {"file_path": "/x"}), CLI_ENV, {"GATE_RULES": str(bad_rules)})
+    r = LegacyGate.run(hook_stdin("Read", {"file_path": "/x"}), CLI_ENV, {"GATE_RULES": str(bad_rules)})
     assert r.status == 0
     d = HookRunner.decision(r.stdout)
     assert d["permissionDecision"] == "ask"
@@ -202,7 +203,7 @@ def test_cli_broken_rules_asks_gate_config(impl, bad_rules):
 
 
 def test_cli_unparsable_stdin_asks(impl):
-    r = HookRunner.run(impl, "not json", CLI_ENV)
+    r = LegacyGate.run("not json", CLI_ENV)
     assert r.status == 0
     d = HookRunner.decision(r.stdout)
     assert d["permissionDecision"] == "ask"

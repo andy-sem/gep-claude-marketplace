@@ -6,12 +6,12 @@ from typing import Any, ClassVar
 
 from destructive_guard.jev.client import JevClient
 from destructive_guard.jev.config import JevConfig
-from destructive_guard.jev.decider import JevDecider
+from destructive_guard.jev.judge import JevJudge
 from destructive_guard.jev.request import JevRequest
 
 
 class LiveJev:
-    """The only place that knows how a decision is made (LJ0: build_state + ask_jev + jev_decision)."""
+    """The only place that knows how a decision is made (L1: build_state + ask_jev + JevJudge.judge)."""
 
     DEFAULT_MAX_REQUESTS = 80
     requests = 0
@@ -33,7 +33,7 @@ class LiveJev:
 
     @staticmethod
     def config(env: Mapping[str, str]) -> dict:
-        return JevConfig.read({"GATE_JEV": "1", **env})
+        return JevConfig.read(env)
 
     @classmethod
     def raw(cls, call: Mapping[str, Any], env: Mapping[str, str]) -> tuple[dict, dict | None, dict]:
@@ -60,13 +60,11 @@ class LiveJev:
                 "error": result.get("error"),
             }
         prompt = JevRequest._prompt_of(cfg)
-        risk = sum(probabilities[c] for c in prompt["ask"])
-        top = max(probabilities, key=lambda c: probabilities[c])
-        jev = JevDecider.jev_decision(probabilities, cfg)
+        out = JevJudge.judge(result, cfg)
         return {
-            "decision": "ask" if jev and jev["decision"] == "ask" else "none",
-            "risk": risk,
-            "top": top,
+            "decision": out.decision,
+            "risk": JevJudge.risk(probabilities, prompt),
+            "top": max(probabilities, key=lambda c: probabilities[c]),
             "probabilities": probabilities,
             "latencyMs": result["latencyMs"],
             "error": None,

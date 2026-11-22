@@ -1,120 +1,129 @@
-"""Hook entry: stdin JSON -> decision on stdout (port of main/emit/logDecision of gate-engine.mjs).
+"""PreToolUse hook (the Lean model's `hook`): one Bash or MCP call in, ask or nothing out.
 
-Fails closed: any exception becomes a `gate-config: internal error` ask. The done-file
-(`GATE_DONE_FILE`) is written only after the decision is on stdout; the wrapper allows only when
-it exists. `GATE_ENABLED=0` emits nothing and does not read stdin.
+The call goes to Jev (redacted); a risky answer asks, a safe or uncertain one gives no decision, so
+Claude Code's own permissions apply. It never prints allow or deny. Jev unavailable (D11) and plugin
+faults (D12) ask with a warning. A misconfigured setting is silent here: `SessionStart` warns once.
 """
 
 import json
 import os
 import sys
+import time
 from collections.abc import Mapping
-from datetime import UTC, datetime
 from typing import Any, BinaryIO
 
-from .errors import RulesError
-from .gate.gate import Gate
-from .verdict import Verdict
+from .errors import ConfigError, JevConfigError
+from .jev.client import JevClient
+from .jev.judge import JevJudge
+from .jev.request import JevRequest
+from .log import GateLog
+from .outcome import Down, HookOut
 
 
 class GateHook:
-    """Reads one hook input from stdin, decides it and writes the decision to stdout."""
+    """Reads one hook input from stdin, decides it and writes the output to stdout."""
 
     @staticmethod
     def _reject_constant(name: str) -> Any:
         # JSON.parse refuses NaN and Infinity; Python's json accepts them by default.
         raise ValueError(f"invalid JSON constant {name}")
 
-    @staticmethod
-    def emit(result: dict) -> None:
-        text = json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": result["decision"],
-                    "permissionDecisionReason": result["reason"],
-                }
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
-        out = sys.stdout.buffer
-        out.write(text.encode("utf-8", errors="replace"))
-        out.flush()
+    @classmethod
+    def parse(cls, stdin: BinaryIO) -> dict:
+        """The hook input: a JSON object with a string `tool_name`. Raises ValueError or TypeError otherwise."""
+        text = stdin.read().decode("utf-8", errors="replace")
+        data = json.loads(text, parse_constant=cls._reject_constant)
+        if not isinstance(data, dict) or not isinstance(data.get("tool_name"), str):
+            raise TypeError("not a hook input")
+        return data
 
     @staticmethod
-    def log_decision(path: str, input: Any, rule: dict | None, result: dict | None) -> None:
-        """GATE_LOG: one JSON line per decision. Commands are redacted like Jev input; a command that
-        mentions .env is not written. Never fails the gate."""
-        try:
-            tool = input.get("tool_name") if isinstance(input, dict) else None
-            if not isinstance(tool, str):
-                tool = None
-            record: dict[str, Any] = {"ts": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z", "tool": tool}
-            tool_input = input.get("tool_input") if isinstance(input, dict) else None
+    def call_of(data: Mapping[str, Any]) -> dict | None:
+        """A Bash call with a string command, or an MCP call; anything else needs no decision."""
+        tool = data["tool_name"]
+        tool_input = data.get("tool_input")
+        if tool == "Bash":
             command = tool_input.get("command") if isinstance(tool_input, dict) else None
-            if tool == "Bash" and isinstance(command, str):
-                from .jev.redactor import Redactor
+            return {"tool": "Bash", "command": command} if isinstance(command, str) else None
+        if tool.startswith("mcp__"):
+            return {"tool": tool, "input": tool_input if tool_input is not None else {}}
+        return None
 
-                record["command"] = Redactor.redact(command)
-            record["rule"] = rule["reason"] if rule else None
-            record["decision"] = result["decision"] if result else "none"
-            record["reason"] = result["reason"] if result else None
-            line = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
-            with open(path, "a", encoding="utf-8", errors="replace") as f:
-                f.write(line + "\n")
-        except Exception:  # noqa: BLE001, S110 - the log is best-effort
-            pass
+    @staticmethod
+    def write(out: HookOut) -> None:
+        text = out.to_json()
+        if text is not None:
+            sys.stdout.buffer.write(text.encode("utf-8", errors="replace"))
+            sys.stdout.buffer.flush()
+
+    @classmethod
+    def decide(cls, call: Mapping[str, Any], cfg: Mapping[str, Any], record: dict[str, Any]) -> HookOut:
+        """Call -> Jev -> output. Fills `record` for GATE_LOG."""
+        state = JevRequest.build_state(call)
+        if state is None:
+            record.update(command=None, input=None, decision="none", warning=Down.ENV_REFERENCE.value)
+            return HookOut("none", warning=Down.ENV_REFERENCE)
+        record["command" if call["tool"] == "Bash" else "input"] = state.get("command", state.get("input"))
+        result = JevClient().ask_jev(state, cfg)
+        out = JevJudge.judge(result, cfg)
+        probs = result.get("probabilities")
+        prompt = JevRequest._prompt_of(cfg)
+        record.update(
+            probabilities=probs,
+            risk=JevJudge.risk(probs, prompt) if probs else None,
+            usage=result.get("usage"),
+            latencyMs=result.get("latencyMs"),
+        )
+        return out
 
     @classmethod
     def main(cls, stdin: BinaryIO | None = None, env: Mapping[str, str] | None = None) -> int:
-        if stdin is None:
-            stdin = sys.stdin.buffer
-        if env is None:
-            env = os.environ
-        result: dict | None = None
-        config: dict | None = None
-        input: Any = None
-        trace: dict = {}
-        try:
-            rules = None
-            try:
-                from .config import GateConfig
-                from .errors import ConfigError
+        from .config import GateConfig
+        from .jev.config import JevConfig
 
-                try:
-                    config = GateConfig.read_config(env)
-                    if config["enabled"]:
-                        rules = GateConfig.build_rules(config)
-                except (RulesError, ConfigError) as e:
-                    result = Verdict.ask("gate-config", str(e))
-            except Exception as e:  # noqa: BLE001
-                result = Verdict.ask("gate-config", f"internal error: {e}")
-            if not result and config and config["enabled"]:
-                try:
-                    text = stdin.read().decode("utf-8", errors="replace")
-                    input = json.loads(text, parse_constant=cls._reject_constant)
-                    parsed = True
-                except Exception:  # noqa: BLE001
-                    parsed = False
-                if not parsed:
-                    result = Verdict.ask("unparsable", "hook input is not valid JSON")
-                else:
-                    result = Gate(rules, env).gate(input, strict=config["strict"], trace=trace)
-        except Exception as e:  # noqa: BLE001 - fail closed
-            result = Verdict.ask("gate-config", f"internal error: {e}")
-        if result:
-            cls.emit(result)
-        if config and config["enabled"] and config["log"]:
-            cls.log_decision(config["log"], input, trace.get("rule"), result)
-        # Tell the wrapper the engine ran to completion (allow = empty stdout).
-        done = env.get("GATE_DONE_FILE")
-        if done:
+        stdin = sys.stdin.buffer if stdin is None else stdin
+        env = os.environ if env is None else env
+        record: dict[str, Any] = {}
+        log_path: str | None = None
+        out: HookOut | None = None
+        try:
             try:
-                with open(done, "w") as f:
-                    f.write("done")
-            except Exception:  # noqa: BLE001, S110
-                pass
+                gate = GateConfig.read(env)
+                log_path = gate["log"]
+                if not gate["enabled"]:
+                    return 0
+                setting_error: Exception | None = None
+            except ConfigError as e:
+                setting_error = e
+            try:
+                data = cls.parse(stdin)
+            except Exception:  # noqa: BLE001 - any unreadable input is a plugin fault
+                out = HookOut.fault(Down.BAD_INPUT, "bad hook input")
+            else:
+                record["tool"] = data["tool_name"]
+                call = cls.call_of(data)
+                if call is None:
+                    return 0
+                try:
+                    if setting_error is not None:
+                        raise JevConfigError(str(setting_error), "badValue")
+                    cfg = JevConfig.read(env)
+                except JevConfigError as e:
+                    # S9: silent per call; the session warning says what is wrong.
+                    GateLog.write(log_path, {**record, "decision": "none", "warning": None, "misconfigured": e.kind})
+                    return 0
+                t0 = time.monotonic()
+                out = cls.decide(call, cfg, record)
+                record.setdefault("latencyMs", round((time.monotonic() - t0) * 1000))
+        except Exception as e:  # noqa: BLE001
+            out = HookOut.fault(Down.INTERNAL_ERROR, type(e).__name__)
+        record.update(
+            decision=out.decision,
+            reason=out.reason,
+            warning=out.warning.value if out.warning else None,
+        )
+        cls.write(out)
+        GateLog.write(log_path, record)
         return 0
 
 

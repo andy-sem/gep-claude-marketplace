@@ -1,5 +1,6 @@
-"""hooks/gate.sh interpreter lookup (D1a/D1b): GATE_INFRA_PYTHON, python3.14, python3, always -I, fail closed."""
+"""hooks/gate.sh interpreter lookup (D1a/D1b): GATE_INFRA_PYTHON, python3.14, python3, always -I; plugin faults ask (D12)."""
 
+import json
 import os
 import shutil
 import subprocess
@@ -13,15 +14,15 @@ from testkit.hook import HookRunner
 from testkit.pythons import Pythons
 
 GATE_SH = DG / "hooks" / "gate.sh"
-UNAVAILABLE = HookRunner.ASK_TEMPLATE.format("unparsable: python unavailable")
-ENGINE_FAILED = HookRunner.ASK_TEMPLATE.format("gate-config: engine failed")
-PUSH_FORCE = HookRunner.ASK_TEMPLATE.format("git-push-force: gated invocation")
+NO_PYTHON = "plugin-fault: no Python >= 3.14 found (set GATE_INFRA_PYTHON)"
+ENGINE_FAILED = "plugin-fault: internal error: engine exit 1"
+RAN = ""  # no key: the engine ran and said nothing, so the call is left to Claude Code
 
 
 def _bin(tmp_path) -> FakeBin:
     """A private PATH with only the tools gate.sh itself needs."""
     fake = FakeBin(tmp_path)
-    for tool in ("dirname", "tr", "mktemp", "rm", "touch"):
+    for tool in ("dirname", "tr", "touch"):
         fake.link(tool)
     return fake
 
@@ -34,7 +35,8 @@ def _wrapper(fake: FakeBin, name: str, python: str, marker=None):
     return path
 
 
-def _run(fake: FakeBin, command="git push -f", cwd=None, **env):
+def _run(fake: FakeBin, command="git push -f", cwd=None, **env) -> str:
+    """The hook's stdout, or the plugin-fault reason it asked with."""
     proc = subprocess.run(
         [shutil.which("bash"), str(GATE_SH)],
         input=HookRunner.bash_input(command, cwd or fake.path).encode(),
@@ -44,23 +46,28 @@ def _run(fake: FakeBin, command="git push -f", cwd=None, **env):
         check=False,
     )
     assert proc.returncode == 0
-    return proc.stdout.decode()
+    out = proc.stdout.decode()
+    if not out:
+        return RAN
+    decision = json.loads(out)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "ask"
+    return decision["permissionDecisionReason"]
 
 
-def test_old_python3_asks_python_unavailable(tmp_path, old_python):
+def test_old_python3_asks_no_python(tmp_path, old_python):
     fake = _bin(tmp_path)
     _wrapper(fake, "python3", old_python)
-    assert _run(fake) == UNAVAILABLE
+    assert _run(fake) == NO_PYTHON
 
 
 def test_missing_explicit_interpreter_asks_without_falling_back(tmp_path):
     fake = _bin(tmp_path)
     _wrapper(fake, "python3", Pythons.require_new_python(os.environ))
-    assert _run(fake, GATE_INFRA_PYTHON="/nope") == UNAVAILABLE
+    assert _run(fake, GATE_INFRA_PYTHON="/nope") == NO_PYTHON
 
 
 def test_no_python_on_path_asks(tmp_path):
-    assert _run(_bin(tmp_path)) == UNAVAILABLE
+    assert _run(_bin(tmp_path)) == NO_PYTHON
 
 
 def test_python314_preferred_over_python3(tmp_path, old_python):
@@ -70,7 +77,7 @@ def test_python314_preferred_over_python3(tmp_path, old_python):
     other = tmp_path / "ran-python3"
     _wrapper(fake, "python3.14", new, marker=ran)
     _wrapper(fake, "python3", old_python, marker=other)
-    assert _run(fake) == PUSH_FORCE
+    assert _run(fake) == RAN
     assert ran.exists()
     assert not other.exists()
 
@@ -79,7 +86,7 @@ def test_python3_used_when_no_python314(tmp_path):
     fake = _bin(tmp_path)
     ran = tmp_path / "ran"
     _wrapper(fake, "python3", Pythons.require_new_python(os.environ), marker=ran)
-    assert _run(fake) == PUSH_FORCE
+    assert _run(fake) == RAN
     assert ran.exists()
 
 
@@ -106,8 +113,8 @@ def test_planted_json_module_does_not_change_the_decision(tmp_path):
     planted = tmp_path / "planted"
     planted.mkdir()
     (planted / "json.py").write_text("raise SystemExit(0)\n")
-    assert _run(fake, cwd=planted) == PUSH_FORCE
-    assert _run(fake, cwd=planted, PYTHONPATH=str(planted)) == PUSH_FORCE
+    assert _run(fake, cwd=planted) == RAN
+    assert _run(fake, cwd=planted, PYTHONPATH=str(planted)) == RAN
 
 
 @pytest.mark.parametrize("value", ["0", "false", "OFF", "no"])

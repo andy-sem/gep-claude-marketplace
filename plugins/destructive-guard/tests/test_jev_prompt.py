@@ -13,9 +13,9 @@ from destructive_guard.jev.config import JevConfig
 from destructive_guard.jev.decider import JevDecider
 from destructive_guard.jev.prompt import JevPrompt
 from testkit import DG
-from testkit.check_cli import CheckRunner
+from testkit.hook import HookRunner
 
-BASE_ENV = {"GATE_JEV": "1", "TYPESAFE_API_KEY": "key-123"}
+BASE_ENV = {"TYPESAFE_API_KEY": "key-123"}
 JEV_DIR = DG / "jev"
 
 
@@ -90,15 +90,14 @@ def test_jev_decision_with_destructive_prompt():
     assert JevDecider.jev_decision(d(0.3, 0.3, 0.4), cfg) is None
 
 
-def test_ask_jev_sends_destructive_question(impl, jev, tmp_path):
+def test_hook_sends_destructive_question(impl, jev, tmp_path):
     jev.answer(d(0.05, 0.05, 0.9), question="destructive")
-    env = {"GATE_JEV": "1", "TYPESAFE_API_KEY": "k", "GATE_JEV_URL": jev.url}
-    proc = CheckRunner.run_check(impl, "--json", "--jev", "--", "rm -rf ~/work", env=env, cwd=tmp_path)
-    assert proc.returncode == 0, proc.stdout + proc.stderr
+    env = {"TYPESAFE_API_KEY": "k", "GATE_JEV_URL": jev.url}
+    r = HookRunner.run(impl, HookRunner.bash_input("rm -rf ~/work", tmp_path), env, cwd=tmp_path)
     [body] = jev.bodies
     assert list(body["questions"]) == ["destructive"]
     assert body["state"]["context"]["policy"] == JevPrompt.builtin_prompt("destructive")["context"]["policy"]
-    assert json.loads(proc.stdout)["source"] == "jev"
+    assert HookRunner.decision(r.stdout)["permissionDecisionReason"].startswith("jev: ")
 
 
 def test_prompt_env_selects_builtin_or_file(tmp_path):
@@ -109,18 +108,15 @@ def test_prompt_env_selects_builtin_or_file(tmp_path):
     assert JevPrompt.prompt_from_env({"GATE_JEV_PROMPT": str(path)}) == CUSTOM
 
 
-def test_relative_prompt_and_log_resolve_against_project_dir(tmp_path):
+def test_relative_prompt_resolves_against_project_dir(tmp_path):
     (tmp_path / "prompt.json").write_text(json.dumps(CUSTOM))
     env = {
         **BASE_ENV,
         "CLAUDE_PROJECT_DIR": str(tmp_path),
         "GATE_JEV_PROMPT": "./prompt.json",
-        "GATE_JEV_LOG": "jev.jsonl",
     }
     cfg = JevConfig.read(env)
     assert cfg["prompt"] == CUSTOM
-    assert cfg["logPath"] == str(tmp_path / "jev.jsonl")
-    assert JevConfig.read({**BASE_ENV, "GATE_JEV_LOG": "/abs/j.jsonl"})["logPath"] == "/abs/j.jsonl"
 
 
 def test_instructions_context_policy_override_prompt():

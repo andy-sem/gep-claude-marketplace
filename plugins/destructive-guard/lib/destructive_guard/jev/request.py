@@ -13,7 +13,6 @@ class JevRequest:
 
     MAX_COMMAND_CHARS = 8000
     MAX_INPUT_CHARS = 8000
-    MAX_SCRIPTS_BYTES = 65536
 
     @staticmethod
     def _dumps(obj: Any) -> str:
@@ -43,61 +42,11 @@ class JevRequest:
             },
         }
 
-    @staticmethod
-    def _byte_length(text: str) -> int:
-        return len(text.encode("utf-8", "replace"))
-
-    @classmethod
-    def scripts_payload(cls, files: list[dict]) -> tuple[list[dict], list[str]]:
-        """Scripts go to Jev in collection order, redacted, up to 64 KB in total: the file that crosses
-        the cap is cut, the rest are left out. The notes say what was cut."""
-        scripts: list[dict] = []
-        notes: list[str] = []
-        used = 0
-        cut_path: str | None = None
-        omitted: list[str] = []
-        for file in files:
-            content = Redactor.redact_script(file["content"])
-            size = cls._byte_length(content)
-            if file.get("truncated"):
-                notes.append(f"{file['path']} cut at 64 KB")
-            if cut_path or omitted:
-                omitted.append(file["path"])
-            elif used + size <= cls.MAX_SCRIPTS_BYTES:
-                scripts.append({"path": file["path"], "content": content})
-                used += size
-            elif used < cls.MAX_SCRIPTS_BYTES:
-                room = cls.MAX_SCRIPTS_BYTES - used
-                cut = content.encode("utf-8", "replace")[:room].decode("utf-8", "replace")
-                scripts.append({"path": file["path"], "content": cut})
-                used = cls.MAX_SCRIPTS_BYTES
-                cut_path = file["path"]
-            else:
-                omitted.append(file["path"])
-        if cut_path or omitted:
-            parts = []
-            if cut_path:
-                parts.append(f"{cut_path} truncated")
-            if omitted:
-                parts.append(f"omitted: {', '.join(omitted)}")
-            notes.append(f"scripts cut at 64 KB total: {'; '.join(parts)}")
-        return scripts, notes
-
-    @staticmethod
-    def problem_notes(problems: list[dict]) -> list[str]:
-        """One note per file the gate could not read safely, so that Jev does not take an empty `scripts`
-        list for "nothing to read". Exempt files are left out, and so are files cut at 64 KB (the cut is
-        noted already). The text is redacted like a script."""
-        return [
-            f"{Redactor.redact_script(p['path'])} not read: {p['reason']}"
-            for p in problems
-            if not p.get("exempt") and p.get("reason") != "exceeds 64 KB"
-        ]
-
     @classmethod
     def build_state(cls, call: Mapping[str, Any]) -> dict | None:
-        """The request state for a call, or None when the call must not be sent (a Bash command that
-        references an .env file). `call` is {tool: "Bash", command, scripts, problems} or {tool, input}."""
+        """The request state for a call, or None when the call must not be sent: it mentions a .env file
+        (the check runs on the raw payload before redaction). `call` is {tool: "Bash", command} or
+        {tool, input}. The command text goes to Jev as it is, redacted; nothing is parsed."""
         if call["tool"] == "Bash":
             redacted = Redactor.redact(call["command"])
             if redacted is None:
@@ -105,18 +54,14 @@ class JevRequest:
             notes = []
             if len(redacted) > cls.MAX_COMMAND_CHARS:
                 notes.append(f"command cut to {cls.MAX_COMMAND_CHARS} of {len(redacted)} characters")
-            scripts, script_notes = cls.scripts_payload(call.get("scripts") or [])
-            return {
-                "tool": "Bash",
-                "command": redacted[:cls.MAX_COMMAND_CHARS],
-                "scripts": scripts,
-                "notes": [*notes, *script_notes, *cls.problem_notes(call.get("problems") or [])],
-            }
+            return {"tool": "Bash", "command": redacted[: cls.MAX_COMMAND_CHARS], "notes": notes}
+        if Redactor.references_env_file(cls._dumps(call.get("input"))):
+            return None
         text = Redactor.redact_mcp_input(call.get("input"))
         notes = []
         if len(text) > cls.MAX_INPUT_CHARS:
             notes.append(f"input cut to {cls.MAX_INPUT_CHARS} of {len(text)} characters")
-        return {"tool": call["tool"], "input": text[:cls.MAX_INPUT_CHARS], "notes": notes}
+        return {"tool": call["tool"], "input": text[: cls.MAX_INPUT_CHARS], "notes": notes}
 
     @staticmethod
     def _get(obj: Any, key: str) -> Any:

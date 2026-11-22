@@ -66,8 +66,7 @@ class CheckReport:
             lines += [
                 f"jev:           on ({j['url']}, model {j['model']}, api key {j['apiKey']})",
                 f"  prompt:      {j['prompt']} (question {j['question']}; ask {','.join(j['ask'])}; safe {','.join(j['safe'])})",
-                f"  scope:       {','.join(j['scope'])}   can lift: {cls._js(j['canLift'])}",
-                f"  thresholds:  allow {cls._js(j['allowThreshold'])}, escalate {cls._js(j['escalateThreshold'])}; timeout {cls._js(j['timeoutMs'])}ms",
+                f"  thresholds:  escalate {cls._js(j['escalateThreshold'])}; timeout {cls._js(j['timeoutMs'])}ms",
             ]
         return "\n".join(lines)
 

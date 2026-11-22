@@ -22,12 +22,12 @@ def test_old_python_gets_exit_3(old_python, stub):
     EntryStubs.check_old_python_exit_3(old_python, stub[0])
 
 
-@pytest.mark.parametrize(("stub", "args", "stdout"), [("gate_main.py", [], ""), ("check.py", ["--json", "--config"], None)])
+@pytest.mark.parametrize(("stub", "args", "stdout"), [("gate_main.py", [], ""), ("session_main.py", [], ""), ("check.py", ["--json", "--config"], None)])
 def test_314_imports_real_package(tmp_path, stub, args, stdout):
-    # P8: both stubs hand over to the real package, not to a module planted next to the cwd.
+    # P8: the stubs hand over to the real package, not to a module planted next to the cwd.
     (tmp_path / "destructive_guard.py").write_text("raise SystemExit(99)\n")
     python = Pythons.require_new_python(os.environ)
-    env = IsolatedEnv.clean({"GATE_ENABLED": "0"} if stub == "gate_main.py" else {})
+    env = IsolatedEnv.clean({"GATE_ENABLED": "0"} if stub != "check.py" else {})
     proc = subprocess.run(
         [python, "-I", str(DG / "lib" / stub), *args], capture_output=True, text=True, cwd=tmp_path, env=env, check=False
     )

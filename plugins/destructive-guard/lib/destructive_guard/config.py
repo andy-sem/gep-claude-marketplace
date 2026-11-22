@@ -68,6 +68,15 @@ class GateConfig:
         return list(dict.fromkeys(names))
 
     @classmethod
+    def read(cls, env: Mapping[str, str], *, cwd: str | Path | None = None) -> dict[str, Any]:
+        """env -> {enabled, log}: the only settings the Jev-only hook reads itself (GATE_ENABLED, GATE_LOG).
+        Raises ConfigError for a value it does not understand."""
+        enabled = cls._flag(env, "GATE_ENABLED", True)
+        log_value = cls._value(env, "GATE_LOG")
+        log = None if log_value is None else ProjectDir.project_path(log_value, env, cwd if cwd is not None else os.getcwd())
+        return {"enabled": enabled, "log": log}
+
+    @classmethod
     def read_config(
         cls,
         env: Mapping[str, str],

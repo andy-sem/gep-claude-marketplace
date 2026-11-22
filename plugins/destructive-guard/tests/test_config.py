@@ -6,7 +6,6 @@ build_rules rows also run directly. The hook and env-guard rows run the hook scr
 """
 
 import json
-import re
 import subprocess
 from pathlib import Path
 
@@ -17,6 +16,7 @@ from destructive_guard.errors import ConfigError, RulesError
 from testkit.check_cli import CheckRunner
 from testkit.envs import IsolatedEnv
 from testkit.hook import HookRunner
+from testkit.legacy_gate import LegacyGate
 from testkit.projects import TempProject
 
 EXTRA_RULES = {
@@ -288,13 +288,13 @@ def test_strict_asks_loose_still_checks_other_parts(impl, tmp_path):
     assert rule(impl, 'bash -c "rm -rf $DIR"', tmp_path, strict=False) == "rm-recursive-force"
     assert rule(impl, 'sh -c "cd $D && git reset --hard"', tmp_path, strict=False) == "git-reset-hard"
     # input-level problems always ask
-    r = HookRunner.run(impl, json.dumps({"tool_name": "Bash", "tool_input": {}}), {"GATE_STRICT": "0"}, cwd=tmp_path)
+    r = LegacyGate.run(json.dumps({"tool_name": "Bash", "tool_input": {}}), {"GATE_STRICT": "0"}, cwd=tmp_path)
     assert r.status == 0
     assert HookRunner.decision(r.stdout)["permissionDecisionReason"].startswith("unparsable:")
 
 
 # ---------------------------------------------------------------------------
-# Hook level (gate.sh)
+# Rule gate (0.8 pipeline, in-process; deleted in L2)
 # ---------------------------------------------------------------------------
 
 
@@ -302,7 +302,7 @@ def test_strict_asks_loose_still_checks_other_parts(impl, tmp_path):
 def hook(impl, tmp_path):
     def go(command, env=None):
         stdin = command if isinstance(command, bytes) else HookRunner.bash_input(command, tmp_path)
-        r = HookRunner.run(impl, stdin, env or {}, cwd=tmp_path)
+        r = LegacyGate.run(stdin, env or {}, cwd=tmp_path)
         assert r.status == 0
         return HookRunner.decision(r.stdout)["permissionDecisionReason"] if r.stdout else None
 
@@ -319,7 +319,6 @@ def test_hook_defaults(hook):
 def test_hook_disabled_emits_nothing(hook):
     assert hook("rm -rf /", {"GATE_ENABLED": "0"}) is None
     assert hook(b"{not json", {"GATE_ENABLED": "off"}) is None
-    assert hook("rm -rf /", {"GATE_ENABLED": "0", "GATE_CHECKS": "bogus"}) is None
 
 
 def test_hook_bad_configuration_fails_closed(hook, tmp_path, extra_rules):
@@ -347,43 +346,13 @@ def test_hook_relative_rules_file_from_subdirectory(impl, tmp_path, extra_rules)
     sub = root / "apps" / "web"
 
     def run(env):
-        r = HookRunner.run(
-            impl, HookRunner.bash_input("deployctl release v1", sub), {"GATE_RULES_FILE": ".claude/rules.json"}, env, cwd=sub
+        r = LegacyGate.run(HookRunner.bash_input("deployctl release v1", sub), {"GATE_RULES_FILE": ".claude/rules.json"}, env, cwd=sub
         )
         assert r.status == 0
         return HookRunner.decision(r.stdout)["permissionDecisionReason"]
 
     assert run({"CLAUDE_PROJECT_DIR": str(root)}).startswith("deployctl:")
     assert run({}).startswith("deployctl:")  # git root of the hook's cwd
-
-
-def test_hook_gate_log_appends_redacted_lines(hook, tmp_path):
-    log = tmp_path / "decisions.log"
-    hook("git push --force", {"GATE_LOG": str(log)})
-    hook("ls", {"GATE_LOG": str(log)})
-    hook("API_TOKEN=supersecret deployctl ping", {"GATE_LOG": str(log)})
-    hook("cat .env", {"GATE_LOG": str(log)})
-    lines = [json.loads(line) for line in log.read_text().strip().split("\n")]
-    assert len(lines) == 4
-    assert lines[0]["tool"] == "Bash"
-    assert lines[0]["command"] == "git push --force"
-    assert lines[0]["rule"].startswith("git-push-force:")
-    assert lines[0]["decision"] == "ask"
-    assert lines[1]["decision"] == "none"
-    assert lines[1]["rule"] is None
-    assert "supersecret" not in lines[2]["command"], lines[2]["command"]
-    assert lines[3]["command"] is None
-    for line in lines:
-        assert re.match(r"^\d{4}-", line["ts"])
-
-
-def test_hook_gate_log_off_and_bad_path(hook, tmp_path):
-    log = tmp_path / "off.log"
-    hook("git push --force", {"GATE_LOG": str(log), "GATE_ENABLED": "0"})
-    assert not log.exists()
-    assert hook("git push --force", {"GATE_LOG": str(tmp_path / "no" / "such" / "dir.log")}).startswith(
-        "git-push-force:"
-    )
 
 
 # ---------------------------------------------------------------------------

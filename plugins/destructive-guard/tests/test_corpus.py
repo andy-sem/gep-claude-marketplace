@@ -14,6 +14,7 @@ from testkit import DG
 from testkit.check_cli import CheckRunner
 from testkit.hook import HookRunner
 from testkit.impl import Impl
+from testkit.legacy_gate import LegacyGate
 from testkit.projects import TempProject
 
 CASES = DG / "tests" / "cases"
@@ -97,7 +98,7 @@ def corpus_results(tmp_path_factory) -> dict[tuple[str, int], str | None]:
                 if "hook" in call
                 else HookRunner.mcp_input(call["mcp"], call["input"], cwd)
             )
-            out = HookRunner.run(impl, stdin, env, cwd=cwd).stdout
+            out = LegacyGate.run(stdin, env, cwd=cwd).stdout
             return key, HookRunner.decision(out)["permissionDecisionReason"].split(":")[0] if out else None
         r = CheckRunner.check_call(impl, call, env=env, cwd=cwd)
         if r["decision"] != "ask":
