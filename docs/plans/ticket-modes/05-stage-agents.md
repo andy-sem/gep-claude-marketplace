@@ -1,7 +1,7 @@
 # Task 05: stage agents read the mode and the criteria
 
 Plan: [../ticket-modes.md](../ticket-modes.md) D3 (planner line), D6, §4.
-Depends on: 04. Status: not started.
+Depends on: 04. Status: done.
 
 ## Goal
 
