@@ -37,7 +37,8 @@ def test_command_and_flags_are_accepted(doc, command, flags):
         assert flag in FlowCli.VALUE_OPTIONS or flag in BOOLEAN, f"{doc.name}: {flag} is not a flow.py option"
         if flag == "--parent":
             continue
-        argv += [flag] if flag in BOOLEAN else [flag, "3" if flag in ("--max", "--poll-seconds", "--stale-hours", "--lost-watch-minutes") else "x"]
+        value = {"--mode": "heavy", "--max": "3", "--poll-seconds": "3", "--stale-hours": "3", "--lost-watch-minutes": "3"}.get(flag, "x")
+        argv += [flag] if flag in BOOLEAN else [flag, value]
     opts = FlowCli.parse_args(argv)
     assert opts["command"] == command
 
@@ -46,3 +47,11 @@ def test_the_skill_documents_every_command():
     text = DOCS[0].read_text(encoding="utf-8")
     for command in FlowCli.COMMANDS:
         assert f"flow.py\" {command}" in text or f"flow.py {command}" in text
+
+
+def test_the_skill_passes_the_mode_on_launch():
+    text = (PLUGIN / "skills/ticket-flow/SKILL.md").read_text(encoding="utf-8")
+    launch = [line for line in text.splitlines() if re.search(r"flow\.py\"? launch", line)]
+    assert launch, "the skill has no flow.py launch command"
+    assert all("--mode" in line for line in launch)
+    assert "modes.md#4-decision-rules-d2" in text
