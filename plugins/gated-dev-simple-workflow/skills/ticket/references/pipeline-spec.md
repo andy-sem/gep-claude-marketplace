@@ -158,15 +158,16 @@ choice in the H2 summary and records it in `state.json` (`devTier`,
 Models come from `models.devGodzilla` / `devWorkhorse` / `devPawn`
 (defaults `opus` / `sonnet` / `haiku`), the fixed tier from `devTier`.
 
-A tier out of its depth is promoted automatically, once per tier, in every dev
-run, before the developer is asked:
+A tier out of its depth is promoted automatically, all the way up (`pawn` →
+`workhorse` → `godzilla`), at most once per tier, in every dev run
+(`implement`, `fix-review`, `fix-pr`), before the developer is asked:
 
 | Agent result | Action |
 | --- | --- |
 | `NEEDS_DECISION` with `tier too low: <reason>` | Re-run the stage one tier up; no H-point |
 | `tier too low:` from `godzilla` | H3 |
-| `verification failed: ...` from `pawn` or `workhorse` | Re-run one tier up, continuing from the `Plan-Step:` trailers |
-| `verification failed: ...` after a promotion, or from `godzilla` | H6 |
+| `verification failed: ...` from `pawn` or `workhorse` (also after a promotion) | Re-run one tier up, continuing from the committed trailers |
+| `verification failed: ...` from `godzilla` | H6 |
 | Any other `NEEDS_DECISION` | H3; the tier does not change |
 | Crash, no marker | 1 retry on the same tier, then H7 |
 
