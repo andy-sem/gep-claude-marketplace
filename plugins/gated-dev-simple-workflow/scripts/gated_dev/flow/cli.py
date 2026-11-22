@@ -1,7 +1,7 @@
 """Command line of the /ticket-flow helper.
 
     flow.py status --parent P [--max N] [--candidate KEY]...
-    flow.py launch --parent P KEY [--summary TEXT] [--reason TEXT] [--max N] [--remote-control] [--dry-run]
+    flow.py launch --parent P KEY [--summary TEXT] [--reason TEXT] [--max N] [--mode MODE] [--remote-control] [--dry-run]
     flow.py skip   --parent P KEY [--reason TEXT]
     flow.py retry  --parent P KEY
     flow.py wait   --parent P [--poll-seconds N] [--stale-hours N] [--lost-watch-minutes N]
@@ -41,6 +41,7 @@ class FlowCli:
         "--max": "max",
         "--summary": "summary",
         "--reason": "reason",
+        "--mode": "mode",
         "--candidate": "candidates",
         "--poll-seconds": "pollSeconds",
         "--stale-hours": "staleHours",
@@ -49,7 +50,7 @@ class FlowCli:
     }
     ALLOWED: ClassVar[dict[str, frozenset[str]]] = {
         "status": frozenset(("parent", "max", "candidates", "cwd")),
-        "launch": frozenset(("parent", "max", "summary", "reason", "remoteControl", "dryRun", "cwd")),
+        "launch": frozenset(("parent", "max", "summary", "reason", "mode", "remoteControl", "dryRun", "cwd")),
         "skip": frozenset(("parent", "reason", "cwd")),
         "retry": frozenset(("parent", "cwd")),
         "wait": frozenset(("parent", "max", "pollSeconds", "staleHours", "lostWatchMinutes", "cwd")),
@@ -59,8 +60,9 @@ class FlowCli:
     USAGE = """Usage: flow.py <command> --parent PARENT [options]
 
     status  [--max N] [--candidate KEY]...   observe the launched runs, save, print the flow
-    launch  KEY [--summary TEXT] [--reason TEXT] [--max N] [--remote-control] [--dry-run]
-                                             open the session of KEY and record it as launched
+    launch  KEY [--summary TEXT] [--reason TEXT] [--max N] [--mode heavy|medium|light]
+                  [--remote-control] [--dry-run]
+                                             open the session of KEY (with that pipeline mode) and record it as launched
     skip    KEY [--reason TEXT]              never pick KEY
     retry   KEY                              forget a skipped or aborted KEY
     wait    [--poll-seconds N] [--stale-hours N] [--lost-watch-minutes N]
@@ -117,6 +119,8 @@ class FlowCli:
             raise LaunchError(f"{command} needs exactly one ticket key")
         if not wants_key and opts["keys"]:
             raise LaunchError(f"{command} takes no ticket key")
+        if "mode" in opts and opts["mode"] not in TicketProject.MODE_NAMES:
+            raise LaunchError(f"mode must be one of {', '.join(TicketProject.MODE_NAMES)}, got {opts['mode']!r}")
         for name in ("max", "pollSeconds", "staleHours", "lostWatchMinutes"):
             if name in opts:
                 opts[name] = cls._number(name, opts[name])
@@ -172,7 +176,7 @@ class FlowCli:
         merged.update({name: opts[name] for name in self.DEFAULTS if name in opts})
         return merged
 
-    def _open_session(self, *, root: str, key: str, config: Mapping, parent: str, summary: str, remote_control: bool, dry_run: bool) -> dict:
+    def _open_session(self, *, root: str, key: str, config: Mapping, parent: str, summary: str, mode: str | None = None, remote_control: bool, dry_run: bool) -> dict:
         """The launcher call: the summary names the ticket's worktree, the parent resolves `baseFromParent`."""
         return TicketLauncher.launch_ticket(
             root=root,
@@ -181,6 +185,7 @@ class FlowCli:
             remote_control=remote_control,
             dry_run=dry_run,
             summary=summary or None,
+            ticket_mode=mode,
             parent=parent,
             env=self.env,
             run=self.run,
@@ -249,7 +254,7 @@ class FlowCli:
         finally:
             if locked:
                 state.release()
-        tickets = {key: {**ticket, **({"changedAt": report["observations"][key]["changedAt"], "heartbeatAt": report["observations"][key]["heartbeatAt"]} if key in report["observations"] else {})} for key, ticket in state.tickets.items()}
+        tickets = {key: {**ticket, "mode": ticket.get("mode") or "-", **({"changedAt": report["observations"][key]["changedAt"], "heartbeatAt": report["observations"][key]["heartbeatAt"]} if key in report["observations"] else {})} for key, ticket in state.tickets.items()}
         self._emit(
             {
                 "command": "status",
@@ -269,7 +274,7 @@ class FlowCli:
 
     def _launch(self, state: FlowState, project: TicketProject, config: Mapping, opts: Mapping, root: str) -> int:
         key = opts["keys"][0]
-        summary, reason = opts.get("summary", ""), opts.get("reason", "")
+        summary, reason, mode = opts.get("summary", ""), opts.get("reason", ""), opts.get("mode")
 
         def attempt() -> dict:
             if "max" in opts:
@@ -278,7 +283,7 @@ class FlowCli:
                 raise FlowError(f"{key} is already in the flow of {state.parent} ({state.tickets[key]['status']}); --retry only frees skipped or aborted tickets")
             if project.find_run(key=key, config=config) is not None:
                 raise FlowError(f"{key} already has a run; open it with /ticket {key} --resume")
-            return self._open_session(root=root, key=key, config=config, parent=state.parent, summary=summary, remote_control=opts["remoteControl"], dry_run=opts["dryRun"])
+            return self._open_session(root=root, key=key, config=config, parent=state.parent, summary=summary, mode=mode, remote_control=opts["remoteControl"], dry_run=opts["dryRun"])
 
         if opts["dryRun"]:
             state.load()  # reads only: a dry run takes no lock and writes nothing
@@ -288,7 +293,7 @@ class FlowCli:
         with state.transaction():
             result = attempt()
             worktree = result.get("worktree")
-            state.add_launched(key, summary=summary, reason=reason, worktree=worktree.get("path") if isinstance(worktree, Mapping) else None)
+            state.add_launched(key, summary=summary, reason=reason, worktree=worktree.get("path") if isinstance(worktree, Mapping) else None, mode=mode)
             state.record_pick(key=key, reason=reason or "launched")
             state.save()
         self._emit({"command": "launch", "parent": state.parent, "key": key, "dryRun": False, "launched": result["launched"], "mode": result["mode"], "cwd": result.get("cwd"), "title": result.get("title")})
