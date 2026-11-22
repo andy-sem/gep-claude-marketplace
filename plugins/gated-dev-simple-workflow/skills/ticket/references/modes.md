@@ -147,7 +147,9 @@ session starts.
 launcher starts `claude --model <modes.<mode>.session>` and passes
 `/ticket <KEY> --mode <mode>`. Without a mode it starts without `--model`
 (the session decides the mode, §4). A resume starts on the session model of
-the mode recorded in `state.json` and passes no `--mode`.
+the mode recorded in `state.json` and passes no `--mode`. `modes.<mode>.session`
+may not be `haiku` (nor a `claude-...haiku...` id): the session is the
+orchestrator and needs sonnet or opus.
 
 **Hand-started sessions** keep their model. Strength order:
 `haiku` < `sonnet` < `opus`; a `claude-...` id counts as the family it names
