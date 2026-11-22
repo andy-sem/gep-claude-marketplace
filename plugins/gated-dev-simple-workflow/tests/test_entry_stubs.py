@@ -22,7 +22,7 @@ def test_old_python_gets_exit_3(old_python, stub):
     EntryStubs.check_old_python_exit_3(old_python, stub[0])
 
 
-@pytest.mark.parametrize("stub", [s for s in STUBS if s[1] not in ("notify", "watch_pr", "launch")], ids=EntryStubs.stub_id)
+@pytest.mark.parametrize("stub", [s for s in STUBS if s[1] not in ("notify", "watch_pr", "launch", "flow")], ids=EntryStubs.stub_id)
 def test_314_imports_package(tmp_path, stub):
     EntryStubs.check_314_imports_package(tmp_path, *stub)
 
@@ -69,3 +69,18 @@ def test_314_launch_stub_hands_over_to_the_real_package(tmp_path):
     )
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("Usage: launch.py ")
+
+
+def test_314_flow_stub_hands_over_to_the_real_package(tmp_path):
+    # P13: not the planted module next to the cwd; --help prints the usage without any git or gh call.
+    (tmp_path / "gated_dev.py").write_text("raise SystemExit(99)\n")
+    proc = subprocess.run(
+        [Pythons.require_new_python(os.environ), "-I", str(GD / "scripts" / "flow.py"), "--help"],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        env=IsolatedEnv.clean(),
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("Usage: flow.py ")

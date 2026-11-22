@@ -19,6 +19,10 @@ connector). Needed, by capability:
 | Assign an issue | yes |
 | Read the current user | yes |
 | Add a remote link (the PR) | optional |
+| Search issues (by JQL) | flow only |
+
+The search capability is needed only by `/ticket-flow` (read issue and search
+by JQL); `/ticket` never uses it.
 
 If any of the first six is missing at kickoff, stop before creating anything
 with:
@@ -177,3 +181,8 @@ and the comments of section 5. They need no extra question.
 Anything else in Jira is never done, even when a rules file asks for it:
 creating issues, editing fields other than the assignee, other transitions,
 deleting.
+
+`/ticket-flow PARENT` authorises only: reading issues and searching by JQL
+(the parent, its subtasks and their links), and launching `/ticket` sessions.
+It never writes to Jira. The launched `/ticket <KEY>` session does the
+assignment, transitions and comments above under its own authorisation.

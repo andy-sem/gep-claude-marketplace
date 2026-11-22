@@ -18,7 +18,7 @@ The two plugins are independent and installable on their own:
 | Plugin | What it is | Ships |
 | --- | --- | --- |
 | `destructive-guard` | Deterministic `PreToolUse` approval gate. Installed once, globally; protects every session (human or agent). Configured **only through env variables**; useful with zero config. | hooks, gate engine, rule packs, Jev prompts, `check` skill |
-| `gated-dev-simple-workflow` | Ticket (file or Jira issue) → spec → plan → dev → review → PR pipeline (`/ticket`). Knows nothing about gate internals; works with or without the gate and treats any gate prompt or denial as a checkpoint, never something to work around. | `ticket` skill, four stage agents, launcher, PR watcher, `Notification` hook |
+| `gated-dev-simple-workflow` | Ticket (file or Jira issue) → spec → plan → dev → review → PR pipeline (`/ticket`), and the subtasks of a Jira parent run in turn (`/ticket-flow`). Knows nothing about gate internals; works with or without the gate and treats any gate prompt or denial as a checkpoint, never something to work around. | `ticket` and `ticket-flow` skills, four stage agents, launcher, flow CLI, PR watcher, `Notification` hook |
 
 ### `destructive-guard` (`plugins/destructive-guard/`)
 
@@ -34,6 +34,7 @@ The two plugins are independent and installable on their own:
 ### `gated-dev-simple-workflow` (`plugins/gated-dev-simple-workflow/`)
 
 - `skills/ticket/SKILL.md` is the orchestrator: it runs in the main session, never writes product code, and drives one subagent per stage in a worktree per ticket (`git worktree`, Orca or iTerm2).
+- `skills/ticket-flow/SKILL.md` (`/ticket-flow PARENT`, needs `tracker`) is the driver for one Jira parent: it picks the next ready subtask, launches its `/ticket` session, waits and repeats. The deterministic part is `scripts/flow.py` + `scripts/gated_dev/flow/`; flow state lives in the git common dir; settings in the `flow` config key; the pick rules are in `skills/ticket/references/flow.md`. Jira writes stay in `/ticket`.
 - Agents in `agents/`: `ticket-spec` → `spec.md`, `ticket-planner` → `plan.md`, `ticket-dev` → commits + `dev-report.md`, `ticket-reviewer` → `review.md`. Each ends with `RESULT: OK <file>` or a `NEEDS_DECISION` block.
 - File-based: the ticket is `docs/tickets/<KEY>/ticket.md` by default, and stages read/write files next to it. Optional Jira tracker (`tracker` in `.claude/gated-dev.json`, behaviour in `skills/ticket/references/jira.md`): the orchestrator fetches the issue into `ticket.md` and moves it To Do → In Progress → In Review → Done using the session's own Jira tools. The stage agents stay tracker-free. Never name an MCP server or its tools in shipped files (`tests/test_no_named_mcp.py`).
 - Plan approval is always a stop point; after it the run commits, pushes and opens a PR with `gh`, then watches the PR (`scripts/watch_pr.py`, background): new feedback → follow-up round (`--address-review`, dev `MODE=fix-pr`, replies marked `<!-- gated-dev -->`), merge → notification and worktree removal (branch kept).
