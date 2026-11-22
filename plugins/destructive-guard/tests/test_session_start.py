@@ -100,3 +100,26 @@ def test_no_interpreter_on_path(tmp_path):
     assert proc.returncode == 0
     assert json.loads(proc.stdout)["systemMessage"].startswith("destructive-guard: no Python >= 3.14")
     assert os.path.isfile(DG / "hooks" / "session-start.sh")
+
+
+def test_unwritable_log_is_reported(impl, tmp_path):
+    blocker = tmp_path / "a-file"
+    blocker.write_text("")
+    log = blocker / "gate.log"
+    msg = message(impl, OK, {"GATE_LOG": str(log)})
+    assert msg.startswith(f"destructive-guard: cannot write GATE_LOG {log} (")
+    assert msg.endswith("): no log this session")
+
+
+def test_unwritable_log_joins_the_misconfigured_message(impl, tmp_path):
+    blocker = tmp_path / "a-file"
+    blocker.write_text("")
+    msg = message(impl, {"GATE_LOG": str(blocker / "gate.log"), "GATE_ENV_GUARD": "maybe"})
+    assert msg.startswith("destructive-guard: GATE_ENV_GUARD must be 0 or 1")
+    assert "; cannot write GATE_LOG " in msg
+
+
+def test_writable_log_in_a_new_directory_is_silent(impl, tmp_path):
+    log = tmp_path / "logs" / "gate.jsonl"
+    assert HookRunner.run_session(impl, OK, {"GATE_LOG": str(log)}).stdout == ""
+    assert log.parent.is_dir()
