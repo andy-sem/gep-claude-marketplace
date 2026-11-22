@@ -75,6 +75,7 @@ class TicketLauncher:
         remote_control: bool = False,
         dry_run: bool = False,
         summary: str | None = None,
+        parent: str | None = None,
         env: Mapping[str, str] | None = None,
         run: ProcessRunner.Run = ProcessRunner.default_run,
         log: Callable[[str], None] = lambda line: None,
@@ -82,7 +83,9 @@ class TicketLauncher:
         """Plans and (unless `dry_run`) opens the session for one ticket.
 
         `summary` titles the session when there is no `ticket.md` yet (a tracker ticket the session
-        will fetch); with a `ticket.md` its title wins.
+        will fetch); with a `ticket.md` its title wins. On Orca, a tracker ticket with a `summary`
+        gets its worktree before the session starts; `parent` (the tracker parent) resolves
+        `baseFromParent` for it.
 
         Returns `{key, mode, host, cwd, command, title, base, worktree, note, launched}` where
         `mode` is `resume`, `orca-worktree` or `main-checkout`. A dry run calls only read-only
@@ -140,16 +143,24 @@ class TicketLauncher:
         # Without a ticket.md, the session's intake writes it (from the tracker or from the project
         # rules), and it decides title and base: start in the main checkout and let the session create
         # the worktree. Without a tracker or rules, read_ticket raises the "no ticket file" error.
+        ticket: dict | None = None
         if not (Path(root) / config["ticketsDir"] / key / "ticket.md").exists():
             if config["tracker"]:
                 note = "no ticket.md yet; the session fetches it from Jira"
+                # The summary names the worktree and the branch; the session's intake writes
+                # ticket.md into it and adopts it (kickoff step 5.1).
+                if host == "orca" and summary:
+                    found = TicketProject(root, run).base_from_parent(parent=parent, config=config)
+                    if found is not False:
+                        ticket = {"file": None, "title": summary, "base": found}
             elif config["orchestratorRules"]:
                 note = "no ticket.md yet; the session's intake rules write it"
             else:
                 note = None
-            if note:
+            if note and ticket is None:
                 return open_session({"mode": "main-checkout", "cwd": root, "args": [], "summary": summary, "note": note})
-        ticket = TicketProject(root).read_ticket(key=key, config=config)
+        if ticket is None:
+            ticket = TicketProject(root).read_ticket(key=key, config=config)
         summary = ticket["title"]
 
         def main_checkout(note: str | None) -> dict:
@@ -162,7 +173,7 @@ class TicketLauncher:
 
         branch_base = TicketProject(root, run).resolve_base(ticket=ticket, config=config)
         if dry_run:
-            argv = OrcaWorktrees(root, run).orca_worktree_args(key=key, title=ticket["title"], base=branch_base)
+            argv = OrcaWorktrees(root, run).orca_worktree_args(key=key, title=ticket["title"], base=branch_base, parent=env.get("ORCA_WORKTREE_ID"))
             planned = " ".join(a if LaunchNaming._PLAIN_ARG.fullmatch(a) else LaunchNaming.shell_quote(a) for a in argv)
             return {
                 **base,
@@ -177,7 +188,7 @@ class TicketLauncher:
         run("git", ["-C", root, "fetch", "origin", branch_base])
         # A failure from here on must not fall back to the main checkout: the session would create
         # a second worktree.
-        worktree = OrcaWorktrees(root, run).create_orca_worktree(key=key, ticket=ticket, config=config, base=branch_base, log=log)
+        worktree = OrcaWorktrees(root, run).create_orca_worktree(key=key, ticket=ticket, config=config, base=branch_base, parent=env.get("ORCA_WORKTREE_ID"), log=log)
         opened = open_session(
             {
                 "mode": "orca-worktree",

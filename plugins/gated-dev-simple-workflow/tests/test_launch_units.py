@@ -463,3 +463,52 @@ def test_read_config_dry_run_gate(tmp_path):
     assert TicketProject(project(tmp_path / "on", config={"dryRunGate": True})).read_config()["dryRunGate"] is True
     with pytest.raises(LaunchError, match="dryRunGate must be true or false"):
         TicketProject(project(tmp_path / "bad", config={"dryRunGate": "yes"})).read_config()
+
+
+def test_orca_worktree_args_make_the_worktree_a_child_of_the_launchers_workspace():
+    argv = OrcaWorktrees("/r").orca_worktree_args(key="K-1", title="Do it", base="main", parent="repo::/r")
+    assert argv[-3:] == ["--parent-worktree", "worktree:repo::/r", "--json"]
+
+
+def _tracker_launch(tmp_path, *, tracker=None, summary="Add export", parent=None, heads="", env=None):
+    from gated_dev.completed_run import CompletedRun
+    from gated_dev.launch.launcher import TicketLauncher
+
+    calls = []
+
+    def fake_run(file, argv):
+        calls.append([file, *argv])
+        if argv[2:4] == ["ls-remote", "--heads"]:
+            return CompletedRun(heads, "")
+        return CompletedRun("", "")
+
+    root = project(tmp_path, config={"tracker": {"type": "jira", **(tracker or {})}, "baseBranch": "main"})
+    config = TicketProject(root).read_config()
+    env = {"TERM_PROGRAM": "Orca", "ORCA_WORKTREE_ID": "repo::/main"} if env is None else env
+    plan = TicketLauncher.launch_ticket(root=root, key="PROJ-1", config=config, dry_run=True, summary=summary, parent=parent, env=env, run=fake_run)
+    return plan, calls
+
+
+def test_tracker_ticket_with_summary_gets_a_child_orca_worktree_before_the_session(tmp_path):
+    plan, _ = _tracker_launch(tmp_path)
+    assert plan["mode"] == "orca-worktree"
+    assert plan["base"] == "main"
+    assert "--name proj-1-add-export --branch PROJ-1/add-export --base-branch origin/main" in plan["command"]
+    assert "--parent-worktree worktree:repo::/main" in plan["command"]
+
+
+def test_tracker_ticket_base_from_parent(tmp_path):
+    one, calls = _tracker_launch(tmp_path / "one", tracker={"baseFromParent": "feature/{parent}/*"}, parent="PROJ-0", heads="abc\trefs/heads/feature/PROJ-0/x\n")
+    assert one["mode"] == "orca-worktree" and one["base"] == "feature/PROJ-0/x"
+    assert ["git", "-C", str(tmp_path / "one"), "ls-remote", "--heads", "origin", "feature/PROJ-0/*"] in calls
+    none, _ = _tracker_launch(tmp_path / "none", tracker={"baseFromParent": "feature/{parent}/*"}, parent="PROJ-0")
+    assert none["mode"] == "orca-worktree" and none["base"] == "main"
+    several, _ = _tracker_launch(tmp_path / "several", tracker={"baseFromParent": "feature/{parent}/*"}, parent="PROJ-0", heads="a\trefs/heads/feature/PROJ-0/x\nb\trefs/heads/feature/PROJ-0/y\n")
+    assert several["mode"] == "main-checkout"  # H3 is asked in the session
+    unknown, _ = _tracker_launch(tmp_path / "unknown", tracker={"baseFromParent": "feature/{parent}/*"})
+    assert unknown["mode"] == "main-checkout"
+
+
+def test_tracker_ticket_without_summary_or_outside_orca_starts_in_the_main_checkout(tmp_path):
+    assert _tracker_launch(tmp_path / "a", summary=None)[0]["mode"] == "main-checkout"
+    assert _tracker_launch(tmp_path / "b", env={"TERM_PROGRAM": "iTerm.app"})[0]["mode"] == "main-checkout"
