@@ -5,9 +5,9 @@ import re
 
 import pytest
 
-from testkit import DG, REPO
-from testkit.hook import HookRunner
-from testkit.jev_mock import JevMock
+from dg_testkit import DG, REPO
+from dg_testkit.hook import HookRunner
+from dg_testkit.jev_mock import JevMock
 
 HERE = DG / "tests"
 RISKY = JevMock.probs(0.1, 0.1, 0.6, 0.2)
@@ -16,7 +16,7 @@ ASK_PREFIX = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDec
 
 
 @pytest.fixture
-def run(impl, jev):
+def run(jev):
     """Runs the hook against the mock; `answer` is a probabilities dict or {"kind": ..., "status": ...}."""
 
     def go(stdin, answer=SAFE, env=None, cwd=None):
@@ -25,7 +25,7 @@ def run(impl, jev):
         else:
             jev.answer(answer)
         key = {"TYPESAFE_API_KEY": "test-key", "GATE_JEV_URL": jev.url, "GATE_JEV_PROMPT": "cloud-change"}
-        return HookRunner.run(impl, stdin, key, env or {}, cwd=cwd)
+        return HookRunner.run(stdin, key, env or {}, cwd=cwd)
 
     return go
 
@@ -66,14 +66,14 @@ def test_env_call_is_not_sent_and_warns(run, jev):
     assert jev.hits == 0
 
 
-def test_no_key_is_silent_per_call(impl):
-    r = HookRunner.run(impl, HookRunner.bash_input("rm -rf /", HERE))
+def test_no_key_is_silent_per_call():
+    r = HookRunner.run(HookRunner.bash_input("rm -rf /", HERE))
     assert (r.status, r.stdout) == (0, "")
 
 
 @pytest.mark.parametrize("stdin", ["not json", "", "null", '"x"', '{"tool_input": {}}', '{"tool_name": 3}'])
-def test_unreadable_input_asks_even_without_a_key(impl, stdin):
-    r = HookRunner.run(impl, stdin)
+def test_unreadable_input_asks_even_without_a_key(stdin):
+    r = HookRunner.run(stdin)
     out = json.loads(r.stdout)
     assert out["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert out["hookSpecificOutput"]["permissionDecisionReason"] == "plugin-fault: bad hook input"
@@ -86,23 +86,23 @@ def test_calls_that_need_no_decision_give_no_output(run, jev, stdin):
     assert jev.hits == 0
 
 
-def test_interpreter_unavailable_asks(impl):
-    r = HookRunner.run(impl, HookRunner.bash_input("git status", HERE), {impl.interpreter_var: "/nonexistent"})
+def test_interpreter_unavailable_asks():
+    r = HookRunner.run(HookRunner.bash_input("git status", HERE), {"GATE_INFRA_PYTHON": "/nonexistent"})
     out = json.loads(r.stdout)
     assert out["hookSpecificOutput"]["permissionDecisionReason"] == "plugin-fault: no Python >= 3.14 found (set GATE_INFRA_PYTHON)"
     assert out["systemMessage"].startswith("destructive-guard: no Python >= 3.14 found")
 
 
-def test_engine_partial_json_then_nonzero_gives_fixed_ask(impl, tmp_path):
+def test_engine_partial_json_then_nonzero_gives_fixed_ask(tmp_path):
     fake = _fake_engine(tmp_path, "partial.sh", """printf '{"hookSpecificOutput":{"permi'; exit 4""")
-    r = HookRunner.run(impl, HookRunner.bash_input("git status", HERE), {impl.interpreter_var: fake})
+    r = HookRunner.run(HookRunner.bash_input("git status", HERE), {"GATE_INFRA_PYTHON": fake})
     out = json.loads(r.stdout)
     assert out["hookSpecificOutput"]["permissionDecisionReason"] == "plugin-fault: internal error: engine exit 4"
 
 
-def test_engine_exit_0_without_output_is_no_decision(impl, tmp_path):
+def test_engine_exit_0_without_output_is_no_decision(tmp_path):
     fake = _fake_engine(tmp_path, "noop.sh", "exit 0")
-    assert HookRunner.run(impl, HookRunner.bash_input("git status", HERE), {impl.interpreter_var: fake}).stdout == ""
+    assert HookRunner.run(HookRunner.bash_input("git status", HERE), {"GATE_INFRA_PYTHON": fake}).stdout == ""
 
 
 def test_hook_registered_for_bash_and_mcp_only():

@@ -13,7 +13,7 @@ from destructive_guard.jev.config import JevConfig
 from destructive_guard.jev.prompt import JevPrompt
 from destructive_guard.jev.redactor import Redactor
 from destructive_guard.jev.request import JevRequest
-from testkit.jev_mock import JevMock
+from dg_testkit.jev_mock import JevMock
 
 BASE_ENV = {"TYPESAFE_API_KEY": "key-123"}
 JEV_URL = "https://api.typesafe.ai/v1/systemone"

@@ -15,7 +15,7 @@ from destructive_guard.jev.client import JevClient
 from destructive_guard.jev.config import JevConfig
 from destructive_guard.jev.prompt import JevPrompt
 from destructive_guard.jev.request import JevRequest
-from testkit.jev_mock import JevMock
+from dg_testkit.jev_mock import JevMock
 
 DOWN = "http://127.0.0.1:1/v1/systemone"
 DBHOST_SQL = "mcp__plugin_dbhost_dbhost__execute_sql"
