@@ -1,7 +1,7 @@
 # Task 06: orchestrator `/ticket` runs the modes
 
 Plan: [../ticket-modes.md](../ticket-modes.md) §3 (items 1–11), D1–D4, §9.
-Depends on: 04, 05. Status: not started.
+Depends on: 04, 05. Status: done.
 
 ## Goal
 

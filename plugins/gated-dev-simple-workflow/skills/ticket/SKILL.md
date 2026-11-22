@@ -1,6 +1,6 @@
 ---
 name: ticket
-description: Run a ticket file through the spec, plan, dev, review and PR pipeline with one subagent per stage, in its own git worktree. Use when the user invokes /ticket <KEY> (optionally with --resume, --status or --address-review), or says "start working on ticket <KEY>", "pick up <KEY>", "resume <KEY>", "status of <KEY>", "address review on <KEY>" or "fix PR comments on <KEY>". The ticket is a Markdown file (docs/tickets/<KEY>/ticket.md by default), a description the user pastes, or a Jira issue when the project configures a tracker.
+description: Run a ticket file through the spec, plan, dev, review and PR pipeline with one subagent per stage, in its own git worktree. Use when the user invokes /ticket <KEY> (optionally with --mode, --resume, --status or --address-review), or says "start working on ticket <KEY>", "pick up <KEY>", "resume <KEY>", "status of <KEY>", "address review on <KEY>" or "fix PR comments on <KEY>". The ticket is a Markdown file (docs/tickets/<KEY>/ticket.md by default), a description the user pastes, or a Jira issue when the project configures a tracker.
 ---
 
 # /ticket: ticket pipeline orchestrator
@@ -14,6 +14,8 @@ You are the orchestrator. You run in the main session, never write product code 
 | dev | `gated-dev-simple-workflow:ticket-dev` | commits, `dev-report.md` |
 | review | `gated-dev-simple-workflow:ticket-reviewer` | `review.md` |
 
+Not every ticket runs every stage. The run's **mode**, decided once at kickoff and only ever raised, sets the stages: `heavy` spec → plan → dev → review, `medium` plan → dev → review, `light` plan → dev. Plan approval (H2) is a stop in every mode. The rules (decision, raises, session model, records) are in `references/modes.md`.
+
 The pipeline is file-based: the ticket is `ticket.md`, and every stage reads and writes files in the ticket directory. Between stages it stays file-based. With a `tracker` in the config, the ticket comes from Jira and the issue is kept in step (`references/jira.md`); without one the pipeline knows no issue tracker, and a project can still connect one through `orchestratorRules` (section 0a). The design (interaction points H1 to H7, the `NEEDS_DECISION` protocol, stages, state file) is in `references/pipeline-spec.md`; the per-project settings are in `references/config.md`. Read the section you are acting on instead of working from memory.
 
 Rules that hold everywhere:
@@ -22,7 +24,7 @@ Rules that hold everywhere:
 - Spawn every stage subagent in the **foreground** (never `run_in_background`) and pass `model` explicitly (section 4). The only background work is the PR watcher of section 9c: a Bash command with `run_in_background: true`, not a subagent.
 - Never launch, restart or stop apps, dev servers or Docker. If something needs them and they are down, that is an infrastructure blocker (H6).
 - Never route around an approval gate, and never run a gated operation that the approved plan does not list. Do not edit product files yourself.
-- Keep `state.json` current: after every transition set the new `stage` and `updatedAt` (ISO-8601). Re-read it before every write, write the whole file and keep its `watch` field as it is (only the watcher of section 9c writes `watch`), and keep `tracker` and `rules` too.
+- Keep `state.json` current: after every transition set the new `stage` and `updatedAt` (ISO-8601). Re-read it before every write, write the whole file and keep its `watch` field as it is (only the watcher of section 9c writes `watch`), and keep `tracker`, `rules`, `mode`, `modeReason` and `modeHistory` too.
 - `state.json` is never committed. Never stage it, and never run a bare `git add -A`: when staging everything, use `git -C <wt> add -A -- . ':(exclude)<ticketsDir>/*/state.json'`.
 - Commit trailer: end every commit message you write with the `Co-Authored-By` attribution line that your session's instructions specify for commits. Do not hard-code a model name; if the session specifies no attribution, add none. "The trailer" below means this line.
 - Scripts and hooks of this plugin live under `${CLAUDE_PLUGIN_ROOT}` (`scripts/watch_pr.py`, `hooks/notify.py`). The scripts need Python >= 3.14: start them with `python3 -I`, or with `"$GATE_INFRA_PYTHON" -I` when `python3` is older and that variable is set.
@@ -33,7 +35,7 @@ Rules that hold everywhere:
 ## 0. Configuration and host
 
 1. `<session-root>` is the top level of the checkout this session started in (`$CLAUDE_PROJECT_DIR`, else `git rev-parse --show-toplevel`). `<root>` is the main checkout: the first `worktree` entry of `git worktree list --porcelain`.
-2. Read `<session-root>/.claude/gated-dev.json` if it exists (all keys optional; see `references/config.md`). Invalid JSON or an unknown key: report it and stop; never guess. Defaults: `ticketsDir` `docs/tickets`, `keyPattern` `^[A-Za-z][A-Za-z0-9._-]*$`, `baseBranch` unset, `setupCommand` unset, `formatCommand` unset, `riskPaths` (section 8), `escalationExtra` `[]`, `models` `{spec: sonnet, plan: opus, dev: sonnet, review: sonnet, reviewRisk: opus}`, `orchestratorRules` unset, `tracker` unset, `dryRunGate` `false`. With a tracker the default `keyPattern` is `^[A-Z][A-Z0-9]*-\d+$`, and its sub-keys are validated as `references/config.md` says. When `orchestratorRules` is set, read that file (`<session-root>/<orchestratorRules>`) now; a missing file, or a `## ` heading that is not an event name of section 0a, is a config error: report it and stop. A `tracker` together with an `orchestratorRules` file that has a `## intake` section is a config error too: report it and stop.
+2. Read `<session-root>/.claude/gated-dev.json` if it exists (all keys optional; see `references/config.md`). Invalid JSON or an unknown key: report it and stop; never guess. Defaults: `ticketsDir` `docs/tickets`, `keyPattern` `^[A-Za-z][A-Za-z0-9._-]*$`, `baseBranch` unset, `setupCommand` unset, `formatCommand` unset, `riskPaths` (section 8), `escalationExtra` `[]`, `models` `{spec: sonnet, plan: opus, dev: sonnet, review: sonnet, reviewRisk: opus}`, `orchestratorRules` unset, `tracker` unset, `dryRunGate` `false`, `mode` `auto`, `modes` `{heavy: {session: opus}, medium: {session: sonnet}, light: {session: sonnet}}` (entries override one by one), `modeRules` `[]`. `mode` must be `auto`, `heavy`, `medium` or `light`; `modes` may only have those three modes with the single sub-key `session` (`opus`, `sonnet`, `haiku` or a `claude-...` id); `modeRules` is a list of non-empty strings; anything else is a config error: report it and stop (`references/config.md#modes`). With a tracker the default `keyPattern` is `^[A-Z][A-Z0-9]*-\d+$`, and its sub-keys are validated as `references/config.md` says. When `orchestratorRules` is set, read that file (`<session-root>/<orchestratorRules>`) now; a missing file, or a `## ` heading that is not an event name of section 0a, is a config error: report it and stop. A `tracker` together with an `orchestratorRules` file that has a `## intake` section is a config error too: report it and stop.
 3. Gate dry-run. Only when `<session-root>/.claude/gated-dev.json` has `"dryRunGate": true` (default `false`; each checked call is one request to the gate's risk classifier and sends the redacted command) and the skill `destructive-guard:check` is in your list of available skills: find its script: in `~/.claude/plugins/installed_plugins.json`, take the `installPath` of the `destructive-guard@<marketplace>` entry whose `projectPath` is `<root>` (scope `project` or `local`), else the one with scope `user`, and check that `<installPath>/lib/check.py` exists (run it with `python3 -I`, or with `$GATE_INFRA_PYTHON` when that is set). Then `GATE_CHECK=CLAUDE_PROJECT_DIR='<session-root>' python3 -I '<installPath>/lib/check.py' --json`. Without `dryRunGate`, without `check.py`, or with `python3` older than 3.14 and no `GATE_INFRA_PYTHON`: no `GATE_CHECK` (the planner then writes `unknown` in the `Gate` column).
 4. Host: `orca` when `TERM_PROGRAM=Orca`, or `ORCA_TERMINAL_HANDLE` is set and `TERM_PROGRAM` is not `iTerm.app`; `iterm` when `TERM_PROGRAM=iTerm.app` or `ITERM_SESSION_ID` is set; otherwise `plain`. An `orca` host also needs the repo registered in Orca: if `orca repo show --repo path:<root> --json` fails (or `orca` is not on `PATH`), the host is `plain` and you say so in one line ("<root> is not an Orca repo; using git worktrees"). Only `orca` changes how worktrees are created and removed; `iterm` and `plain` use git directly.
 5. Tracker. With a `tracker`, check that the session has the Jira tools (`references/jira.md` §1) and resolve the site (§2). Missing tools: stop with the message of §1. This runs before section 1 does anything, so a bad setup creates nothing.
@@ -47,10 +49,10 @@ A project can add its own steps to the pipeline, for example to keep an issue tr
 | `intake` | Kickoff, step 1: no `ticket.md` and no pasted description. The section may write `ticket.md` (with front matter `base:` if it decides the base). |
 | `started` | Kickoff done: worktree, `state.json` and setup exist. |
 | `resumed` | `--resume`, after the checks of section 9 step 1. |
-| `spec-done` | Spec stage finished. |
+| `spec-done` | Spec stage finished (heavy mode only). |
 | `plan-approved` | H2 approved and the spec and plan committed. |
 | `dev-done` | Dev stage finished (also after each fix round). |
-| `review-done` | Each review verdict (`VERDICT` and `reviewRound` are known). |
+| `review-done` | Each review verdict (`VERDICT` and `reviewRound` are known); none in light mode unless it was raised. |
 | `pr-body` | Writing the PR body (section 9a step 3). The section may give lines to add under `## Spec & plan`. |
 | `pr-opened` | The PR exists (`prUrl` is set). |
 | `pr-feedback-addressed` | A PR feedback round of section 9b is closed. |
@@ -68,6 +70,7 @@ Rules for following them:
 
 1. Take the key from the user's text. It must match `keyPattern` and must not contain `/` or `..`; otherwise ask for it and stop.
 2. Flags: `--resume` ("resume <KEY>"), `--status` ("status of <KEY>"), `--address-review` ("address review on <KEY>", "fix PR comments on <KEY>"). At most one; if several are given, ask which. No flag means a new run ("start working on", "pick up").
+   `--mode heavy|medium|light` ("use light mode") is an option, not one of these flags: allowed with no flag (it decides the mode of the new run, `references/modes.md#4-decision-rules-d2` rule 1) and with `--resume` (section 9), never with `--status` or `--address-review` (say so and stop, changing nothing). Any other value: ask for a valid one and stop.
 3. Find an existing run: in `git worktree list --porcelain`, look for a worktree whose branch matches `refs/heads/<KEY>/*`. Its state file is `<wt>/<ticketsDir>/<KEY>/state.json`. If several match, keep the one whose `stage` is not `aborted`; if that still leaves zero or more than one, ask which to use. Set `TICKET_DIR=<wt>/<ticketsDir>/<KEY>`.
 4. Cases:
    - `--status`: no worktree or no state file: report "no state found for <KEY>", change nothing, stop. Otherwise section 2.
@@ -78,7 +81,7 @@ Rules for following them:
 
 ## 2. Status (read-only)
 
-Read `state.json` and print: ticket, title, stage (and `reviewRound`), branch, worktree, base branch, PR URL if any, `lastAddressedCommentAt` if set (stage `addressing_review` means PR feedback is being addressed), `watch.heartbeatAt` if set (the PR watcher of section 9c is alive while it is less than 3 minutes old), the number of recorded decisions with the last question, every entry of `warnings` (`tracker` ones included), with a tracker also `state.tracker.status` and `url` (one read-only fetch of the live status is allowed), and the paths of `ticket.md`, `spec.md`, `plan.md`, `decisions.md`, `dev-report.md`, `review.md` and `pr-feedback-<n>.md` that exist. "Open questions" means: stage `awaiting_plan_approval` (the plan waits for approval), or the unresolved `## Open questions` of `spec.md` when the stage is `spec`. Write nothing, spawn nothing.
+Read `state.json` and print: ticket, title, stage (and `reviewRound`), `mode` and `modeReason` (no `mode`: `heavy`, recorded before modes), every `modeHistory` entry (`from` → `to`, `by`, `reason`, `at`), branch, worktree, base branch, PR URL if any, `lastAddressedCommentAt` if set (stage `addressing_review` means PR feedback is being addressed), `watch.heartbeatAt` if set (the PR watcher of section 9c is alive while it is less than 3 minutes old), the number of recorded decisions with the last question, every entry of `warnings` (`tracker` ones included), with a tracker also `state.tracker.status` and `url` (one read-only fetch of the live status is allowed), and the paths of `ticket.md`, `spec.md`, `plan.md`, `decisions.md`, `dev-report.md`, `review.md` and `pr-feedback-<n>.md` that exist. "Open questions" means: stage `awaiting_plan_approval` (the plan waits for approval), or the unresolved `## Open questions` of `spec.md` when the stage is `spec`. Write nothing, spawn nothing.
 
 ## 3. Kickoff
 
@@ -90,6 +93,8 @@ Steps 1 to 5 stop with a clear message on any failure and leave nothing behind. 
    - Neither: **Event `intake`**. If the file exists afterwards, use it. Otherwise tell the user to create `<ticketsDir>/<KEY>/ticket.md` or to paste a description with the command, and stop.
 
    An empty file, or one with no `# ` heading, is not a ticket: say so and stop. Read the optional YAML front matter (`---` block at the top): `base:` (a branch name) is the only key the orchestrator uses (with a tracker the intake may set it, `references/jira.md` §3). The title is the first `# ` heading.
+
+   **Mode.** Now that the ticket is read, decide the mode with the rules of `references/modes.md#4-decision-rules-d2`, in order: `--mode`; config `mode` other than `auto`; then rules 3 to 6 together with `modeRules`, from `ticket.md` (with a tracker also the issue type and labels of its front matter), `riskPaths` and `escalationExtra`; when unsure, the heavier mode. Keep the mode and a one-line reason that names the deciding rule (step 6 records both) and print `Mode: <mode> (<reason>)`. Do not ask the developer about it; H2 is where the run can be redirected.
 2. **Base branch.** The first that applies: front matter `base:` (with a tracker it may come from `baseFromParent`; more than one matching branch is H3, asked in the session and recorded once `state.json` exists); config `baseBranch`; the remote default branch (`git symbolic-ref --short refs/remotes/origin/HEAD`, strip `origin/`; skip this when the command fails); `main`. Run `git fetch origin <base>`; failure: report and stop. From here the base is `BASE_REF=origin/<base>`, a ref for log and diff ranges only, never a branch to check out or push to. Pass it in the `BASE_BRANCH=` line of every prompt.
 3. **Slug.** Lowercase the title, replace every run of characters outside `[a-z0-9]` with `-`, trim leading and trailing `-`, cut to 40 characters, trim a trailing `-` again. Empty result: `work`. Branch `<KEY>/<slug>`.
 4. **Ignore pipeline paths.** The per-repo exclude file is `"$(git -C <root> rev-parse --path-format=absolute --git-common-dir)/info/exclude"`. Make sure it contains the lines `<ticketsDir>/*/state.json` and `/.claude/worktrees/`; append each one that is missing. (It is shared by all worktrees of the repository and is never committed.)
@@ -103,11 +108,12 @@ Steps 1 to 5 stop with a clear message on any failure and leave nothing behind. 
    2. *Branch already exists* (locally or on `origin`): ask Reuse (recommended) · Abort. Reuse: if `git worktree list --porcelain` shows the branch checked out in some worktree, adopt that worktree; otherwise `git worktree add <path> <branch>` on every host.
    3. *Host `orca`*: `orca worktree create --repo path:<root> --name <key-lower>-<slug> --branch <KEY>/<slug> --base-branch BASE_REF --setup skip [--parent-worktree worktree:$ORCA_WORKTREE_ID] --json` (the parent option only when `ORCA_WORKTREE_ID` is set, so the worktree becomes a child of the workspace this session runs in); take the path from its JSON (`result.worktree.path`, else `result.path`). If it fails, report it and stop (do not fall back: a later retry would create a second worktree).
    4. *Otherwise* (`iterm`, `plain`): `git worktree add --no-track -b <branch> <path> BASE_REF` (`--no-track`, so a plain push never targets the base).
-6. **Ticket dir and state.** `mkdir -p <wt>/<ticketsDir>/<KEY>`. If `<wt>/<ticketsDir>/<KEY>/ticket.md` does not exist (the base branch does not carry it), copy the file from step 1 there. Check `git -C <wt> check-ignore -q <ticketsDir>/<KEY>/state.json`; if it fails, stop and report it (the worktree stays; no `state.json` is written into a tree that would track it). Write `state.json`: `ticket`, `title`, `baseBranch` (bare name), `baseRef`, `branch`, `worktree` (absolute), `host`, `stage: "spec"`, `reviewRound: 0`, `decisions: []`, `warnings: []`, `prUrl: null`, `updatedAt`, and with a tracker `tracker` (`type`, `site`, `url`, `status`, `statusAt`, `pending: []`). Create `decisions.md` with the heading `# Decisions`.
-7. **Setup.** If `setupCommand` is set, run it with `cd <wt> &&`. Failure is an infrastructure blocker: H6 (Retry · Skip · Abort, section 7). Skip is recorded in `state.warnings` and `decisions.md`; Abort sets `abortedFrom: "spec"` and `stage: "aborted"` (section 10).
+6. **Ticket dir and state.** `mkdir -p <wt>/<ticketsDir>/<KEY>`. If `<wt>/<ticketsDir>/<KEY>/ticket.md` does not exist (the base branch does not carry it), copy the file from step 1 there. Check `git -C <wt> check-ignore -q <ticketsDir>/<KEY>/state.json`; if it fails, stop and report it (the worktree stays; no `state.json` is written into a tree that would track it). Write `state.json`: `ticket`, `title`, `baseBranch` (bare name), `baseRef`, `branch`, `worktree` (absolute), `host`, `stage` (`"spec"` in heavy mode, `"plan"` otherwise), `mode`, `modeReason`, `modeHistory: []`, `reviewRound: 0`, `decisions: []`, `warnings: []`, `prUrl: null`, `updatedAt`, and with a tracker `tracker` (`type`, `site`, `url`, `status`, `statusAt`, `pending: []`). Create `decisions.md` with the heading `# Decisions`.
+7. **Setup.** If `setupCommand` is set, run it with `cd <wt> &&`. Failure is an infrastructure blocker: H6 (Retry · Skip · Abort, section 7). Skip is recorded in `state.warnings` and `decisions.md`; Abort sets `abortedFrom` to the initial stage of step 6 and `stage: "aborted"` (section 10).
 8. **Session name.** When `TICKET_FLOW_KEY` is unset (a session started by hand), print one line suggesting `/rename <KEY> · <short title>`. The short title is the title with every character outside `[A-Za-z0-9 .,:()/_-]` replaced by a space, spaces collapsed, cut at the last word boundary within 40 characters. You cannot rename a session yourself.
 9. **Tracker `started`** (assign, To Do to In Progress, comment), then **Event `started`**.
-10. Continue with the spec stage.
+10. **Session model** (`references/modes.md#6-session-model-d4`). When `modes.<mode>.session` is stronger than the model this session runs on (order `haiku` < `sonnet` < `opus`; a `claude-...` id counts as the family it names), or either cannot be placed in that order, ask **Stop and restart on `<model>` (recommended)** · **Continue here**. Record the answer in `state.decisions` and `decisions.md` with the `stage: "mode"` shape of `references/modes.md#9-records`; **Continue here** also appends the `stage: "mode"` warning given there to `state.warnings`. Restart: print the worktree path and `cd '<wt>' && claude --model <model> "/ticket <KEY> --resume"`, then end the turn without spawning anything (the resumed session re-enters the recorded stage). A weaker mode in a stronger session is never asked about.
+11. Continue with the spec stage (section 5) in heavy mode, with the plan stage (section 6) otherwise.
 
 ## 4. Stage prompt and result handling
 
@@ -120,6 +126,7 @@ WORKTREE=<abs worktree path>
 KEY=<KEY>
 TICKET_DIR=<abs worktree path>/<ticketsDir>/<KEY>
 BASE_BRANCH=<BASE_REF, e.g. origin/main>
+MODE_PIPELINE=heavy|medium|light   (ticket-planner, ticket-dev, ticket-reviewer)
 MODE=implement|fix-review|fix-pr   (ticket-dev only)
 REVIEW_ROUND=<n>                   (ticket-dev with MODE=fix-review only)
 FEEDBACK=<abs path>                (ticket-dev with MODE=fix-pr only, section 9b)
@@ -132,7 +139,7 @@ PROJECT_RULES:                     (only when escalationExtra is not empty)
 <one "- <rule>" line per entry of escalationExtra>
 ```
 
-`REVIEW_ROUND` is `reviewRound` after it was incremented (section 8). For the planner, append the developer's change request under a `FEEDBACK:` line when re-planning. Spawn with the Agent tool: `subagent_type` from the table above, a short `description`, and `model` from `models` (`spec`, `plan`, `dev`; for the reviewer see section 8). Foreground only. Do not pass `effort`; the agent files carry it.
+`MODE_PIPELINE` is the current `mode` of `state.json` (`heavy` when it has none); the name differs on purpose from the dev agent's `MODE=`. `REVIEW_ROUND` is `reviewRound` after it was incremented (section 8). For the planner, append the developer's change request under a `FEEDBACK:` line when re-planning. Spawn with the Agent tool: `subagent_type` from the table above, a short `description`, and `model` from `models` (`spec`, `plan`, `dev`; for the reviewer see section 8). Foreground only. Do not pass `effort`; the agent files carry it.
 
 ### Parse
 
@@ -146,44 +153,62 @@ Read the agent's final message in this order:
 
 After spec, plan and review stages only `<ticketsDir>/<KEY>/` may change. Run `git -C <wt> status --porcelain`. Any path outside that directory fails the stage: discard nothing, list the paths, and go to H7 (Retry · Abort) without the automatic retry.
 
+### Raising the mode
+
+The mode is only ever raised, by R1 to R4 of `references/modes.md#5-raising-the-mode-d3` (sections 6, 7 and 9b say where), and to `heavy` only before H2 is approved. A request to lower it (at H2, or a planner line naming the current or a lighter mode) is not applied: say that a mode is never lowered and go on with the current one. To raise from `<from>` to `<to>`:
+
+1. Record it before anything else: set `stage` to the stage the raise enters (`spec` for a raise to heavy, `awaiting_plan_approval` for R2 and R3 to medium, `review` for R4 after dev, `addressing_review` for R4 in section 9b), append `{from, to, by, stage, reason, at}` to `state.modeHistory` (`by`: `planner`, `developer` or `riskPaths`), append `{stage: "mode", question: "raise mode <from> to <to> (<by>)", answer: "<reason>", at}` to `state.decisions` and the matching `## <ISO time> (mode)` entry to `decisions.md` (committed alone as above once the plan is approved), and set `mode` to `<to>` and `modeReason` to the reason. Print `Mode: <from> -> <to> (<reason>)`.
+2. When `modes.<to>.session` is stronger than the running model, ask the session-model question of section 3, step 10 (on restart the resumed session re-enters the stage set in 1).
+3. Continue as the section that raised says.
+
 ## 5. Spec stage
 
 Stage `spec`. Spawn the spec agent. On `RESULT: OK`, run the scope check. A blocking question arrives as `NEEDS_DECISION` with `stage: spec` (H1): handle it per section 4 and re-run. Then set `stage: "plan"`. **Tracker `spec-done`**, then **Event `spec-done`**.
 
 ## 6. Plan stage and the plan gate (H2)
 
-Stage `plan`. Spawn the planner. A `NEEDS_DECISION` is handled per section 4 and the planner re-runs. On `RESULT: OK`, run the scope check, set `stage: "awaiting_plan_approval"`, then ask **H2**. Show:
+Stage `plan`. Spawn the planner. A `NEEDS_DECISION` is handled per section 4 and the planner re-runs (in medium and light mode a missing or unclear acceptance criterion arrives this way, `stage: plan`, and takes H1's role). On `RESULT: OK`, run the scope check, then read the first non-empty line of the `## Mode` section of `plan.md` (`references/modes.md#the--mode-section-of-planmd`):
+
+- `raise to heavy: <reason>` in light or medium mode (R1): raise (section 4, `by: planner`), run the spec stage (section 5), then this section again with the spec.
+- `raise to medium: <reason>` in light mode (R2): raise (section 4, `by: planner`); nothing re-runs.
+- `keep`, a line naming the current or a lighter mode, a missing section or any other line: the mode stays (for the last two, H2 says the planner gave no valid mode line).
+
+Then set `stage: "awaiting_plan_approval"` and ask **H2**. It is a stop in every mode. Show:
 
 - a short summary of the plan (steps in order, verification choice);
 - the path to `plan.md`;
 - the whole `## Gated operations` table (or "None");
-- open decisions or risks the plan flags.
+- open decisions or risks the plan flags;
+- `Mode: <mode> (<modeReason>)`, and any raise the planner made.
 
 Options: **Approve (recommended)** · **Request changes** · **Abort**.
 
-- **Request changes:** take the free text, set `stage: "plan"`, re-run the planner with it under `FEEDBACK:`, then ask H2 again. No round limit.
+- **Request changes:** take the free text. When it asks for a heavier mode ("use heavy", "add a review"; R3, `by: developer`), raise first (section 4): to `heavy`, run the spec stage (section 5), then re-run the planner with the rest of the text under `FEEDBACK:`; to `medium` (from light) with no other change request, ask H2 again, nothing re-runs. A request for a lighter mode is refused (section 4). Any other change request: set `stage: "plan"`, re-run the planner with the text under `FEEDBACK:`, then ask H2 again. No round limit.
 - **Abort:** section 10.
 - **Approve:**
   1. `git -C <wt> status --porcelain`: a path outside `<ticketsDir>/<KEY>/` is a scope failure (section 4); never approve with stray changes.
-  2. Format `ticket.md`, `spec.md`, `plan.md`, `decisions.md`, then `git -C <wt> add` those four files only.
-  3. Commit with the subject `docs(<KEY>): add spec and plan` and the trailer.
+  2. Format `ticket.md`, `spec.md` (when it exists, heavy mode), `plan.md`, `decisions.md`, then `git -C <wt> add` those files only.
+  3. Commit with the subject `docs(<KEY>): add spec and plan` (`docs(<KEY>): add plan` without `spec.md`) and the trailer.
   4. Set `stage: "dev"`. **Tracker `plan-approved`**, then **Event `plan-approved`**.
 
 Approving the plan also authorises the rest of the run's normal actions: local commits, pushing the ticket branch and opening the PR. Do not ask about them again. Never force push or push to any branch other than the ticket branch.
 
 ## 7. Dev stage and blockers (H6)
 
-Stage `dev`. Spawn the dev agent with `MODE=implement`. On `RESULT: OK`, `dev-report.md` exists; check that `git -C <wt> log --format=%H --grep='^Plan-Step: ' <BASE_REF>..HEAD` prints at least one commit (none: failed run) and that `git -C <wt> status --porcelain` is clean. Leftover changes: show them and ask **Commit them (recommended)** (format, stage with the exclude pathspec above, commit `chore(<KEY>): commit leftover changes from dev stage` plus the trailer) · **Stash** (`git stash push -u`) · **Abort**. Then set `stage: "review"`. **Tracker `dev-done`**, then **Event `dev-done`**.
+Stage `dev`. Spawn the dev agent with `MODE=implement`. On `RESULT: OK`, `dev-report.md` exists; check that `git -C <wt> log --format=%H --grep='^Plan-Step: ' <BASE_REF>..HEAD` prints at least one commit (none: failed run) and that `git -C <wt> status --porcelain` is clean. Leftover changes: show them and ask **Commit them (recommended)** (format, stage with the exclude pathspec above, commit `chore(<KEY>): commit leftover changes from dev stage` plus the trailer) · **Stash** (`git stash push -u`) · **Abort**. Then **Tracker `dev-done`**, then **Event `dev-done`**, then the next stage:
+
+- heavy and medium mode: set `stage: "review"` (section 8).
+- light mode: run the `riskPaths` check of section 8 (R4, `references/modes.md#8-light-mode-and-review`). Any output: raise to medium (section 4, `by: riskPaths`, the reason names the paths) and go to section 8, where the reviewer runs on `models.reviewRisk`. No output: set `stage: "complete"` and go to section 9a; the review stage does not run.
 
 **H6.** A dev `NEEDS_DECISION` whose `question:` starts with `verification failed:` (the agent's 2 fix attempts are used up; every other dev `NEEDS_DECISION` is H3), and any infrastructure blocker (setup fails, Docker down, a service will not start), get the same prompt: the failing command and an output excerpt, options **Retry** · **Skip this check** · **Abort**.
 
 - Retry: re-run the stage (dev) or the command.
-- Skip: append `{stage, command, reason, at}` to `state.warnings` and record the skip as a decision (section 4); it is listed under "Skipped checks" in the PR. If the skip answers a dev `NEEDS_DECISION`, there is no `dev-report.md`: do not re-run dev; write a minimal one yourself (`## Steps done` from the `Plan-Step:` commits, `## Verification` with the skipped command marked SKIPPED and its reason, `## Deviations from the plan`: "None known; verification skipped for the reason above"), format and commit it as `docs(<KEY>): add dev report` plus the trailer, then continue to review.
+- Skip: append `{stage, command, reason, at}` to `state.warnings` and record the skip as a decision (section 4); it is listed under "Skipped checks" in the PR. If the skip answers a dev `NEEDS_DECISION`, there is no `dev-report.md`: do not re-run dev; write a minimal one yourself (`## Steps done` from the `Plan-Step:` commits, `## Verification` with the skipped command marked SKIPPED and its reason, `## Deviations from the plan`: "None known; verification skipped for the reason above"), format and commit it as `docs(<KEY>): add dev report` plus the trailer, then continue with the next stage as after `RESULT: OK` above.
 - Abort: section 10. Never launch or restart apps or Docker to clear a blocker.
 
 ## 8. Review stage and loop
 
-Stage `review`. Choose the reviewer model: run `git -C <wt> diff --name-only <BASE_REF>...HEAD -- <pathspecs>` with one `':(glob)<pattern>'` per entry of `riskPaths`. Default `riskPaths`: `**/migrations/**`, `**/*policy*`, `**/auth/**`, `**/*.tf`, `infra/**`, `.github/workflows/**`, `.claude/**`. Any output: `models.reviewRisk`; none: `models.review`.
+Stage `review`. Runs in heavy and medium mode; a light run reaches it only after a raise (section 7). Choose the reviewer model (the `riskPaths` check): run `git -C <wt> diff --name-only <BASE_REF>...HEAD -- <pathspecs>` with one `':(glob)<pattern>'` per entry of `riskPaths`. Default `riskPaths`: `**/migrations/**`, `**/*policy*`, `**/auth/**`, `**/*.tf`, `infra/**`, `.github/workflows/**`, `.claude/**`. Any output: `models.reviewRisk`; none: `models.review`.
 
 Spawn the reviewer. On `RESULT: OK`, `review.md` must exist and its last line must be `VERDICT: PASS` or `VERDICT: CHANGES_REQUIRED`; otherwise it is a failed run. Run the scope check, then format and commit `review.md` as `docs(<KEY>): add review round <reviewRound+1>` plus the trailer. **Tracker `review-done`**, then **Event `review-done`**.
 
@@ -196,11 +221,11 @@ Minor findings are never auto-fixed; they are listed in the PR.
 
 ## 9. Resume
 
-`--resume` (and Resume from section 1) re-enters the recorded `stage` from its start. First:
+`--resume` (and Resume from section 1) re-enters the recorded `stage` from its start, with the recorded `mode` (`references/modes.md#10-resume`; a state without `mode` counts as `heavy`). First:
 
-1. Read the config again (section 0) and repeat the exclude and `check-ignore` checks of section 3, steps 4 and 6 (the exclude entries may be missing in a fresh clone). Then **Tracker `resumed`**: refetch the issue, and on a changed summary or description ask as `references/jira.md` §3 says, before the working-tree check below. Then **Event `resumed`**.
+1. A `--mode` equal to the recorded mode changes nothing; one that differs is refused with a message naming the recorded mode: change nothing and stop (a raise happens only through section 4). Read the config again (section 0) and repeat the exclude and `check-ignore` checks of section 3, steps 4 and 6 (the exclude entries may be missing in a fresh clone). Then **Tracker `resumed`**: refetch the issue, and on a changed summary or description ask as `references/jira.md` §3 says, before the working-tree check below. Then **Event `resumed`**.
 2. `git -C <wt> status --porcelain`. In stages `spec`, `plan` and `awaiting_plan_approval`, changes inside `<ticketsDir>/<KEY>/` are the stage's own output; in stage `review` the same holds for `review.md`. Any other change must be shown before you spawn anything: Stage `merged` needs no question (section 9d keeps a dirty worktree). In stages `dev`, `complete`, `done` and `addressing_review` ask **Keep and continue (recommended)** · **Stash** · **Abort**; in every other stage ask **Stash (recommended)** · **Abort**.
-3. Stage `awaiting_plan_approval`: ask H2 again. Stage `aborted`: ask which stage to re-enter (default `abortedFrom`). Stage `addressing_review`: section 9b from step 1 (its PR-state check sends a merged PR to section 9d and stops on a closed one; for an open PR it continues at step 3, the tree check was done here). Stage `done`: report the PR and go to section 9c (the watch restarts). Stage `merged`: section 9d.
+3. Before re-entering, ask the session-model question of section 3, step 10 for the recorded mode, unless `state.decisions` already has a **Continue here** for that mode. Stage `awaiting_plan_approval`: ask H2 again. Stage `aborted`: ask which stage to re-enter (default `abortedFrom`; only stages the recorded mode runs). Stage `addressing_review`: section 9b from step 1 (its PR-state check sends a merged PR to section 9d and stops on a closed one; for an open PR it continues at step 3, the tree check was done here). Stage `done`: report the PR and go to section 9c (the watch restarts). Stage `merged`: section 9d.
 4. Stage `dev`: re-run the agent (it skips steps whose `Plan-Step: N` trailer is already in the log). Stage `review`: re-run the reviewer. Stage `complete`: section 9a (it reuses an existing PR).
 
 ## 9a. Complete
@@ -210,19 +235,19 @@ Stage `complete`. You do this yourself; no subagent.
 1. Run the `## Verification` commands of `plan.md` in order, one at a time with `cd <wt> &&`, minus checks skipped under H6. Failure, or a needed app or service that is down: H6. Never start them.
 2. The tree must be clean (leftovers: the Commit · Stash · Abort question of section 7). Push: `git -C <wt> push -u origin <branch>`. Plain push of the ticket's own branch only; never force.
 3. Write the PR body to a file in the scratchpad (not in the worktree), with these sections in order:
-   - `## Summary`: what changed and why, from `spec.md` and `dev-report.md`.
-   - `## Spec & plan`: links to `<ticketsDir>/<KEY>/ticket.md`, `spec.md` and `plan.md` on the branch, plus the Jira link from **Tracker `pr-body`** and any lines from **Event `pr-body`**.
+   - `## Summary`: what changed and why, from `spec.md` (`ticket.md` and `plan.md` without one) and `dev-report.md`, and a line `Mode: <mode> (<modeReason>)`.
+   - `## Spec & plan`: links to `<ticketsDir>/<KEY>/ticket.md`, `spec.md` (when it exists) and `plan.md` on the branch, plus the Jira link from **Tracker `pr-body`** and any lines from **Event `pr-body`**.
    - `## Verification`: each command and its result.
-   - `## Open minor findings`: the `## Minor` list of `review.md`, plus findings accepted under H5 (or "None").
-   - `## Skipped checks`: every `state.warnings` entry with its `command` and `reason`, except those whose `stage` is `tracker` or `rules` (or "None").
+   - `## Open minor findings`: the `## Minor` list of `review.md` (when a review ran), plus findings accepted under H5 (or "None").
+   - `## Skipped checks`: every `state.warnings` entry with its `command` and `reason`, except those whose `stage` is `tracker` or `rules` (`mode` ones are listed), and in light mode the line `No review stage ran` (or "None").
 
    End the body with the pull-request attribution line your session's instructions specify, if any.
-4. Open the PR: if `gh pr list --head <branch> --json url` returns one, reuse it; otherwise `gh pr create --base <baseBranch> --head <branch> --title "<type>(<KEY>): <title>" --body-file <file>`. The type comes from the spec (`feat` by default, `fix` for bugs, `docs` for documentation-only work). Save the URL as `prUrl`. **Tracker `pr-opened`** (to In Review, plus a comment with the PR link), then **Event `pr-opened`** (both also when an existing PR was reused).
+4. Open the PR: if `gh pr list --head <branch> --json url` returns one, reuse it; otherwise `gh pr create --base <baseBranch> --head <branch> --title "<type>(<KEY>): <title>" --body-file <file>`. The type comes from the spec, or the ticket without one (`feat` by default, `fix` for bugs, `docs` for documentation-only work). Save the URL as `prUrl`. **Tracker `pr-opened`** (to In Review, plus a comment with the PR link), then **Event `pr-opened`** (both also when an existing PR was reused).
 5. Set `stage: "done"` and print the final report: PR URL, worktree path, the decisions taken, the warnings, the minor findings still open. Then go to section 9c.
 
 ## 9b. Address PR review (`--address-review`)
 
-Stage `addressing_review`. Runs when the PR of a finished run has new human feedback: started by the developer with `--address-review`, or by the watch of section 9c. The only subagents are `ticket-dev` (`MODE=fix-pr`, then `fix-review` if needed) and `ticket-reviewer`. This section authorises the commits, the plain push of the ticket branch and the GitHub replies below, and nothing else. Never force push, resolve a review thread or re-request a review. Every PR reply starts with the marker line `<!-- gated-dev -->`; the watcher ignores comments that carry it.
+Stage `addressing_review`. Runs when the PR of a finished run has new human feedback: started by the developer with `--address-review`, or by the watch of section 9c. The only subagents are `ticket-dev` (`MODE=fix-pr`, then `fix-review` if needed) and `ticket-reviewer` (not in light mode unless step 7 raises it). This section authorises the commits, the plain push of the ticket branch and the GitHub replies below, and nothing else. Never force push, resolve a review thread or re-request a review. Every PR reply starts with the marker line `<!-- gated-dev -->`; the watcher ignores comments that carry it.
 
 1. **Preconditions.** `stage` must be `done` or `addressing_review`, and `prUrl` must be set with `gh pr view <prUrl> --json state,number,createdAt,headRefName` reporting `OPEN`. `MERGED`: section 9d. `CLOSED`: report it and stop. Any other stage or state: report it and stop. Whenever it stops here it changes nothing except `updatedAt`. Unless you arrive from section 9 (which did both), run the working-tree check of section 9, step 2 (stage `done` counts like `complete`) and the exclude and `check-ignore` checks of section 3, steps 4 and 6.
 2. **Stage.** Set `stage: "addressing_review"`.
@@ -230,14 +255,14 @@ Stage `addressing_review`. Runs when the PR of a finished run has new human feed
    - If the highest-numbered `pr-feedback-<n>.md` has an item newer than `lastAddressedCommentAt`, that round was interrupted: reuse that file and number and go to step 4 (items already fixed or answered show up as `PR-Fix:` trailers and marked replies; steps 6 and 8 skip them). Otherwise `n` is the next free number.
    - Nothing kept: set `lastAddressedCommentAt` to the newest time among the items that passed the time filter (if any, so the watcher does not wake for them again), `stage: "done"`, report "no new PR feedback" and go to section 9c.
 4. **Sync the branch.** `git -C <wt> fetch origin <branch>`, then `git -C <wt> merge --ff-only origin/<branch>` so the local branch is not behind. If the branches diverged, show the divergence and ask H6-style **Retry** · **Abort**; never rebase, merge or force push on your own.
-5. **Classify.** Write `TICKET_DIR/pr-feedback-<n>.md`: a header with the PR URL, the collection time and `Base commit: <sha of HEAD now>`, then one `## Item <id>` block per item with `Source` (inline, review or comment), `Author`, `Created`, `Location` (`path:line` or n/a), `Thread` (root id or none), `Body`, `Class` and `Plan` (what to change, the draft answer, or the reason to decline). Decide `Class` yourself: `change` (actionable), `question` (needs an answer, no code), `decline` (you would not make the change). Answer `question` items from `spec.md`, `plan.md`, `dev-report.md` and the diff. Ask the developer (H3, recommended option first) before dev runs when an item is ambiguous, changes scope or acceptance criteria, falls under the escalation list of the pipeline (`references/pipeline-spec.md` §4, plus `escalationExtra`), needs a gated operation the plan does not list, is a `question` you cannot answer, or is a `decline` (always confirm: **Decline with reason (recommended)** · **Make the change** · **Skip without a reply**). Record the answers per section 4 (stage `addressing_review`), update `Class` and `Plan` to the outcome, then format the file and commit it alone as `docs(<KEY>): add PR feedback round <n>` plus the trailer. If no item is `change`, skip steps 6 and 7 and the verification and push of step 8, and only post the replies.
+5. **Classify.** Write `TICKET_DIR/pr-feedback-<n>.md`: a header with the PR URL, the collection time and `Base commit: <sha of HEAD now>`, then one `## Item <id>` block per item with `Source` (inline, review or comment), `Author`, `Created`, `Location` (`path:line` or n/a), `Thread` (root id or none), `Body`, `Class` and `Plan` (what to change, the draft answer, or the reason to decline). Decide `Class` yourself: `change` (actionable), `question` (needs an answer, no code), `decline` (you would not make the change). Answer `question` items from `spec.md` (when it exists), `plan.md`, `dev-report.md` and the diff. Ask the developer (H3, recommended option first) before dev runs when an item is ambiguous, changes scope or acceptance criteria, falls under the escalation list of the pipeline (`references/pipeline-spec.md` §4, plus `escalationExtra`), needs a gated operation the plan does not list, is a `question` you cannot answer, or is a `decline` (always confirm: **Decline with reason (recommended)** · **Make the change** · **Skip without a reply**). Record the answers per section 4 (stage `addressing_review`), update `Class` and `Plan` to the outcome, then format the file and commit it alone as `docs(<KEY>): add PR feedback round <n>` plus the trailer. If no item is `change`, skip steps 6 and 7 and the verification and push of step 8, and only post the replies.
 6. **Dev.** Spawn `ticket-dev` with `MODE=fix-pr` and `FEEDBACK=<abs path of pr-feedback-<n>.md>`. It fixes every `change` item, commits with `PR-Fix: <comment id>` trailers and appends `## PR feedback round <n>` to `dev-report.md`. Handle the result as in section 7: `NEEDS_DECISION` per section 4 (H6 for `verification failed:`); `RESULT: OK` needs at least one commit in `git -C <wt> log --grep='^PR-Fix: ' <Base commit>..HEAD` (instead of `Plan-Step:`) and a clean tree.
-7. **Review.** Spawn `ticket-reviewer` with `REVIEW_SINCE=<Base commit>` and the model choice of section 8. Run the scope check, then format and commit `review.md` as `docs(<KEY>): add review for PR feedback round <n>` plus the trailer (not the section 8 subject, so the rounds stay distinguishable), then **Tracker `review-done`**, then **Event `review-done`**. `VERDICT: CHANGES_REQUIRED`: increment `reviewRound`, run one `ticket-dev` `MODE=fix-review` round (section 8), review again; if it still returns `CHANGES_REQUIRED`, ask H5 as in section 8 (**Accept as is**, recorded in `state.warnings` and listed in the summary comment of step 8 · **One more round** · **Take over manually**, leaving `stage: "addressing_review"`).
+7. **Review.** In light mode, first run the `riskPaths` check of section 8 on the branch diff (R4, `references/modes.md#8-light-mode-and-review`): any output raises to medium (section 4, `by: riskPaths`, the stage stays `addressing_review`) and the review below runs, in this round and later ones; no output skips the rest of this step (no reviewer, no review commit). In heavy and medium mode (a raise included), spawn `ticket-reviewer` with `REVIEW_SINCE=<Base commit>` and the model choice of section 8. Run the scope check, then format and commit `review.md` as `docs(<KEY>): add review for PR feedback round <n>` plus the trailer (not the section 8 subject, so the rounds stay distinguishable), then **Tracker `review-done`**, then **Event `review-done`**. `VERDICT: CHANGES_REQUIRED`: increment `reviewRound`, run one `ticket-dev` `MODE=fix-review` round (section 8), review again; if it still returns `CHANGES_REQUIRED`, ask H5 as in section 8 (**Accept as is**, recorded in `state.warnings` and listed in the summary comment of step 8 · **One more round** · **Take over manually**, leaving `stage: "addressing_review"`).
 8. **Verify, push, reply.**
    1. Run the `## Verification` commands of `plan.md` as in section 9a, step 1 (H6 on failure). The tree must be clean; then push with a plain `git -C <wt> push` (never force).
    2. Reply on GitHub. Write each body to a file in the scratchpad and post it with `-F body=@<file>`. Every body starts with the marker line, then a short note: the commit hash(es) (`git log --grep="^PR-Fix: <id>"`) for a `change`, the answer for a `question`, the reason for a `decline`. Skip an item that already has a later marked comment in its thread (for reviews and issue comments: a PR comment containing `PR feedback round <n>`), so a re-run never posts twice.
       - Inline comment: reply in its thread, to the root comment id: `gh api repos/{owner}/{repo}/pulls/{n}/comments/{id}/replies -F body=@<file>`.
-      - Review or issue comment: one PR comment for all of them, `gh pr comment <prUrl> --body-file <file>`: the marker line, a heading `PR feedback round <n>`, one line per item (id, outcome), plus any checks skipped or findings accepted in this round (`state.warnings`).
+      - Review or issue comment: one PR comment for all of them, `gh pr comment <prUrl> --body-file <file>`: the marker line, a heading `PR feedback round <n>`, one line per item (id, outcome), plus any checks skipped or findings accepted in this round (`state.warnings`). When step 7 skipped the reviewer (light mode), add the line `No review ran in this round (light mode)`, and post this comment even when the round has only inline items.
 9. **Close.** Set `lastAddressedCommentAt` to the newest `Created` among the items of `pr-feedback-<n>.md` (ISO-8601) and `stage: "done"`. **Tracker `pr-feedback-addressed`** (comment only, no transition), then **Event `pr-feedback-addressed`**. Print: PR URL, items by class, commits, replies posted, warnings. Threads stay unresolved and no review is requested; the developer does that. Then go to section 9c. **Take over manually** and **Abort** do not restart the watch.
 
 ## 9c. Watch the PR
