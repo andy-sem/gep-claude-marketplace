@@ -161,6 +161,7 @@ so every worktree sees the same picture.
 /ticket PROJ-1 --status
 /ticket PROJ-1 --resume
 /ticket PROJ-1 --address-review      # address new PR feedback now
+/ticket PROJ-1 --mode light          # fix the mode instead of letting the session decide
 ```
 
 The run stops for you only at fixed points: blocking spec questions,
@@ -253,6 +254,44 @@ Known limits:
   one), whether the driver moves the parent issue, and the relaunch cap of 3
   (a constant, not a setting).
 
+## Modes
+
+Not every ticket needs every stage. A run has a **mode**, decided once at
+kickoff, that sets which stages run:
+
+| Mode | Stages | Session model (default) | Meant for |
+| --- | --- | --- | --- |
+| `heavy` | spec → plan → dev → review | `opus` | Unclear or cross-cutting tickets; schema, auth, security, infra, new dependencies |
+| `medium` | plan → dev → review | `sonnet` | Clear tickets of normal size |
+| `light` | plan → dev | `sonnet` | Small, well-specified changes in one area |
+
+Kickoff and complete (push, PR, PR watch, merge cleanup) run in every mode,
+and the **plan approval is a stop in every mode**, light included.
+
+- **Choosing.** `--mode heavy|medium|light` wins; then the config key `mode`
+  (anything but `auto`); otherwise the `/ticket` session decides from the
+  ticket (escalation list, `riskPaths`, open questions, number of areas,
+  size) and takes the heavier mode when unsure. `modeRules` adds your own
+  plain-language rules. The session never asks you which mode; you can
+  redirect it at plan approval.
+- **Raising.** A mode is only ever raised, never lowered: the planner can ask
+  for a heavier one, you can ask at plan approval ("use heavy"), and a light
+  run whose diff touches `riskPaths` gets a review. Gated operations in the
+  plan alone do not raise a light run.
+- **`--mode`** works on `/ticket`, on the launcher (`launch.py --mode light
+  PROJ-1`, which also starts the session on that mode's model) and on
+  `flow.py launch`. `/ticket-flow` decides each subtask's mode itself and
+  always launches with `--mode`.
+- **Session model.** `modes.<mode>.session` is the model the launcher starts
+  the session on. `haiku` is not allowed: the session is the orchestrator and
+  needs sonnet or opus. A session you started by hand on a weaker model than
+  the mode wants asks you to restart or continue.
+
+Config keys `mode`, `modes` and `modeRules` are in
+[Configuration](#configuration). The rules in full, the records in
+`state.json` and the session-model question:
+[`skills/ticket/references/modes.md`](skills/ticket/references/modes.md).
+
 ## Ticket files and run state
 
 Write `docs/tickets/<KEY>/ticket.md` (the first `# ` heading is the title; it
@@ -296,6 +335,11 @@ invalid file or an unknown key stops the run with a message. Example:
   "models": { "plan": "opus", "reviewRisk": "opus" }
 }
 ```
+
+Modes (see [Modes](#modes)) use three more keys: `mode` (`auto` by default, or
+a fixed mode), `modes` (`{"light": {"session": "sonnet"}}`, session model per
+mode; `opus`, `sonnet` or a `claude-...` id, never `haiku`) and `modeRules`
+(a list of extra rules for the mode decision).
 
 Regex backslashes are doubled in JSON (`\\d`, not `\d`). Every key, its
 default and the ticket file format: `skills/ticket/references/config.md`.
@@ -595,6 +639,33 @@ and release). Binding decisions:
 Known limits and open questions are in [Running a whole parent](#running-a-whole-parent).
 The manual acceptance run (a demo repo and a sandbox Jira project, never a
 real team project) is still to do.
+
+### Ticket modes (0.13, November 2026)
+
+`heavy`, `medium` and `light` modes cut the pipeline for tickets that do not
+need all of it (details: [modes.md](skills/ticket/references/modes.md)). Binding
+decisions:
+
+- **D1. Decided once, at kickoff, without asking.** Medium and light skip the
+  spec stage, so the decision cannot come later. The developer redirects at
+  plan approval, which stays a stop in every mode.
+- **D2. Rules in a fixed order.** `--mode`, config `mode`, then the ticket
+  against the escalation list, `riskPaths`, open questions and size; the
+  heavier mode when unsure.
+- **D3. Raise only.** The planner, the developer at plan approval and a
+  `riskPaths` hit after dev in light mode can raise; nothing lowers.
+- **D4. The session model follows the mode.** A running session cannot change
+  its model, so the launcher starts it on `modes.<mode>.session`.
+- **D5. The stage set is not configurable.** A configurable list would make
+  the approval points and the state machine depend on the project.
+- **Decided 2026-11-22.** A hand-started session on a weaker model than the
+  mode wants asks restart or continue (a weaker mode in a stronger session is
+  never asked). Light mode gets no review just because the plan lists gated
+  operations: only `riskPaths` or an explicit raise add it. `haiku` is
+  forbidden as a session model: the session is the orchestrator, and the
+  config check rejects `haiku` and any `claude-...haiku...` id.
+
+The manual acceptance run (a private demo repo) is still to do.
 
 ### Lean gate follow-up
 

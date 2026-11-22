@@ -1,7 +1,9 @@
 # Task 08: README, versions, manual check
 
 Plan: [../ticket-modes.md](../ticket-modes.md) §6, §8, §11.
-Depends on: 01–07. Status: not started.
+Depends on: 01–07. Status: done.
+
+Note: the manual check below (private demo repo) is still to be done by the user.
 
 ## Goal
 
