@@ -10,6 +10,8 @@ class LaunchNaming:
     """Session names, slugs, quoting and JS-style value helpers of the launcher."""
 
     # Whatever keyPattern says, a key is put into shell commands unquoted.
+    MODEL_ALIASES = frozenset(("opus", "sonnet", "haiku"))
+    _MODEL_ID = re.compile(r"claude-[a-z0-9.-]+")
     _SAFE_KEY = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
     _SAFE_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*")
     _PLAIN_ARG = re.compile(r"[A-Za-z0-9_:./@-]+")
@@ -55,6 +57,11 @@ class LaunchNaming:
     def is_safe_key(cls, key: Any) -> bool:
         """True when `key` is usable in commands, branch and file names."""
         return isinstance(key, str) and cls._SAFE_KEY.fullmatch(key) is not None and ".." not in key
+
+    @classmethod
+    def is_model(cls, value: Any) -> bool:
+        """True when `value` is a model alias (`opus`, `sonnet`, `haiku`) or a `claude-...` id, safe in a shell line."""
+        return isinstance(value, str) and (value in cls.MODEL_ALIASES or cls._MODEL_ID.fullmatch(value) is not None)
 
     @classmethod
     def short_summary(cls, summary: Any) -> str:

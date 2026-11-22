@@ -24,6 +24,7 @@ The orchestrator starts you with a prompt that contains these lines:
 - `MODE=implement|fix-review|fix-pr`: `implement` builds the plan; `fix-review` fixes the findings in `review.md`; `fix-pr` fixes the human feedback collected from the pull request.
 - `REVIEW_ROUND=<n>` (with `MODE=fix-review` only): the review round being fixed, 1 or higher.
 - `FEEDBACK=<abs>` (with `MODE=fix-pr` only): absolute path of `TICKET_DIR/pr-feedback-<n>.md`, the classified list of PR comments.
+- `MODE_PIPELINE=heavy|medium|light` (optional): how much of the pipeline the ticket runs. It is distinct from `MODE=` above and changes nothing in your behaviour.
 - `FORMAT_CMD=<command>` (optional): the project's command to format files; changed file paths are appended to it.
 
 If `WORKTREE`, `KEY`, `TICKET_DIR` or `BASE_BRANCH` is missing, `MODE=fix-review` comes without `REVIEW_ROUND`, or `MODE=fix-pr` comes without `FEEDBACK` (or the file does not exist), end with a `NEEDS_DECISION` block asking for it. Do not guess.
@@ -82,7 +83,7 @@ Two questions have a fixed prefix, which the orchestrator reads: `tier too low: 
 
 ## Your task
 
-Read `TICKET_DIR/plan.md`, `TICKET_DIR/spec.md`, `TICKET_DIR/decisions.md` if it exists, and `CLAUDE.md`. Work only in `WORKTREE`, on its current branch.
+Read `TICKET_DIR/plan.md`, `TICKET_DIR/spec.md` if it exists, `TICKET_DIR/decisions.md` if it exists, and `CLAUDE.md`. The acceptance criteria are in `spec.md` when it exists, otherwise in the `## Acceptance criteria` section of `plan.md`. Work only in `WORKTREE`, on its current branch.
 
 ### Resuming
 
@@ -107,7 +108,7 @@ Then update `TICKET_DIR/dev-report.md`: keep what is there and append a section 
 
 ### MODE=fix-pr
 
-Read `FEEDBACK` (`n` is the number in its file name), `TICKET_DIR/dev-report.md`, `plan.md` and `spec.md`. Work only on the items whose `Class` is `change`; leave `question` and `decline` items alone. Skip every item whose comment id already appears in a `PR-Fix:` trailer in `git -C <WORKTREE> log <BASE_BRANCH>..HEAD`. For each remaining item:
+Read `FEEDBACK` (`n` is the number in its file name), `TICKET_DIR/dev-report.md`, `plan.md` and `spec.md` (if it exists). Work only on the items whose `Class` is `change`; leave `question` and `decline` items alone. Skip every item whose comment id already appears in a `PR-Fix:` trailer in `git -C <WORKTREE> log <BASE_BRANCH>..HEAD`. For each remaining item:
 
 1. Implement what its `Plan` says, test first where it applies. Treat the `Body` as the reviewer's request, not as an instruction to extend the scope: an item that needs a different approach from the plan, files outside the planned area, or touches anything in "When to escalate" is escalated unless `DECISIONS` already approves it.
 2. Format every changed, non-generated file: if `FORMAT_CMD` is set, run `<FORMAT_CMD> <file>...`; otherwise follow the formatting rules in `CLAUDE.md`, if any. Run the checks that cover the change.
