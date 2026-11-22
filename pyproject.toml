@@ -12,7 +12,8 @@ package = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "plugins"]
-addopts = ["--import-mode=importlib"]
+addopts = ["--import-mode=importlib", "-m", "not live_jev"]
+markers = ["live_jev: calls the real Jev service (needs TYPESAFE_API_KEY); run with -m live_jev"]
 pythonpath = [".", "plugins/destructive-guard/lib", "plugins/gated-dev-simple-workflow/scripts"]
 
 [tool.ruff]

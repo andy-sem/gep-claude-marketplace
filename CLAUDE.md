@@ -62,6 +62,7 @@ jq . .claude-plugin/marketplace.json
 uv sync                                                     # once: dev tools (pytest, ruff); needs uv and Python 3.14
 uv run pytest                                               # Python tests
 uv run ruff check .
+uv run pytest -m live_jev                                  # optional: tests against the real Jev; needs TYPESAFE_API_KEY (skips without it)
 ```
 
 `destructive-guard` needs Python >= 3.14 (standard library only; tests: `uv run pytest plugins/destructive-guard`). Keep existing tests green and add tests with every behaviour change. `gated-dev-simple-workflow` needs Python >= 3.14 too (launcher, PR watcher, notification hook; tests: `uv run pytest plugins/gated-dev-simple-workflow`); its skills and agents (Markdown) have none.

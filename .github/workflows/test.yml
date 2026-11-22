@@ -4,9 +4,14 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+  schedule:
+    # Nightly: catches jev-latest changing while nobody pushes.
+    - cron: "17 3 * * *"
 
 jobs:
   test:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,6 +21,7 @@ jobs:
           for f in plugins/*/.claude-plugin/plugin.json; do jq -e . "$f" > /dev/null; done
 
   python:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -44,6 +50,7 @@ jobs:
   # Lean model of the lean gate (dev-only, see CLAUDE.md). --wfail also fails
   # on `sorry`, which Lean reports as a warning.
   lean:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,3 +62,26 @@ jobs:
       - name: Build the model
         working-directory: plugins/destructive-guard/formal
         run: lake build --wfail
+
+  # Tests against the real Jev (marker live_jev). Never pull_request_target:
+  # it would hand the secret to fork code. No artifacts: the repo is public.
+  jev-live:
+    # Secrets never reach PRs from forks; skip those instead of failing.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: CI
+    concurrency: { group: jev-live, cancel-in-progress: false }
+    timeout-minutes: 10
+    env:
+      TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+      GATE_JEV: ${{ vars.GATE_JEV }}      # 0.8 only; removed with D2 in L6
+      LIVE_JEV_REQUIRED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.14" }
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+      - run: uv run pytest -m live_jev -p no:cacheprovider -rA
