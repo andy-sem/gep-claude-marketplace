@@ -1,6 +1,14 @@
 """SessionStart hook (the Lean model's `sessionStart`): warn once about a misconfigured setting (D3).
 
 Never contacts Jev. Silent when everything is fine or the gate is off.
+
+Lean model (formal/SimpleGate.lean) -> code:
+
+| Lean                         | Here                                                          |
+| ---------------------------- | ------------------------------------------------------------- |
+| `sessionStart`               | `SessionCheck.message` (via `SessionCheck.main`)              |
+| `Setting.misconfigured w`    | `SessionCheck.issue` returns a `JevConfigError` / `ConfigError` |
+| `Setting.on`                 | `SessionCheck.issue` returns None: no output                  |
 """
 
 import json

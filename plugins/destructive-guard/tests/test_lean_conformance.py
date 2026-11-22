@@ -330,14 +330,47 @@ def test_example_session_start_misconfigured_no_key(impl):
     assert "TYPESAFE_API_KEY is not set" in json.loads(r.stdout)["systemMessage"]
 
 
-def test_example_session_start_on_is_silent(impl):
+def test_example_session_start_on(impl):
     assert HookRunner.run_session(impl, {"TYPESAFE_API_KEY": "k"}).stdout == ""
+
+
+EFFECTIVE_IDS = ["effective_ask_allow", "effective_ask_deny", "effective_none_allow"]
 
 
 @pytest.mark.parametrize(
     ("decision", "claude", "expected"),
     [("ask", "allow", "ask"), ("ask", "deny", "deny"), ("none", "allow", "allow")],
-    ids=["effective_ask_allow", "effective_ask_deny", "effective_none_allow"],
+    ids=EFFECTIVE_IDS,
 )
 def test_example_effective(decision, claude, expected):
     assert effective(decision, claude) == expected
+
+
+# Traceability: every `example` of the Lean model carries a `-- example: NAME` line, and each NAME has a
+# test of the same name here (a key of EXAMPLES, a `test_example_<NAME>` function or a parametrize id).
+LEAN = DG / "formal" / "SimpleGate.lean"
+NAMED = re.compile(r"^-- example: (\w+)\n(example\b.*)$", re.MULTILINE)
+
+
+def lean_examples() -> dict[str, str]:
+    return {m[1]: m[2] for m in NAMED.finditer(LEAN.read_text(encoding="utf-8"))}
+
+
+def tested_names() -> set[str]:
+    own = {n.removeprefix("test_example_") for n in globals() if n.startswith("test_example_") and n != "test_example_effective"}
+    return own | set(EXAMPLES) | set(EFFECTIVE_IDS)
+
+
+def test_every_lean_example_is_named():
+    text = LEAN.read_text(encoding="utf-8")
+    assert len(lean_examples()) == len(re.findall(r"^example\b", text, re.MULTILINE)) > 0
+
+
+def test_every_lean_example_has_a_test_of_the_same_name():
+    missing = sorted(set(lean_examples()) - tested_names())
+    assert not missing, f"Lean examples without a test of the same name: {missing}"
+
+
+def test_every_named_test_has_a_lean_example():
+    stale = sorted(tested_names() - set(lean_examples()))
+    assert not stale, f"tests named like Lean examples that no longer exist: {stale}"

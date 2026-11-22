@@ -1,4 +1,16 @@
-"""Jev's answer -> hook output (the Lean model's `judge`)."""
+"""Jev's answer -> hook output (the Lean model's `judge`).
+
+Lean model (formal/SimpleGate.lean) -> code:
+
+| Lean                                   | Here                                                         |
+| -------------------------------------- | ------------------------------------------------------------ |
+| `judge c`                              | `JevJudge.judge`                                             |
+| `JevResult.answer risk`                | a result with `probabilities`; `risk` is the sum of `ask`    |
+| `c.escalate < risk` -> `ask`           | `risk > cfg["escalateThreshold"]` -> `HookOut("ask", ...)`   |
+| otherwise -> no decision               | `HookOut("none")`                                            |
+| `JevResult.down why`                   | no `probabilities`; `JevJudge.unavailable` picks `Down`      |
+| `Down.timeout/http/network/malformed`  | `Down.TIMEOUT/HTTP/NETWORK/MALFORMED` -> ask + warning (D11) |
+"""
 
 from collections.abc import Mapping
 from decimal import ROUND_HALF_UP, Decimal
