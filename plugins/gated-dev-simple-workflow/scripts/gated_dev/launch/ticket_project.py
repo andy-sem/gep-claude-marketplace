@@ -17,8 +17,20 @@ class TicketProject:
 
     DEFAULT_KEY_PATTERN = "^[A-Za-z][A-Za-z0-9._-]*$"
     CONFIG_KEYS = frozenset(
-        ("ticketsDir", "keyPattern", "baseBranch", "setupCommand", "formatCommand", "riskPaths", "escalationExtra", "models", "orchestratorRules", "tracker", "flow", "dryRunGate")
+        ("ticketsDir", "keyPattern", "baseBranch", "setupCommand", "formatCommand", "riskPaths", "escalationExtra", "models", "orchestratorRules", "tracker", "flow", "dryRunGate", "devTier")
     )
+    DEV_TIERS = frozenset(("auto", "godzilla", "workhorse", "pawn"))
+    MODEL_DEFAULTS: ClassVar[dict[str, str]] = {
+        "spec": "sonnet",
+        "plan": "opus",
+        "review": "sonnet",
+        "reviewRisk": "opus",
+        "devGodzilla": "opus",
+        "devWorkhorse": "sonnet",
+        "devPawn": "haiku",
+    }
+    MODEL_ALIASES = frozenset(("opus", "sonnet", "haiku", "fable", "best", "opusplan"))
+    _MODEL_ID = re.compile(r"claude-[a-z0-9.-]+")
     TRACKER_KEY_PATTERN = r"^[A-Z][A-Z0-9]*-\d+$"
     TRACKER_KEYS = frozenset(("type", "site", "statuses", "startFrom", "assign", "comments", "baseFromParent"))
     TRACKER_TYPES = frozenset(("jira",))
@@ -87,6 +99,10 @@ class TicketProject:
         dry_run_gate = raw.get("dryRunGate", False)
         if not isinstance(dry_run_gate, bool):
             raise LaunchError(f"{file}: dryRunGate must be true or false")
+        dev_tier = raw.get("devTier", "auto")
+        if dev_tier not in TicketProject.DEV_TIERS:
+            raise LaunchError(f"{file}: devTier must be one of {', '.join(sorted(TicketProject.DEV_TIERS))}")
+        models = TicketProject._read_models(raw.get("models"), file)
         return {
             "ticketsDir": tickets_dir,
             "keyPattern": key_pattern,
@@ -95,8 +111,26 @@ class TicketProject:
             "tracker": tracker,
             "flow": flow,
             "dryRunGate": dry_run_gate,
+            "devTier": dev_tier,
+            "models": models,
         }
 
+
+    @staticmethod
+    def _read_models(raw: Any, file: Path) -> dict[str, str]:
+        """The checked `models` with the defaults filled in."""
+        if raw is None:
+            return dict(TicketProject.MODEL_DEFAULTS)
+        if not isinstance(raw, dict):
+            raise LaunchError(f"{file}: models must be an object")
+        if "dev" in raw:
+            raise LaunchError(f"{file}: models.dev was replaced by models.devWorkhorse (and devGodzilla, devPawn)")
+        for k, v in raw.items():
+            if k not in TicketProject.MODEL_DEFAULTS:
+                raise LaunchError(f'{file}: models has unknown key "{k}"')
+            if not (isinstance(v, str) and (v in TicketProject.MODEL_ALIASES or TicketProject._MODEL_ID.fullmatch(v))):
+                raise LaunchError(f"{file}: models.{k} must be a model alias or a claude-* model id")
+        return {**TicketProject.MODEL_DEFAULTS, **raw}
 
     @staticmethod
     def _read_tracker(raw: Any, file: Path) -> dict | None:
