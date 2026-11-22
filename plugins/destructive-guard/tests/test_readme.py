@@ -28,3 +28,16 @@ def test_readme_documents_every_env_variable():
 @pytest.mark.parametrize("path", sorted((DG / "jev").glob("*.json")), ids=lambda p: p.name)
 def test_readme_lists_every_jev_prompt(path):
     assert f"`{path.stem}`" in README
+
+
+def test_readme_documents_the_removed_variables_and_assumptions():
+    for n in ("GATE_JEV", "GATE_CHECKS", "GATE_RULES_FILE", "GATE_STRICT", "GATE_JEV_SCOPE"):
+        assert f"`{n}`" in README  # the migration table (the removed names are also in lib/)
+    for n in range(1, 8):
+        assert f"| A{n} |" in README
+    assert "2.1.330" in README
+
+
+@pytest.mark.parametrize("text", ["jev-unavailable:", "plugin-fault:", "GATE_ENABLED=0"])
+def test_readme_explains_the_ask_reasons(text):
+    assert text in README

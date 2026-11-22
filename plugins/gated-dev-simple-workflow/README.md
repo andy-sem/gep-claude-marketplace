@@ -452,7 +452,7 @@ real team project) is still to do.
 `destructive-guard` 1.0 decides with the Jev classifier only and has no rule
 ids. The `## Gated operations` table therefore has a `Gate` column instead of
 `Rule ID`, filled from `check` only when `dryRunGate` is true (decision D6 of
-`docs/plans/lean-gate/`, option b: a check costs a Jev request and sends the
+the `destructive-guard` README, option b: a check costs a Jev request and sends the
 command).
 
 ## Requirements
