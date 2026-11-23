@@ -104,7 +104,7 @@ The mode can be raised during the run, never lowered
 | kickoff | orchestrator | `ticket.md`, config | worktree, `state.json`, `decisions.md` | worktree exists, setup ran |
 | spec (heavy) | spec agent (read-only) | `ticket.md`, repo docs, code | `spec.md` (goal, context, in/out of scope, testable acceptance criteria, assumptions, open questions tagged blocking/non-blocking) | no blocking questions left |
 | plan | planner (read-only) | `spec.md` (heavy) or `ticket.md` (medium, light), `decisions.md`, repo | `plan.md` (steps with files and checks, gated operations table, verification, risks, `## Mode`; in medium and light also `## Acceptance criteria`) | **H2 approval**; then `ticket.md`, `spec.md` (when it exists), `plan.md`, `decisions.md` are committed |
-| dev | `ticket-dev-godzilla` / `-workhorse` / `-pawn` (all tools), tier per §5b | `plan.md`, `spec.md` (when it exists), `decisions.md` | one commit per step (`Plan-Step: N`), `dev-report.md` | steps done, verification passes (2 fix attempts, then promotion or H6) |
+| dev | `ticket-dev-godzilla` / `-workhorse` / `-pawn` (all tools), one agent per task of the plan's `## Tasks`, in order, tier per task (§5b) | `plan.md`, `spec.md` (when it exists), `decisions.md` | one commit per step (`Plan-Step: N`), `dev-report.md` (a `## Task T<n>` section per task) | steps done, verification passes (2 fix attempts, then promotion or H6) |
 | review (heavy, medium) | reviewer (read-only) | diff vs base, `spec.md` (when it exists), `plan.md`, `dev-report.md` | `review.md`: critical / important / minor findings, `VERDICT: PASS|CHANGES_REQUIRED` | PASS, or H5 after 2 fix rounds |
 | complete | orchestrator | `plan.md`, `review.md`, `state.json` | push, PR | PR open, stage `done` |
 | done | orchestrator + `watch_pr.py` (background) | the PR | `watch` heartbeat in `state.json` | feedback → `addressing_review`, merged → `merged`, closed → stop |
@@ -159,7 +159,7 @@ posts its comment.
 Three dev agents share one contract and differ in weight: `ticket-dev-godzilla`
 (opus, heavy), `ticket-dev-workhorse` (sonnet, normal), `ticket-dev-pawn`
 (haiku, mechanical steps spelled out in the plan). The planner advises in a
-`## Dev tier` section of `plan.md`. The orchestrator decides at H2, shows the
+`## Dev tier` section of `plan.md` and a `Tier:` line per task of `## Tasks`. The orchestrator decides at H2, shows the
 choice in the H2 summary and records it in `state.json` (`devTier`,
 `devTierReason`). Rules, in order:
 
@@ -176,7 +176,7 @@ mode.
 
 | Dev run | Tier |
 | --- | --- |
-| `MODE=implement` | `devTier` |
+| `MODE=implement` | the task's tier (`taskTiers`), `devTier` without tasks |
 | `MODE=fix-review`, round 1 | `devTier` |
 | `MODE=fix-review`, round 2 and later | one tier up |
 | `MODE=fix-pr` | per round from `pr-feedback-<n>.md`: `pawn` when every `change` item is mechanical, else `devTier`; at least `workhorse` when an item touches `riskPaths` |

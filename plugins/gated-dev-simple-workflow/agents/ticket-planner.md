@@ -1,6 +1,6 @@
 ---
 name: ticket-planner
-description: Ticket pipeline stage 2. Reads spec.md (or ticket.md when there is no spec) and the repo and writes TICKET_DIR/plan.md with ordered steps, gated operations, verification commands and risks. Use only when the ticket orchestrator launches it.
+description: Ticket pipeline stage 2. Reads spec.md (or ticket.md when there is no spec) and the repo and writes TICKET_DIR/plan.md with ordered steps grouped into dev tasks, gated operations, verification commands and risks. Use only when the ticket orchestrator launches it.
 model: opus
 effort: high
 disallowedTools: Edit, NotebookEdit
@@ -89,13 +89,20 @@ Write `TICKET_DIR/plan.md` (overwrite it if it exists) with exactly these sectio
   - `Files:` the files it creates or changes (repo-relative paths),
   - `Check:` how to verify the step (a command or an observable result).
   Make each step one commit-sized unit. Apply TDD where it applies: the test comes first.
+- `## Tasks`: the steps grouped into tasks. Each task runs in its own dev subagent with a fresh context, one task after the other in the order listed, so size every task for one agent to finish without running out of context: usually 1 to 3 steps and the handful of files they change and read. Each task is `### Task T<n>: <title>` (numbered from 1) followed by:
+  - `Steps:` the step numbers, consecutive and in order (`1, 2`). Every step belongs to exactly one task; task T1 starts with step 1 and each next task continues where the previous one ended. Never split a step across tasks.
+  - `Read first:` the files beyond the step's own `Files:` that the agent must read to do the task (patterns to follow, callers), or `None`. Keep it short: it is the agent's whole picture of the codebase.
+  - `Provides:` what later tasks rely on from this one, as exact contracts (function signatures, types, endpoints, file paths, config keys), or `None`. A later task works from these contracts instead of reading the whole implementation.
+  - `Tier:` one line `<godzilla | workhorse | pawn> - <reason>`, chosen for this task alone by the criteria of `## Dev tier` below.
+
+  Split where the work has a natural seam (a layer, a module, a self-contained piece with a clear contract), so a later task needs to know only the `Provides:` of earlier ones. A plan of up to 3 small steps is one task.
 - `## Gated operations`: a table with columns `Command`, `Gate`, `Reason`. List every command or tool call the steps need that you judge likely to need the developer's approval: anything that deletes or overwrites data, rewrites git history, pushes, deploys, changes infrastructure, databases or remote services, or touches secrets. Give the exact command. `Reason` is your own short reason. `Gate` is `unknown` unless `GATE_CHECK` is set; with it, run it on each listed call and write `ask (risk 0.86)` from `decision` and `risk` (or `none (risk 0.12)`; when the check reports a `jev-unavailable` reason or a warning, write `unknown`). `GATE_CHECK` only fills the `Gate` column: never add or drop rows because of it, and never guess a `Gate` value. List only calls a step actually runs, as written in the step; a command that runs only inside a script or tool the step calls (an npm script, a Makefile target) is not listed on its own, but mention in the step that the gate does not see it. Write "None" when there are none.
 - `## Verification`: the commands to run after the steps, taken from the project's documented checks (`CLAUDE.md`, contributing docs, package scripts): the full test suite for source changes, lighter checks such as format/lint for documentation-only changes.
 - `## Risks`: what could go wrong and how the plan limits it.
-- `## Dev tier`: one line `<godzilla | workhorse | pawn> - <reason>`. The reason gives the step count, how much each step leaves open, the risk and the files touched. Pick by these criteria:
-  - `pawn`: few, mechanical steps fully spelled out (copy, config, docs, renames, a test for a known case). Never when the plan has gated operations, touches `riskPaths`, or marks a step as a risk.
+- `## Dev tier`: one line `<godzilla | workhorse | pawn> - <reason>`, the highest tier of all tasks. It also runs the final verification and the fix rounds after review. The reason gives the step count, how much each step leaves open, the risk and the files touched. Pick each task's tier, and this one, by these criteria:
+  - `pawn`: few, mechanical steps fully spelled out (copy, config, docs, renames, a test for a known case). Never when the steps concerned run gated operations, touch `riskPaths`, or are marked as a risk.
   - `workhorse`: the normal case.
   - `godzilla`: many steps, cross-cutting changes, tricky logic, migrations, concurrency, performance, or escalation items already decided in `DECISIONS`.
-  - The mode bounds it: in `heavy` mode at least `workhorse`; in `light` mode at most `workhorse`. A light ticket that needs `godzilla` gets `raise to medium` or `raise to heavy` under `## Mode` instead.
+  - The mode bounds every tier: in `heavy` mode at least `workhorse`; in `light` mode at most `workhorse`. A light ticket with a task that needs `godzilla` gets `raise to medium` or `raise to heavy` under `## Mode` instead.
 
 If a decision from the escalation list is needed to finish the plan, put the best-guess answer in the plan, then end with a `NEEDS_DECISION` block with `stage: plan`. Otherwise end with `RESULT: OK <abs path of plan.md>`.

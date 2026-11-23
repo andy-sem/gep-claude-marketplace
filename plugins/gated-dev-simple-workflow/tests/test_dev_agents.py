@@ -56,3 +56,16 @@ def test_both_prefixes_documented(tier):
 def test_pawn_level_is_literal():
     level = _split("ticket-dev-pawn")[1].split("## Your level")[1].split("\n## ")[0]
     assert "tier too low: " in level
+
+
+@pytest.mark.parametrize("tier", TIERS)
+def test_task_scope_documented(tier):
+    body = _split(f"ticket-dev-{tier}")[1]
+    assert "`TASK=T<n>`" in body
+    assert "## Task T<n>" in body
+
+
+def test_planner_writes_tasks():
+    text = (AGENTS / "ticket-planner.md").read_text(encoding="utf-8")
+    for field in ("`## Tasks`", "`Steps:`", "`Read first:`", "`Provides:`", "`Tier:`"):
+        assert field in text, field
