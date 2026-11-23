@@ -16,7 +16,8 @@ stops the run with a message (nothing is guessed).
     "any change to the public API of packages/sdk",
     "a migration that is not additive"
   ],
-  "models": { "plan": "opus", "reviewRisk": "opus" },
+  "devTier": "auto",
+  "models": { "plan": "opus", "reviewRisk": "opus", "devWorkhorse": "sonnet" },
   "orchestratorRules": ".claude/gated-dev-rules.md",
   "dryRunGate": false,
   "mode": "auto",
@@ -39,7 +40,8 @@ stops the run with a message (nothing is guessed).
 | `formatCommand` | none | Formatter; the files to format are appended. Passed to the dev agent as `FORMAT_CMD=`. |
 | `riskPaths` | see SKILL.md section 8 | Globs; when the diff touches one, the reviewer runs on `models.reviewRisk`. Replaces the default list. |
 | `escalationExtra` | `[]` | Project-specific cases every agent must escalate; passed as `PROJECT_RULES:`. |
-| `models` | `spec: sonnet`, `plan: opus`, `dev: sonnet`, `review: sonnet`, `reviewRisk: opus` | Model per stage; keys given here override the defaults one by one. |
+| `devTier` | `auto` | Developer tier: `auto` (the planner picks per ticket), `godzilla`, `workhorse` or `pawn`. A fixed tier skips the planner's choice. |
+| `models` | `spec: sonnet`, `plan: opus`, `review: sonnet`, `reviewRisk: opus`, `devGodzilla: opus`, `devWorkhorse: sonnet`, `devPawn: haiku` | Model per stage; keys given here override the defaults one by one. Each value is `opus`, `sonnet`, `haiku` or a `claude-...` id; an unknown key is an error. `models.dev` was replaced by the three tier keys and stops with an error. |
 | `orchestratorRules` | none | Repo-relative path to a Markdown file of extra orchestrator steps, one `## <event>` section per event (SKILL.md section 0a). A missing file or an unknown event heading stops the run. A ticket without `ticket.md` may then be started: the `intake` section writes it. |
 | `tracker` | none (the ticket is a file) | Takes the ticket from an issue tracker instead of a hand-written `ticket.md`. Only Jira is supported; see [Tracker: Jira](#tracker-jira). |
 | `dryRunGate` | `false` | `true`: the planner dry-runs the calls it lists through `destructive-guard:check` and fills the `Gate` column of `## Gated operations` (`ask (risk 0.86)`); otherwise the column says `unknown`. Each checked call is one request to the gate's risk classifier and sends the redacted command, so it is off by default. Must be a boolean. `/ticket-flow` runs `/ticket` sessions and inherits the setting; nothing in the flow code calls the gate. |

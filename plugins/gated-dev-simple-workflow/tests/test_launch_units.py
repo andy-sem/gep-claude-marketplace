@@ -593,6 +593,46 @@ def test_read_config_dry_run_gate(tmp_path):
         TicketProject(project(tmp_path / "bad", config={"dryRunGate": "yes"})).read_config()
 
 
+def test_read_config_dev_tier(tmp_path):
+    assert TicketProject(project(tmp_path / "none")).read_config()["devTier"] == "auto"
+    for tier in ("auto", "godzilla", "workhorse", "pawn"):
+        assert TicketProject(project(tmp_path / tier, config={"devTier": tier})).read_config()["devTier"] == tier
+    with pytest.raises(LaunchError, match="devTier must be one of"):
+        TicketProject(project(tmp_path / "bad", config={"devTier": "giant"})).read_config()
+
+
+def test_read_config_models_defaults_and_overrides(tmp_path):
+    defaults = TicketProject(project(tmp_path / "none")).read_config()["models"]
+    assert defaults["devGodzilla"] == "opus"
+    assert defaults["devWorkhorse"] == "sonnet"
+    assert defaults["devPawn"] == "haiku"
+    assert defaults["reviewRisk"] == "opus"
+    given = {"devPawn": "claude-haiku-4-5", "plan": "sonnet"}
+    models = TicketProject(project(tmp_path / "set", config={"models": given})).read_config()["models"]
+    assert models == {**defaults, **given}
+
+
+@pytest.mark.parametrize(
+    ("models", "message"),
+    [
+        ("opus", "models must be an object"),
+        ({"bogus": "opus"}, 'models has unknown key "bogus"'),
+        ({"devPawn": 3}, "models.devPawn must be opus, sonnet, haiku or a claude-"),
+        ({"devPawn": "haiku; rm -rf /"}, "models.devPawn must be opus, sonnet, haiku or a claude-"),
+        ({"plan": "claude-"}, "models.plan must be opus, sonnet, haiku or a claude-"),
+    ],
+)
+def test_read_config_models_invalid(tmp_path, models, message):
+    with pytest.raises(LaunchError, match=message):
+        TicketProject(project(tmp_path, config={"models": models})).read_config()
+
+
+def test_read_config_models_dev_is_replaced(tmp_path):
+    with pytest.raises(LaunchError) as error:
+        TicketProject(project(tmp_path, config={"models": {"dev": "sonnet"}})).read_config()
+    assert str(error.value).endswith("models.dev was replaced by models.devWorkhorse (and devGodzilla, devPawn)")
+
+
 def test_orca_worktree_args_make_the_worktree_a_child_of_the_launchers_workspace():
     argv = OrcaWorktrees("/r").orca_worktree_args(key="K-1", title="Do it", base="main", parent="repo::/r")
     assert argv[-3:] == ["--parent-worktree", "worktree:repo::/r", "--json"]

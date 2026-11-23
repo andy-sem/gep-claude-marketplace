@@ -17,8 +17,21 @@ class TicketProject:
 
     DEFAULT_KEY_PATTERN = "^[A-Za-z][A-Za-z0-9._-]*$"
     CONFIG_KEYS = frozenset(
-        ("ticketsDir", "keyPattern", "baseBranch", "setupCommand", "formatCommand", "riskPaths", "escalationExtra", "models", "orchestratorRules", "tracker", "flow", "dryRunGate", "mode", "modes", "modeRules")
+        (
+            "ticketsDir", "keyPattern", "baseBranch", "setupCommand", "formatCommand", "riskPaths", "escalationExtra", "models",
+            "orchestratorRules", "tracker", "flow", "dryRunGate", "mode", "modes", "modeRules", "devTier",
+        )
     )
+    DEV_TIERS = frozenset(("auto", "godzilla", "workhorse", "pawn"))
+    MODEL_DEFAULTS: ClassVar[dict[str, str]] = {
+        "spec": "sonnet",
+        "plan": "opus",
+        "review": "sonnet",
+        "reviewRisk": "opus",
+        "devGodzilla": "opus",
+        "devWorkhorse": "sonnet",
+        "devPawn": "haiku",
+    }
     TRACKER_KEY_PATTERN = r"^[A-Z][A-Z0-9]*-\d+$"
     TRACKER_KEYS = frozenset(("type", "site", "statuses", "startFrom", "assign", "comments", "baseFromParent"))
     TRACKER_TYPES = frozenset(("jira",))
@@ -100,6 +113,10 @@ class TicketProject:
         mode_rules = raw.get("modeRules", [])
         if not (isinstance(mode_rules, list) and all(isinstance(x, str) and x for x in mode_rules)):
             raise LaunchError(f"{file}: modeRules must be a list of non-empty strings")
+        dev_tier = raw.get("devTier", "auto")
+        if dev_tier not in TicketProject.DEV_TIERS:
+            raise LaunchError(f"{file}: devTier must be one of {', '.join(sorted(TicketProject.DEV_TIERS))}")
+        models = TicketProject._read_models(raw.get("models"), file)
         return {
             "ticketsDir": tickets_dir,
             "keyPattern": key_pattern,
@@ -111,6 +128,8 @@ class TicketProject:
             "mode": mode,
             "modes": modes,
             "modeRules": mode_rules,
+            "devTier": dev_tier,
+            "models": models,
         }
 
     @staticmethod
@@ -139,6 +158,21 @@ class TicketProject:
                 modes[name]["session"] = value["session"]
         return modes
 
+    @staticmethod
+    def _read_models(raw: Any, file: Path) -> dict[str, str]:
+        """The checked `models` with the defaults filled in."""
+        if raw is None:
+            return dict(TicketProject.MODEL_DEFAULTS)
+        if not isinstance(raw, dict):
+            raise LaunchError(f"{file}: models must be an object")
+        if "dev" in raw:
+            raise LaunchError(f"{file}: models.dev was replaced by models.devWorkhorse (and devGodzilla, devPawn)")
+        for k, v in raw.items():
+            if k not in TicketProject.MODEL_DEFAULTS:
+                raise LaunchError(f'{file}: models has unknown key "{k}"')
+            if not LaunchNaming.is_model(v):
+                raise LaunchError(f"{file}: models.{k} must be opus, sonnet, haiku or a claude-... model id")
+        return {**TicketProject.MODEL_DEFAULTS, **raw}
 
     @staticmethod
     def _read_tracker(raw: Any, file: Path) -> dict | None:
