@@ -22,6 +22,7 @@ The orchestrator starts you with a prompt that contains these lines:
 - `DECISIONS:` followed by YAML: the decisions already taken. Treat them as binding. Do not ask about them again.
 - `PROJECT_RULES:` (optional) followed by a list: project-specific cases that must also be escalated. Treat them as part of "When to escalate".
 - `MODE=implement|fix-review|fix-pr`: `implement` builds the plan; `fix-review` fixes the findings in `review.md`; `fix-pr` fixes the human feedback collected from the pull request.
+- `TASK=T<n>` (optional, with `MODE=implement` only): build only this task of the plan's `## Tasks` section. Absent means the whole plan.
 - `REVIEW_ROUND=<n>` (with `MODE=fix-review` only): the review round being fixed, 1 or higher.
 - `FEEDBACK=<abs>` (with `MODE=fix-pr` only): absolute path of `TICKET_DIR/pr-feedback-<n>.md`, the classified list of PR comments.
 - `MODE_PIPELINE=heavy|medium|light` (optional): how much of the pipeline the ticket runs. It is distinct from `MODE=` above and changes nothing in your behaviour.
@@ -91,12 +92,16 @@ Before starting, run `git -C <WORKTREE> log <BASE_BRANCH>..HEAD` and skip every 
 
 ### MODE=implement
 
+With `TASK`, build only the steps that task lists. Earlier tasks are already committed; your context is your task: read its steps, its `Read first:` files and the `Provides:` lines of earlier tasks, and open other code only where those are not enough. Do not work on the steps of other tasks.
+
 For each remaining step in order:
 
 1. Implement it, test first where it applies. Change only the files the plan lists for that step.
 2. Format every changed, non-generated file: if `FORMAT_CMD` is set, run `<FORMAT_CMD> <file>...`; otherwise follow the formatting rules in `CLAUDE.md`, if any.
 3. Run the step's `Check:`.
 4. Commit with the subject `<type>(<KEY>): <desc>` (Conventional Commits, ticket key as the scope) and the trailer `Plan-Step: N`. Also end every commit message with the `Co-Authored-By` attribution line your session's instructions specify for commits (do not invent a model name; if none is specified, use `Co-Authored-By: Claude <noreply@anthropic.com>`).
+
+With `TASK` set to a task that is not the last one in `## Tasks`: after its last step, append a section `## Task T<n>` to `TICKET_DIR/dev-report.md` (create the file if needed) with each step and its commit hash and any deviation from the plan, commit it with the subject `docs(<KEY>): add dev report for task T<n>` and end with `RESULT: OK <abs path of dev-report.md>`. Otherwise (the last task, or no `TASK`) continue below.
 
 After the last step, run the plan's `## Verification` commands. You get 2 fix attempts for failures. If verification still fails, end with a `NEEDS_DECISION` block with `stage: dev` whose `question:` starts with the fixed prefix `verification failed: ` followed by the failing command, and with an excerpt of its output in `context`. Use that prefix for verification failures only.
 
@@ -127,4 +132,4 @@ Append to `TICKET_DIR/dev-report.md` (keep what is there) a section `## PR feedb
 
 ### Report
 
-When all steps are done and verification passes, write `TICKET_DIR/dev-report.md` with `## Steps done` (each step and its commit hash), `## Verification` (each command and its result) and `## Deviations from the plan` (or "None"). Commit it with the subject `docs(<KEY>): add dev report`. Then end with `RESULT: OK <abs path of dev-report.md>`.
+When all steps are done and verification passes, write `TICKET_DIR/dev-report.md` (keep the `## Task` sections of earlier tasks) with `## Steps done` (each step and its commit hash), `## Verification` (each command and its result) and `## Deviations from the plan` (or "None"). Commit it with the subject `docs(<KEY>): add dev report`. Then end with `RESULT: OK <abs path of dev-report.md>`.

@@ -746,6 +746,29 @@ feedback → `pawn`, and pawn on haiku keeping the dev contract) is still to
 do in the demo repo. If pawn breaks the contract, the first fix is a tighter
 "Your level" section, not a different model.
 
+### Dev tasks (0.15, November 2026)
+
+One dev agent built the whole plan, and on big tickets its context window
+ran out. The planner now groups the steps into tasks (`## Tasks` in
+`plan.md`: `Steps`, `Read first`, `Provides`, `Tier`), and the `/ticket`
+skill spawns one dev agent per task with `TASK=T<n>`, one after the other in
+the same worktree. Binding decisions:
+
+- **Sequential only.** Tasks run in order, never in parallel: parallel agents
+  in one worktree would see each other's half-done changes and race on git,
+  and separate worktrees per task cost more than they save.
+- **Small contexts.** A task agent reads its own steps, its `Read first`
+  files and the `Provides` contracts of earlier tasks, not the whole plan.
+- **Tier per task.** The H2 tier rules run per task (`state.taskTiers`);
+  `devTier` is the plan's tier, at least the highest task tier, and runs the
+  fix rounds. Promotion is per task (`devTierHistory` entries get `task`).
+  This answers O1 of the dev tiers at task level.
+- **Verification.** Every task runs its steps' checks; only the last task
+  runs the plan's `## Verification` and completes `dev-report.md` (one
+  `## Task T<n>` section per earlier task). Resume continues with the first
+  task that has a step without a `Plan-Step` commit. A plan without
+  `## Tasks` runs one agent as before.
+
 ### Lean gate follow-up
 
 `destructive-guard` 1.0 decides with the Jev classifier only and has no rule
