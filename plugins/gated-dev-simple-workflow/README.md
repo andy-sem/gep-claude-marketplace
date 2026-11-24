@@ -321,12 +321,12 @@ decisions, warnings, the PR URL, the time of the last PR feedback handled
 ## Configuration
 
 Optional, per clone, in `.claude/gated-dev-simple-workflow/config.json` of the
-main checkout. The file is local and git-ignored: the first `/ticket` run
-creates it with `{}` and adds `/.claude/gated-dev-simple-workflow/` to
-`.git/info/exclude` (the file is never committed). Sessions in worktrees, the
-launcher and `/ticket-flow` all read the main checkout's copy. The old location
-`.claude/gated-dev.json` is still read when the new file is missing, with a
-notice to move it; when both exist the new one wins. Every key is optional; an
+main checkout. The file is local and git-ignored: the first run of
+`/ticket`, the launcher or `/ticket-flow` adds
+`/.claude/gated-dev-simple-workflow/` to `.git/info/exclude` and creates the
+file, moving an old `.claude/gated-dev.json` there or writing `{}` (commit the
+deletion of the old file afterwards). Sessions in worktrees, the launcher and
+`/ticket-flow` all read the main checkout's copy. Every key is optional; an
 invalid file or an unknown key stops the run with a message. Example:
 
 ```json
@@ -784,18 +784,21 @@ version, the launcher the main checkout's. It now lives in
 `.claude/gated-dev-simple-workflow/config.json` of the main checkout and is
 local. Binding decisions:
 
-- **Created on first use, not on install.** Claude Code plugins have no
-  install hook, and a `SessionStart` hook would add the folder to every repo
-  opened. The first `/ticket` kickoff creates the file with `{}`.
-- **Ignored through `.git/info/exclude`.** Kickoff appends
+- **Created on first use, not on install or update.** Claude Code plugins
+  have no install or update hook, and a `SessionStart` hook would add the
+  folder to every repo opened. The first `/ticket` session, launcher or
+  `/ticket-flow` command in a clone creates the file.
+- **Ignored through `.git/info/exclude`.** The same step appends
   `/.claude/gated-dev-simple-workflow/` next to the existing pipeline
   entries, so the project's `.gitignore` is never changed.
 - **One copy per clone.** The skill, the launcher and the flow CLI all read
   the main checkout's file (first entry of `git worktree list`), never a
   worktree's.
-- **Migration.** The old file is still read when the new one is missing,
-  with a notice to move it; when both exist the new one wins. Kickoff
-  creates no new file while the old one exists, so it cannot hide it.
+- **Migration by moving.** When the new file is missing and the old
+  `.claude/gated-dev.json` exists, it is moved (not copied), so the settings
+  carry over and only one file is left; the developer commits the deletion.
+  Without either file, `{}` is written. Dry runs and `--status` move nothing
+  and read the old file.
 
 ### Lean gate follow-up
 

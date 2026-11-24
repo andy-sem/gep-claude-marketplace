@@ -126,7 +126,7 @@ def demo(tmp_path):
 # --- findRun ------------------------------------------------------------------
 
 
-def test_launch_reads_the_main_checkout_config_from_a_worktree_and_reports_the_legacy_file(tmp_path):
+def test_launch_reads_the_main_checkout_config_from_a_worktree(tmp_path):
     p = Project(tmp_path, config={"ticketsDir": "custom"})
     wt = tmp_path / "wt"
     GitRepo.add_worktree(p.root, wt, "side")
@@ -134,12 +134,41 @@ def test_launch_reads_the_main_checkout_config_from_a_worktree_and_reports_the_l
     assert (r.status, r.stdout.strip()) == (0, "no ticket without a run in custom"), r.stderr
     assert r.stderr == ""
 
-    old = Project(tmp_path / "old", config=None)
-    (old.root / ".claude").mkdir()
-    (old.root / ".claude" / "gated-dev.json").write_text('{"ticketsDir": "legacy"}')
-    r = old.launch("--all")
+
+def exclude_lines(root: Path) -> list[str]:
+    exclude = root / ".git" / "info" / "exclude"
+    return exclude.read_text().splitlines() if exclude.exists() else []
+
+
+def test_launch_moves_the_legacy_config_into_the_ignored_folder(tmp_path):
+    p = Project(tmp_path)
+    (p.root / ".claude").mkdir()
+    (p.root / ".claude" / "gated-dev.json").write_text('{"ticketsDir": "legacy"}')
+    r = p.launch("--all")
     assert (r.status, r.stdout.strip()) == (0, "no ticket without a run in legacy"), r.stderr
-    assert "gated-dev.json is deprecated" in r.stderr
+    assert re.search(r"moved .*gated-dev\.json to .*gated-dev-simple-workflow/config\.json", r.stderr)
+    assert not (p.root / ".claude" / "gated-dev.json").exists()
+    assert (p.root / ".claude" / "gated-dev-simple-workflow" / "config.json").read_text() == '{"ticketsDir": "legacy"}'
+    assert exclude_lines(p.root).count("/.claude/gated-dev-simple-workflow/") == 1
+    assert "gated-dev-simple-workflow" not in GitRepo.git(p.root, "status", "--porcelain")
+
+    again = p.launch("--all")
+    assert (again.status, again.stderr) == (0, "")
+    assert exclude_lines(p.root).count("/.claude/gated-dev-simple-workflow/") == 1
+
+
+def test_launch_creates_an_empty_ignored_config_but_not_on_a_dry_run(tmp_path):
+    p = Project(tmp_path)
+    config = p.root / ".claude" / "gated-dev-simple-workflow" / "config.json"
+    dry = p.launch("--all", "--dry-run")
+    assert dry.status == 0, dry.stderr
+    assert not config.exists()
+    r = p.launch("--all")
+    assert r.status == 0, r.stderr
+    assert "created" in r.stderr
+    assert config.read_text() == "{}\n"
+    assert "/.claude/gated-dev-simple-workflow/" in exclude_lines(p.root)
+    assert "gated-dev-simple-workflow" not in GitRepo.git(p.root, "status", "--porcelain")
 
 
 def test_find_run_finds_the_key_worktree_ignores_aborted_runs_rejects_several(tmp_path):

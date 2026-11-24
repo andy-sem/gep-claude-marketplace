@@ -2,15 +2,18 @@
 
 Optional, per clone, in the main checkout of the repository (the first entry
 of `git worktree list`). Sessions in a worktree, the launcher and `/ticket-flow`
-all read this one file. It is local and never committed: the first `/ticket`
-run creates it with `{}` and adds `/.claude/gated-dev-simple-workflow/` to the
-repository's `.git/info/exclude`. Every key is optional; a missing file means
-all defaults. Invalid JSON or an unknown key stops the run with a message
-(nothing is guessed).
+all read this one file. It is local and never committed. The first run of
+`/ticket`, the launcher or `/ticket-flow` in a clone adds
+`/.claude/gated-dev-simple-workflow/` to the repository's `.git/info/exclude`
+and creates the file: it moves the old `.claude/gated-dev.json` there when
+that file exists, and writes `{}` otherwise. Every key is optional; `{}`
+means all defaults. Invalid JSON or an unknown key stops the run with a
+message (nothing is guessed).
 
-Old location: `.claude/gated-dev.json` (committed, read per checkout) is
-still read when the new file does not exist, with a notice to move it. When
-both exist, the new file wins and the old one is reported as ignored.
+Old location: `.claude/gated-dev.json` was committed and read per checkout.
+After the move, commit its deletion. Dry runs and `--status` move nothing and
+still read the old file. When both files exist, the new one wins and the old
+one is reported as ignored.
 
 ```json
 {

@@ -22,7 +22,7 @@ Rules that hold everywhere:
 
 ## 1. Start
 
-1. Read the config of the main checkout (the first `worktree` entry of `git worktree list --porcelain`): `.claude/gated-dev-simple-workflow/config.json`, or the old `.claude/gated-dev.json` when only that one exists (the flow CLI prints a notice to move it). Without a `tracker`, stop: "`/ticket-flow` needs a Jira tracker in `.claude/gated-dev-simple-workflow/config.json`." Settings are in `flow` (`references/config.md`).
+1. Read the config of the main checkout (the first `worktree` entry of `git worktree list --porcelain`): `.claude/gated-dev-simple-workflow/config.json`, (the flow CLI creates it on its first run that is not a dry run, moving an old `.claude/gated-dev.json` there or writing `{}`; with `--dry-run` only the old file present, read that one). Without a `tracker`, stop: "`/ticket-flow` needs a Jira tracker in `.claude/gated-dev-simple-workflow/config.json`." Settings are in `flow` (`references/config.md`).
 2. Check the session's Jira tools: read issue and search by JQL are both required. If either is missing, stop with: `tracker "jira" is configured, but this session has no Jira tools (read issue, search by JQL). Connect a Jira server or remove "tracker" from .claude/gated-dev-simple-workflow/config.json.`
 3. Read the parent issue; stop when it cannot be read. Print its key and summary.
 4. Mode flags:

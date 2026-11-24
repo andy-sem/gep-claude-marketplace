@@ -88,8 +88,38 @@ class TicketProject:
                 return current, f"{legacy} is ignored: {current} takes precedence; delete the old file"
             return current, None
         if legacy.exists():
-            return legacy, f"{legacy} is deprecated: move it to {current} (git-ignored)"
+            return legacy, f"{legacy} is deprecated: it is moved to {current} (git-ignored) on the next run that is not a dry run"
         return current, None
+
+    CONFIG_EXCLUDE = "/.claude/gated-dev-simple-workflow/"
+
+    def ensure_config(self) -> str | None:
+        """Makes sure `CONFIG_PATH` exists in `root` and is git-ignored; returns a notice when it changed something.
+
+        No file: a `LEGACY_CONFIG_PATH` file is moved there, otherwise `{}` is written. Either way
+        `CONFIG_EXCLUDE` goes into the repository's `info/exclude` (shared by all worktrees, never committed).
+        """
+        current = Path(self.root) / TicketProject.CONFIG_PATH
+        if current.exists():
+            return None
+        legacy = Path(self.root) / TicketProject.LEGACY_CONFIG_PATH
+        self._exclude(TicketProject.CONFIG_EXCLUDE)
+        current.parent.mkdir(parents=True, exist_ok=True)
+        if legacy.exists():
+            legacy.replace(current)
+            return f"moved {legacy} to {current} (git-ignored); commit the deletion of {TicketProject.LEGACY_CONFIG_PATH}"
+        current.write_text("{}\n", encoding="utf-8")
+        return f"created {current} (git-ignored, all defaults)"
+
+    def _exclude(self, line: str) -> None:
+        """Appends `line` to the repository's `info/exclude` unless it is there."""
+        common = str(self.run("git", ["-C", str(self.root), "rev-parse", "--path-format=absolute", "--git-common-dir"]).stdout).strip()
+        exclude = Path(common) / "info" / "exclude"
+        text = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
+        if line in text.splitlines():
+            return
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        exclude.write_text(f"{text}{'' if not text or text.endswith(chr(10)) else chr(10)}{line}\n", encoding="utf-8")
 
     def read_config(self) -> dict:
         """The config file of `root` (`config_file`), with defaults. Raises on invalid content.

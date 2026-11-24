@@ -42,7 +42,7 @@ The two plugins are independent and installable on their own:
 - Plan approval is always a stop point; after it the run commits, pushes and opens a PR with `gh`, then watches the PR (`scripts/watch_pr.py`, background): new feedback → follow-up round (`--address-review`, dev `MODE=fix-pr`, replies marked `<!-- gated-dev -->`), merge → notification and worktree removal (branch kept).
 - With `destructive-guard` enabled the planner dry-runs its calls through `destructive-guard:check` and lists the ones that will ask in the plan's `## Gated operations` table.
 - `hooks/notify.py` via `hooks/run-python.sh` (`Notification` hook; Python >= 3.14, silent without it): desktop notification for launcher-started sessions (`TICKET_FLOW_KEY`); macOS `osascript`, Linux `notify-send`, silent elsewhere; `GATED_DEV_NOTIFY=0` disables. Tests in `tests/test_notify.py`, `tests/test_run_python.py`.
-- Per-clone settings: `.claude/gated-dev-simple-workflow/config.json` in the main checkout, local and git-ignored (created by the first `/ticket` kickoff, which adds it to `.git/info/exclude`; the old committed `.claude/gated-dev.json` is still read as a fallback; see `skills/ticket/references/config.md`); pipeline contract in `skills/ticket/references/pipeline-spec.md`.
+- Per-clone settings: `.claude/gated-dev-simple-workflow/config.json` in the main checkout, local and git-ignored (`TicketProject.ensure_config` and `/ticket` section 0 create it on first use, adding it to `.git/info/exclude` and moving an old `.claude/gated-dev.json` there; see `skills/ticket/references/config.md`); pipeline contract in `skills/ticket/references/pipeline-spec.md`.
 
 ## Work in progress
 

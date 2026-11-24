@@ -197,9 +197,11 @@ class FlowCli:
         cwd = opts.get("cwd") or os.getcwd()
         root = TicketProject.find_root(cwd=cwd, run=self.run)
         project = TicketProject(root, self.run)
+        notice = None if opts.get("dryRun") else project.ensure_config()
         config = project.read_config()
-        if project.config_notice:
-            self.err(project.config_notice)
+        for line in (notice, project.config_notice):
+            if line:
+                self.err(line)
         TicketProject.check_key(opts["parent"], config)
         settings = self._settings(config, opts)
         state = FlowState(

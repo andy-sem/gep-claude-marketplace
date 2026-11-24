@@ -242,7 +242,7 @@ def test_read_config_location_new_path_legacy_fallback_and_precedence(tmp_path):
 
     old = TicketProject(legacy(tmp_path / "old", {"ticketsDir": "o"}))
     assert old.read_config()["ticketsDir"] == "o"
-    assert re.search(r"gated-dev\.json is deprecated: move it to .*gated-dev-simple-workflow/config\.json", old.config_notice)
+    assert re.search(r"gated-dev\.json is deprecated: it is moved to .*gated-dev-simple-workflow/config\.json", old.config_notice)
 
     both = TicketProject(legacy(project(tmp_path / "both", config={"ticketsDir": "n"}), {"ticketsDir": "o"}))
     assert both.read_config()["ticketsDir"] == "n"
