@@ -92,11 +92,12 @@ class TicketProject:
         return current, None
 
     CONFIG_EXCLUDE = "/.claude/gated-dev-simple-workflow/"
+    CONFIG_TEMPLATE = Path(__file__).resolve().parents[3] / "templates" / "config.json"
 
     def ensure_config(self) -> str | None:
         """Makes sure `CONFIG_PATH` exists in `root` and is git-ignored; returns a notice when it changed something.
 
-        No file: a `LEGACY_CONFIG_PATH` file is moved there, otherwise `{}` is written. Either way
+        No file: a `LEGACY_CONFIG_PATH` file is moved there, otherwise `CONFIG_TEMPLATE` (every key with its default) is copied. Either way
         `CONFIG_EXCLUDE` goes into the repository's `info/exclude` (shared by all worktrees, never committed).
         """
         current = Path(self.root) / TicketProject.CONFIG_PATH
@@ -108,8 +109,8 @@ class TicketProject:
         if legacy.exists():
             legacy.replace(current)
             return f"moved {legacy} to {current} (git-ignored); commit the deletion of {TicketProject.LEGACY_CONFIG_PATH}"
-        current.write_text("{}\n", encoding="utf-8")
-        return f"created {current} (git-ignored, all defaults)"
+        current.write_text(TicketProject.CONFIG_TEMPLATE.read_text(encoding="utf-8"), encoding="utf-8")
+        return f"created {current} from the template (git-ignored, every key at its default)"
 
     def _exclude(self, line: str) -> None:
         """Appends `line` to the repository's `info/exclude` unless it is there."""

@@ -6,8 +6,11 @@ all read this one file. It is local and never committed. The first run of
 `/ticket`, the launcher or `/ticket-flow` in a clone adds
 `/.claude/gated-dev-simple-workflow/` to the repository's `.git/info/exclude`
 and creates the file: it moves the old `.claude/gated-dev.json` there when
-that file exists, and writes `{}` otherwise. Every key is optional; `{}`
-means all defaults. Invalid JSON or an unknown key stops the run with a
+that file exists, and otherwise copies the plugin's template
+[`templates/config.json`](../../../templates/config.json), which lists every
+key with its default (`null` where the default is "not set"; `keyPattern` is
+`null` because its default depends on `tracker`). Every key is optional; a
+missing key or `null` means the default, so `{}` is a valid config too. Invalid JSON or an unknown key stops the run with a
 message (nothing is guessed).
 
 Old location: `.claude/gated-dev.json` was committed and read per checkout.

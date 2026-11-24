@@ -324,8 +324,10 @@ Optional, per clone, in `.claude/gated-dev-simple-workflow/config.json` of the
 main checkout. The file is local and git-ignored: the first run of
 `/ticket`, the launcher or `/ticket-flow` adds
 `/.claude/gated-dev-simple-workflow/` to `.git/info/exclude` and creates the
-file, moving an old `.claude/gated-dev.json` there or writing `{}` (commit the
-deletion of the old file afterwards). Sessions in worktrees, the launcher and
+file, moving an old `.claude/gated-dev.json` there or copying the template
+[`templates/config.json`](templates/config.json), which lists every key with
+its default (commit the deletion of the old file afterwards). A key set to
+`null` means the default. Sessions in worktrees, the launcher and
 `/ticket-flow` all read the main checkout's copy. Every key is optional; an
 invalid file or an unknown key stops the run with a message. Example:
 
@@ -797,7 +799,9 @@ local. Binding decisions:
 - **Migration by moving.** When the new file is missing and the old
   `.claude/gated-dev.json` exists, it is moved (not copied), so the settings
   carry over and only one file is left; the developer commits the deletion.
-  Without either file, `{}` is written. Dry runs and `--status` move nothing
+  Without either file, the template `templates/config.json` is copied: every
+  key with its default, `null` where the default is "not set". A test keeps
+  it equal to the defaults in code and in SKILL.md section 8 (`riskPaths`). Dry runs and `--status` move nothing
   and read the old file.
 
 ### Lean gate follow-up

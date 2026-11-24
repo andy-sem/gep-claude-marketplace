@@ -252,6 +252,18 @@ def test_read_config_location_new_path_legacy_fallback_and_precedence(tmp_path):
     assert (none.read_config()["ticketsDir"], none.config_notice) == ("docs/tickets", None)
 
 
+def test_config_template_lists_every_key_with_the_defaults(tmp_path):
+    template = json.loads(TicketProject.CONFIG_TEMPLATE.read_text())
+    assert set(template) == TicketProject.CONFIG_KEYS
+    assert TicketProject(project(tmp_path / "t", config=template)).read_config() == TicketProject(project(tmp_path / "e", config={})).read_config()
+    assert template["models"] == TicketProject.MODEL_DEFAULTS
+    assert template["modes"] == TicketProject.MODE_DEFAULTS
+    skill = (Path(__file__).parents[1] / "skills" / "ticket" / "SKILL.md").read_text()
+    [line] = [x for x in skill.splitlines() if "Default `riskPaths`:" in x]
+    listed = line.split("Default `riskPaths`:")[1].split(". Any output")[0]
+    assert template["riskPaths"] == re.findall(r"`([^`]+)`", listed)
+
+
 def test_read_config_mode_defaults_and_overrides(tmp_path):
     d = TicketProject(project(tmp_path / "d")).read_config()
     assert (d["mode"], d["modes"], d["modeRules"]) == ("auto", MODE_DEFAULTS, [])

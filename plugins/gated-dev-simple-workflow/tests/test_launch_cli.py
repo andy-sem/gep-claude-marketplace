@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from gated_dev.launch.ticket_project import TicketProject
 from gd_testkit.entrypoints import Entrypoints
 from gd_testkit.envs import IsolatedEnv
 from gd_testkit.fakebin import FakeBin
@@ -166,7 +167,7 @@ def test_launch_creates_an_empty_ignored_config_but_not_on_a_dry_run(tmp_path):
     r = p.launch("--all")
     assert r.status == 0, r.stderr
     assert "created" in r.stderr
-    assert config.read_text() == "{}\n"
+    assert config.read_text() == TicketProject.CONFIG_TEMPLATE.read_text()
     assert "/.claude/gated-dev-simple-workflow/" in exclude_lines(p.root)
     assert "gated-dev-simple-workflow" not in GitRepo.git(p.root, "status", "--porcelain")
 
