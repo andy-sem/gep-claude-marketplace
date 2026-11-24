@@ -38,8 +38,8 @@ class Project:
         self.home = tmp / "home"
         self.root = GitRepo.init_repo(tmp / "repo", origin=tmp / "origin.git" if origin else None, branch=branch)
         if config is not None:
-            (self.root / ".claude").mkdir(exist_ok=True)
-            (self.root / ".claude" / "gated-dev.json").write_text(config if isinstance(config, str) else json.dumps(config))
+            (self.root / ".claude" / "gated-dev-simple-workflow").mkdir(parents=True, exist_ok=True)
+            (self.root / ".claude" / "gated-dev-simple-workflow" / "config.json").write_text(config if isinstance(config, str) else json.dumps(config))
         for key, text in (tickets or {}).items():
             (self.root / "docs" / "tickets" / key).mkdir(parents=True, exist_ok=True)
             (self.root / "docs" / "tickets" / key / "ticket.md").write_text(text)
@@ -88,11 +88,11 @@ class Project:
 
     # runs --------------------------------------------------------------------
 
-    def launch(self, *args: str, host: dict | None = None, cwd=True) -> Result:
+    def launch(self, *args: str, host: dict | None = None, cwd: bool | Path = True) -> Result:
         env = {k: v for k, v in IsolatedEnv.clean(Entrypoints.env()).items() if k not in HOST_VARS and not k.startswith("ORCA_")}
         env.update(GitRepo.git_env(self.home))
         env.update({"PATH": str(self.fb.path), **(host or {})})
-        cmd = [*FakeBin.absolute(Entrypoints.launch()), *(["--cwd", str(self.root)] if cwd else []), *args]
+        cmd = [*FakeBin.absolute(Entrypoints.launch()), *(["--cwd", str(self.root if cwd is True else cwd)] if cwd else []), *args]
         proc = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=60, check=False)
         return Result(proc.returncode, proc.stdout, proc.stderr)
 
@@ -124,6 +124,22 @@ def demo(tmp_path):
 
 
 # --- findRun ------------------------------------------------------------------
+
+
+def test_launch_reads_the_main_checkout_config_from_a_worktree_and_reports_the_legacy_file(tmp_path):
+    p = Project(tmp_path, config={"ticketsDir": "custom"})
+    wt = tmp_path / "wt"
+    GitRepo.add_worktree(p.root, wt, "side")
+    r = p.launch("--all", cwd=wt)
+    assert (r.status, r.stdout.strip()) == (0, "no ticket without a run in custom"), r.stderr
+    assert r.stderr == ""
+
+    old = Project(tmp_path / "old", config=None)
+    (old.root / ".claude").mkdir()
+    (old.root / ".claude" / "gated-dev.json").write_text('{"ticketsDir": "legacy"}')
+    r = old.launch("--all")
+    assert (r.status, r.stdout.strip()) == (0, "no ticket without a run in legacy"), r.stderr
+    assert "gated-dev.json is deprecated" in r.stderr
 
 
 def test_find_run_finds_the_key_worktree_ignores_aborted_runs_rejects_several(tmp_path):

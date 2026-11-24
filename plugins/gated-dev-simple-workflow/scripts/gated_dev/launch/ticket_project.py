@@ -58,6 +58,7 @@ class TicketProject:
     def __init__(self, root: str | Path, run: ProcessRunner.Run = ProcessRunner.default_run) -> None:
         self.root = root
         self.run = run
+        self.config_notice: str | None = None
 
     @staticmethod
     def find_root(*, cwd: str, run: ProcessRunner.Run = ProcessRunner.default_run) -> str:
@@ -72,9 +73,30 @@ class TicketProject:
     def _outside_repo(path: str) -> bool:
         return os.path.isabs(path) or ".." in re.split(r"[\\/]", path)
 
+    CONFIG_PATH = ".claude/gated-dev-simple-workflow/config.json"
+    LEGACY_CONFIG_PATH = ".claude/gated-dev.json"
+
+    def config_file(self) -> tuple[Path, str | None]:
+        """The config file of `root` (the main checkout) and a notice about the legacy location, if any.
+
+        `CONFIG_PATH` wins; without it a `LEGACY_CONFIG_PATH` file is still read, with a notice to move it.
+        """
+        current = Path(self.root) / TicketProject.CONFIG_PATH
+        legacy = Path(self.root) / TicketProject.LEGACY_CONFIG_PATH
+        if current.exists():
+            if legacy.exists():
+                return current, f"{legacy} is ignored: {current} takes precedence; delete the old file"
+            return current, None
+        if legacy.exists():
+            return legacy, f"{legacy} is deprecated: move it to {current} (git-ignored)"
+        return current, None
+
     def read_config(self) -> dict:
-        """`.claude/gated-dev.json` of `root`, with defaults. Raises on invalid content."""
-        file = Path(self.root) / ".claude" / "gated-dev.json"
+        """The config file of `root` (`config_file`), with defaults. Raises on invalid content.
+
+        A notice about the legacy location is kept in `config_notice`.
+        """
+        file, self.config_notice = self.config_file()
         raw: dict = {}
         if file.exists():
             try:

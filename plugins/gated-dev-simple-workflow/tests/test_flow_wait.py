@@ -555,9 +555,16 @@ def test_wait_error_exits_1_and_needs_a_flow(repo, cli):
     assert (code, lines[-1]["outcome"]) == (1, "error")
 
 
-def test_flow_settings_come_from_the_config_and_flags_win(repo, cli):
+def test_cli_reports_a_legacy_config_file_on_stderr(repo, cli):
     (repo.tmp / ".claude").mkdir()
     (repo.tmp / ".claude" / "gated-dev.json").write_text("{}")
+    cli.run("wait", "--parent", "PROJ-100")
+    assert any("gated-dev.json is deprecated" in line for line in cli.err)
+
+
+def test_flow_settings_come_from_the_config_and_flags_win(repo, cli):
+    (repo.tmp / ".claude" / "gated-dev-simple-workflow").mkdir(parents=True)
+    (repo.tmp / ".claude" / "gated-dev-simple-workflow" / "config.json").write_text("{}")
     settings = FlowCli(env={}, run=repo.git, gh_run=repo.gh, sleep=repo.clock.sleep, now=repo.clock.now, is_alive=bool, out=print, err=print)._settings
     assert settings({}, {}) == {"max": 1, "pollSeconds": 60, "staleHours": 3, "lostWatchMinutes": 10}
     assert settings({"flow": {"pollSeconds": 30, "max": 2}}, {"max": 4}) == {"max": 4, "pollSeconds": 30, "staleHours": 3, "lostWatchMinutes": 10}
